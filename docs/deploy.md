@@ -23,10 +23,9 @@
 
 ## Updating
 
-When a new version has been pushed, in *Container Manager* → *Project* → `tmy-garage` → *Action* → **Build**.
-On some Container Manager versions Build keeps the image already on the NAS, even with `pull_policy: always`.
-If the app has not changed afterwards: *Action* → **Stop**, then *Image* → `ghcr.io/tmy-code/tmy_garage` → **Delete**
-(delete the `tmy-garage` container first if it refuses), then *Build* again. Your data is in `docker/tmy-garage`, not in the image.
+When a new version has been pushed, in *Container Manager* → *Project* → `tmy-garage` → *Action* → **Stop**, then
+*Action* → **Build**. With `pull_policy: always` in the project YAML (as in [`docker-compose.yml`](../docker-compose.yml)),
+Build downloads the new image. Your data is in `docker/tmy-garage`, not in the image, so it is not affected.
 Before changing the database structure, the app saves a copy in `docker/tmy-garage/backups`.
 
 **Check which version is running:** the dashboard shows the *Langue / Language* switch and true-black dark mode from
