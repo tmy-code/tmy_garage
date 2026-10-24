@@ -109,6 +109,16 @@ function InlineEditor({
 
 type Editing = string | 'new' | null;
 
+function AddButton({ editor }: { editor: ReturnType<typeof useEditor> }) {
+  const t = useT();
+  if (editor.editing === 'new') return null;
+  return (
+    <button type="button" className="button button-small" onClick={() => editor.setEditing('new')}>
+      + {t.workshop.add}
+    </button>
+  );
+}
+
 function useEditor() {
   const [editing, setEditing] = useState<Editing>(null);
   const submit = useSubmit();
@@ -187,8 +197,9 @@ export function SpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: S
     [t.workshop.otherSpecs, specs.filter((s) => s.kind === 'other')],
   ];
   return (
-    <Layout title={t.workshop.specsTitle(vehicle.name)} back={`/vehicles/${vehicle.id}`}>
+    <Layout title={t.workshop.specsTitle(vehicle.name)} back={`/vehicles/${vehicle.id}`} actions={<AddButton editor={editor} />}>
       <NeedsConnection />
+      {editor.editing === 'new' ? <SpecEditor vehicle={vehicle} editor={editor} /> : null}
       {specs.length === 0 && editor.editing !== 'new' ? <p className="empty">{t.workshop.noSpecs}</p> : null}
       {groups.map(([title, items]) =>
         items.length === 0 ? null : (
@@ -211,13 +222,6 @@ export function SpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: S
             </ul>
           </section>
         ),
-      )}
-      {editor.editing === 'new' ? (
-        <SpecEditor vehicle={vehicle} editor={editor} />
-      ) : (
-        <button type="button" className="button button-block" onClick={() => editor.setEditing('new')}>
-          + {t.workshop.add}
-        </button>
       )}
     </Layout>
   );
@@ -282,8 +286,9 @@ export function PartSpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapsho
   const editor = useEditor();
   const specs = snapshot.partSpecs.filter((s) => s.vehicleId === vehicle.id);
   return (
-    <Layout title={t.workshop.partsTitle(vehicle.name)} back={`/vehicles/${vehicle.id}`}>
+    <Layout title={t.workshop.partsTitle(vehicle.name)} back={`/vehicles/${vehicle.id}`} actions={<AddButton editor={editor} />}>
       <NeedsConnection />
+      {editor.editing === 'new' ? <PartSpecEditor vehicle={vehicle} editor={editor} /> : null}
       {specs.length === 0 && editor.editing !== 'new' ? <p className="empty">{t.workshop.noPartSpecs}</p> : null}
       <ul className="list list-grid">
         {specs.map((spec) =>
@@ -300,13 +305,6 @@ export function PartSpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapsho
           ),
         )}
       </ul>
-      {editor.editing === 'new' ? (
-        <PartSpecEditor vehicle={vehicle} editor={editor} />
-      ) : (
-        <button type="button" className="button button-block" onClick={() => editor.setEditing('new')}>
-          + {t.workshop.add}
-        </button>
-      )}
     </Layout>
   );
 }
@@ -373,9 +371,10 @@ export function FittedPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: 
   }
 
   return (
-    <Layout title={t.workshop.fittedTitle(vehicle.name)} back={`/vehicles/${vehicle.id}`}>
+    <Layout title={t.workshop.fittedTitle(vehicle.name)} back={`/vehicles/${vehicle.id}`} actions={<AddButton editor={editor} />}>
       <NeedsConnection />
       <p className="muted">{t.workshop.fittedIntro}</p>
+      {editor.editing === 'new' ? <PositionEditor vehicle={vehicle} editor={editor} /> : null}
       {list.length === 0 && editor.editing !== 'new' ? (
         <div className="empty">
           <p>{t.workshop.noPositions}</p>
@@ -422,13 +421,6 @@ export function FittedPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: 
           ),
         )}
       </ul>
-      {editor.editing === 'new' ? (
-        <PositionEditor vehicle={vehicle} editor={editor} />
-      ) : (
-        <button type="button" className="button button-block" onClick={() => editor.setEditing('new')}>
-          + {t.workshop.add}
-        </button>
-      )}
     </Layout>
   );
 }
