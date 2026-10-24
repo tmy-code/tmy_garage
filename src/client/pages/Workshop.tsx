@@ -36,11 +36,28 @@ function Linked({ text }: { text: string }) {
   );
 }
 
-function Segmented<T extends string>({ value, options, onChange, label }: { value: T; options: [T, string][]; onChange: (v: T) => void; label: string }) {
+function Segmented<T extends string>({
+  value,
+  options,
+  onChange,
+  label,
+}: {
+  value: T;
+  options: [T, string][];
+  onChange: (v: T) => void;
+  label: string;
+}) {
   return (
     <div className="segmented" role="radiogroup" aria-label={label}>
       {options.map(([v, text]) => (
-        <button type="button" key={v} role="radio" aria-checked={value === v} className={value === v ? 'on' : ''} onClick={() => onChange(v)}>
+        <button
+          type="button"
+          key={v}
+          role="radio"
+          aria-checked={value === v}
+          className={value === v ? 'on' : ''}
+          onClick={() => onChange(v)}
+        >
           {text}
         </button>
       ))}
@@ -107,7 +124,6 @@ function useEditor() {
   return { editing, setEditing: (e: Editing) => (submit.setError(null), setEditing(e)), save, remove, ...submit };
 }
 
-
 // --- Vehicle Specs ---
 
 function SpecEditor({ vehicle, existing, editor }: { vehicle: Vehicle; existing?: VehicleSpec; editor: ReturnType<typeof useEditor> }) {
@@ -119,7 +135,11 @@ function SpecEditor({ vehicle, existing, editor }: { vehicle: Vehicle; existing?
   const body = { kind, name, value, notes };
   return (
     <InlineEditor
-      onSubmit={() => editor.save(() => (existing ? online('PUT', `/api/specs/${existing.id}`, body) : online('POST', `/api/vehicles/${vehicle.id}/specs`, body)))}
+      onSubmit={() =>
+        editor.save(() =>
+          existing ? online('PUT', `/api/specs/${existing.id}`, body) : online('POST', `/api/vehicles/${vehicle.id}/specs`, body),
+        )
+      }
       onCancel={() => editor.setEditing(null)}
       onDelete={existing ? () => editor.remove(existing.name, () => online('DELETE', `/api/specs/${existing.id}`)) : undefined}
       disabled={editor.disabled}
@@ -174,7 +194,7 @@ export function SpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: S
         items.length === 0 ? null : (
           <section key={title}>
             <h2>{title}</h2>
-            <ul className="list">
+            <ul className="list list-grid">
               {items.map((spec) =>
                 editor.editing === spec.id ? (
                   <li key={spec.id} className="editing">
@@ -215,7 +235,9 @@ function PartSpecEditor({ vehicle, existing, editor }: { vehicle: Vehicle; exist
   return (
     <InlineEditor
       onSubmit={() =>
-        editor.save(() => (existing ? online('PUT', `/api/part-specs/${existing.id}`, body) : online('POST', `/api/vehicles/${vehicle.id}/part-specs`, body)))
+        editor.save(() =>
+          existing ? online('PUT', `/api/part-specs/${existing.id}`, body) : online('POST', `/api/vehicles/${vehicle.id}/part-specs`, body),
+        )
       }
       onCancel={() => editor.setEditing(null)}
       onDelete={existing ? () => editor.remove(existing.name, () => online('DELETE', `/api/part-specs/${existing.id}`)) : undefined}
@@ -263,7 +285,7 @@ export function PartSpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapsho
     <Layout title={t.workshop.partsTitle(vehicle.name)} back={`/vehicles/${vehicle.id}`}>
       <NeedsConnection />
       {specs.length === 0 && editor.editing !== 'new' ? <p className="empty">{t.workshop.noPartSpecs}</p> : null}
-      <ul className="list">
+      <ul className="list list-grid">
         {specs.map((spec) =>
           editor.editing === spec.id ? (
             <li key={spec.id} className="editing">
@@ -291,14 +313,24 @@ export function PartSpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapsho
 
 // --- Fitment Positions and what is fitted ---
 
-function PositionEditor({ vehicle, existing, editor }: { vehicle: Vehicle; existing?: FitmentPosition; editor: ReturnType<typeof useEditor> }) {
+function PositionEditor({
+  vehicle,
+  existing,
+  editor,
+}: {
+  vehicle: Vehicle;
+  existing?: FitmentPosition;
+  editor: ReturnType<typeof useEditor>;
+}) {
   const t = useT();
   const [name, setName] = useState(existing?.name ?? '');
   return (
     <InlineEditor
       onSubmit={() =>
         editor.save(() =>
-          existing ? online('PUT', `/api/positions/${existing.id}`, { name }) : online('POST', `/api/vehicles/${vehicle.id}/positions`, { name }),
+          existing
+            ? online('PUT', `/api/positions/${existing.id}`, { name })
+            : online('POST', `/api/vehicles/${vehicle.id}/positions`, { name }),
         )
       }
       onCancel={() => editor.setEditing(null)}
@@ -314,7 +346,8 @@ function PositionEditor({ vehicle, existing, editor }: { vehicle: Vehicle; exist
 }
 
 function FittedLine({ usage, estimatedOdometer, t }: { usage: PartUsage; estimatedOdometer: number | null; t: Messages }) {
-  const since = estimatedOdometer !== null && estimatedOdometer > usage.odometer ? t.workshop.since(formatKm(estimatedOdometer - usage.odometer)) : '';
+  const since =
+    estimatedOdometer !== null && estimatedOdometer > usage.odometer ? t.workshop.since(formatKm(estimatedOdometer - usage.odometer)) : '';
   return (
     <>
       <span>{describePart(usage.part)}</span>
@@ -352,7 +385,7 @@ export function FittedPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: 
           {editor.error ? <p className="banner banner-error">{editor.error}</p> : null}
         </div>
       ) : null}
-      <ul className="list">
+      <ul className="list list-grid">
         {list.map(({ position, current, previous }) =>
           editor.editing === position.id ? (
             <li key={position.id} className="editing">
@@ -367,7 +400,11 @@ export function FittedPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: 
                     {t.workshop.edit}
                   </button>
                 </div>
-                {current ? <FittedLine usage={current} estimatedOdometer={usage.estimatedOdometer} t={t} /> : <span className="muted">{t.workshop.nothingFitted}</span>}
+                {current ? (
+                  <FittedLine usage={current} estimatedOdometer={usage.estimatedOdometer} t={t} />
+                ) : (
+                  <span className="muted">{t.workshop.nothingFitted}</span>
+                )}
                 {previous.length > 0 ? (
                   <details>
                     <summary className="muted">
@@ -401,7 +438,10 @@ export function FittedPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: 
 export function TaskPage({ task, vehicle, snapshot }: { task: MaintenanceTask; vehicle: Vehicle; snapshot: Snapshot }) {
   const t = useT();
   const today = todayIso();
-  const due = useMemo(() => vehicleDue(snapshot, vehicle.id, today).due.find((d) => d.taskId === task.id), [snapshot, vehicle.id, today, task.id]);
+  const due = useMemo(
+    () => vehicleDue(snapshot, vehicle.id, today).due.find((d) => d.taskId === task.id),
+    [snapshot, vehicle.id, today, task.id],
+  );
   const [ticked, setTicked] = useState<Set<number>>(new Set());
   const partSpecs = new Map(snapshot.partSpecs.map((p) => [p.id, p]));
   const specs = snapshot.vehicleSpecs.filter((s) => task.specIds.includes(s.id));
@@ -440,68 +480,76 @@ export function TaskPage({ task, vehicle, snapshot }: { task: MaintenanceTask; v
 
       {empty ? <p className="empty">{t.workshop.emptyCard}</p> : null}
 
-      {task.tools.length > 0 ? (
-        <section>
-          <div className="section-head">
-            <h2>{t.workshop.checklist}</h2>
-            {ticked.size > 0 ? (
-              <button type="button" className="button button-small" onClick={() => setTicked(new Set())}>
-                {t.workshop.untick}
-              </button>
-            ) : null}
-          </div>
-          {task.tools.map((tool, i) => (
-            <label key={i} className={`check ${ticked.has(i) ? 'check-on' : ''}`}>
-              <input type="checkbox" checked={ticked.has(i)} onChange={() => toggle(i)} />
-              <span className="due-name">{tool}</span>
-            </label>
-          ))}
-        </section>
-      ) : null}
+      <div className="columns">
+        <div>
+          {task.tools.length > 0 ? (
+            <section>
+              <div className="section-head">
+                <h2>{t.workshop.checklist}</h2>
+                {ticked.size > 0 ? (
+                  <button type="button" className="button button-small" onClick={() => setTicked(new Set())}>
+                    {t.workshop.untick}
+                  </button>
+                ) : null}
+              </div>
+              {task.tools.map((tool, i) => (
+                <label key={i} className={`check ${ticked.has(i) ? 'check-on' : ''}`}>
+                  <input type="checkbox" checked={ticked.has(i)} onChange={() => toggle(i)} />
+                  <span className="due-name">{tool}</span>
+                </label>
+              ))}
+            </section>
+          ) : null}
 
-      {parts.length > 0 ? (
-        <section>
-          <h2>{t.workshop.parts}</h2>
-          <ul className="list">
-            {parts.map(({ spec, quantity, last }) => (
-              <li key={spec.id}>
-                <div className="history-row">
-                  <span>
-                    <strong>{spec.name}</strong> · {formatQuantity(quantity, spec.unit, t)}
-                  </span>
-                  {spec.characteristics ? <span>{spec.characteristics}</span> : null}
-                  {spec.partNumbers ? <span className="muted">{spec.partNumbers}</span> : null}
-                  {last ? <span className="muted">{t.workshop.lastUsed(describePart(last.part), formatDate(last.date, t))}</span> : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+          {parts.length > 0 ? (
+            <section>
+              <h2>{t.workshop.parts}</h2>
+              <ul className="list">
+                {parts.map(({ spec, quantity, last }) => (
+                  <li key={spec.id}>
+                    <div className="history-row">
+                      <span>
+                        <strong>{spec.name}</strong> · {formatQuantity(quantity, spec.unit, t)}
+                      </span>
+                      {spec.characteristics ? <span>{spec.characteristics}</span> : null}
+                      {spec.partNumbers ? <span className="muted">{spec.partNumbers}</span> : null}
+                      {last ? (
+                        <span className="muted">{t.workshop.lastUsed(describePart(last.part), formatDate(last.date, t))}</span>
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </div>
 
-      {specs.length > 0 ? (
-        <section>
-          <h2>{t.workshop.specsUsed}</h2>
-          <ul className="list">
-            {specs.map((spec) => (
-              <li key={spec.id}>
-                <div className="history-row">
-                  <SpecLine spec={spec} />
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+        <div>
+          {specs.length > 0 ? (
+            <section>
+              <h2>{t.workshop.specsUsed}</h2>
+              <ul className="list">
+                {specs.map((spec) => (
+                  <li key={spec.id}>
+                    <div className="history-row">
+                      <SpecLine spec={spec} />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
 
-      {task.workshopNotes ? (
-        <section>
-          <h2>{t.workshop.notesTitle}</h2>
-          <p className="card notes">
-            <Linked text={task.workshopNotes} />
-          </p>
-        </section>
-      ) : null}
+          {task.workshopNotes ? (
+            <section>
+              <h2>{t.workshop.notesTitle}</h2>
+              <p className="card notes">
+                <Linked text={task.workshopNotes} />
+              </p>
+            </section>
+          ) : null}
+        </div>
+      </div>
 
       <section className="actions actions-footer">
         <a className="button" href={`#/tasks/${task.id}/workshop`}>
@@ -541,7 +589,8 @@ export function WorkshopForm({ task, vehicle, snapshot }: { task: MaintenanceTas
     event.preventDefault();
     void run(async () => {
       const requiredParts = parts.map((p) => ({ partSpecId: p.partSpecId, quantity: parseNumber(p.quantity) }));
-      if (requiredParts.some((p) => p.quantity === null || Number.isNaN(p.quantity) || p.quantity <= 0)) throw new Error(t.workshop.quantityError);
+      if (requiredParts.some((p) => p.quantity === null || Number.isNaN(p.quantity) || p.quantity <= 0))
+        throw new Error(t.workshop.quantityError);
       if (new Set(requiredParts.map((p) => p.partSpecId)).size !== requiredParts.length) throw new Error(t.workshop.duplicatePart);
       await online('PUT', `/api/tasks/${task.id}/workshop`, {
         workshopNotes: notes,
@@ -583,7 +632,12 @@ export function WorkshopForm({ task, vehicle, snapshot }: { task: MaintenanceTas
                   aria-label={t.workshop.quantity}
                   placeholder={spec ? t.workshop.units[spec.unit](2) : ''}
                 />
-                <button type="button" className="button button-small" onClick={() => setParts(parts.filter((_, j) => j !== i))} aria-label={t.workshop.remove}>
+                <button
+                  type="button"
+                  className="button button-small"
+                  onClick={() => setParts(parts.filter((_, j) => j !== i))}
+                  aria-label={t.workshop.remove}
+                >
                   ✕
                 </button>
               </div>
@@ -591,7 +645,11 @@ export function WorkshopForm({ task, vehicle, snapshot }: { task: MaintenanceTas
           })}
           <div className="actions">
             {partSpecs.length > 0 ? (
-              <button type="button" className="button button-small" onClick={() => setParts([...parts, { partSpecId: partSpecs[0]!.id, quantity: '1' }])}>
+              <button
+                type="button"
+                className="button button-small"
+                onClick={() => setParts([...parts, { partSpecId: partSpecs[0]!.id, quantity: '1' }])}
+              >
                 {t.workshop.addPart}
               </button>
             ) : null}
@@ -641,39 +699,43 @@ export function ShoppingPage({ snapshot }: { snapshot: Snapshot }) {
     <Layout title={t.workshop.shopping} back="/">
       <p className="muted">{t.workshop.shoppingIntro(SHOPPING_HORIZON_DAYS)}</p>
       {list.length === 0 ? <p className="empty">{t.workshop.nothingToBuy}</p> : null}
-      {list.map(({ vehicle, items, tasksWithoutParts }) => (
-        <section key={vehicle.id}>
-          <h2>{vehicle.name}</h2>
-          <ul className="list">
-            {items.map((item) => (
-              <li key={item.partSpec.id}>
-                <div className="history-row">
-                  <span>
-                    <strong>{item.partSpec.name}</strong> · {formatQuantity(item.quantity, item.partSpec.unit, t)}
-                  </span>
-                  {item.partSpec.characteristics ? <span>{item.partSpec.characteristics}</span> : null}
-                  {item.partSpec.partNumbers ? <span className="muted">{item.partSpec.partNumbers}</span> : null}
-                  {item.lastUsed ? (
-                    <span className="muted">{t.workshop.lastUsed(describePart(item.lastUsed.part), formatDate(item.lastUsed.date, t))}</span>
-                  ) : null}
-                  <span className="muted">{t.workshop.forTasks(item.tasks.map(({ task }) => task.name).join(', '))}</span>
-                </div>
-              </li>
-            ))}
-          </ul>
-          {tasksWithoutParts.length > 0 ? (
-            <p className="nudge">
-              {t.workshop.noPartsListed('')}
-              {tasksWithoutParts.map((task, i) => (
-                <Fragment key={task.id}>
-                  {i > 0 ? ', ' : ''}
-                  <a href={`#/tasks/${task.id}/workshop`}>{task.name}</a>
-                </Fragment>
+      <div className="card-grid">
+        {list.map(({ vehicle, items, tasksWithoutParts }) => (
+          <section key={vehicle.id}>
+            <h2>{vehicle.name}</h2>
+            <ul className="list">
+              {items.map((item) => (
+                <li key={item.partSpec.id}>
+                  <div className="history-row">
+                    <span>
+                      <strong>{item.partSpec.name}</strong> · {formatQuantity(item.quantity, item.partSpec.unit, t)}
+                    </span>
+                    {item.partSpec.characteristics ? <span>{item.partSpec.characteristics}</span> : null}
+                    {item.partSpec.partNumbers ? <span className="muted">{item.partSpec.partNumbers}</span> : null}
+                    {item.lastUsed ? (
+                      <span className="muted">
+                        {t.workshop.lastUsed(describePart(item.lastUsed.part), formatDate(item.lastUsed.date, t))}
+                      </span>
+                    ) : null}
+                    <span className="muted">{t.workshop.forTasks(item.tasks.map(({ task }) => task.name).join(', '))}</span>
+                  </div>
+                </li>
               ))}
-            </p>
-          ) : null}
-        </section>
-      ))}
+            </ul>
+            {tasksWithoutParts.length > 0 ? (
+              <p className="nudge">
+                {t.workshop.noPartsListed('')}
+                {tasksWithoutParts.map((task, i) => (
+                  <Fragment key={task.id}>
+                    {i > 0 ? ', ' : ''}
+                    <a href={`#/tasks/${task.id}/workshop`}>{task.name}</a>
+                  </Fragment>
+                ))}
+              </p>
+            ) : null}
+          </section>
+        ))}
+      </div>
     </Layout>
   );
 }

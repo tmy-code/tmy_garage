@@ -26,7 +26,12 @@ async function createVehicle(name = 'Test bike'): Promise<Vehicle> {
 }
 
 async function createTask(vehicleId: string, overrides: object = {}): Promise<MaintenanceTask> {
-  const res = await call('POST', `/api/vehicles/${vehicleId}/tasks`, { name: 'Oil change', intervalKm: 6000, intervalMonths: 12, ...overrides });
+  const res = await call('POST', `/api/vehicles/${vehicleId}/tasks`, {
+    name: 'Oil change',
+    intervalKm: 6000,
+    intervalMonths: 12,
+    ...overrides,
+  });
   expect(res.status).toBe(201);
   return res.json();
 }
@@ -93,7 +98,13 @@ describe('vehicles and tasks', () => {
   it('refuses to delete a task that appears in a Service', async () => {
     const bike = await createVehicle();
     const task = await createTask(bike.id);
-    await call('PUT', '/api/services/svc-00001', { id: 'svc-00001', vehicleId: bike.id, date: '2026-10-01', odometer: 100, taskIds: [task.id] });
+    await call('PUT', '/api/services/svc-00001', {
+      id: 'svc-00001',
+      vehicleId: bike.id,
+      date: '2026-10-01',
+      odometer: 100,
+      taskIds: [task.id],
+    });
     expect((await call('DELETE', `/api/tasks/${task.id}`)).status).toBe(409);
   });
 });
@@ -125,13 +136,25 @@ describe('services and readings (replayed by the offline send queue)', () => {
     const a = await createVehicle('A');
     const b = await createVehicle('B');
     const task = await createTask(b.id);
-    const res = await call('PUT', '/api/services/svc-00001', { id: 'svc-00001', vehicleId: a.id, date: '2026-10-01', odometer: 1, taskIds: [task.id] });
+    const res = await call('PUT', '/api/services/svc-00001', {
+      id: 'svc-00001',
+      vehicleId: a.id,
+      date: '2026-10-01',
+      odometer: 1,
+      taskIds: [task.id],
+    });
     expect(res.status).toBe(422);
   });
 
   it('rejects a Service with no tasks', async () => {
     const bike = await createVehicle();
-    const res = await call('PUT', '/api/services/svc-00001', { id: 'svc-00001', vehicleId: bike.id, date: '2026-10-01', odometer: 1, taskIds: [] });
+    const res = await call('PUT', '/api/services/svc-00001', {
+      id: 'svc-00001',
+      vehicleId: bike.id,
+      date: '2026-10-01',
+      odometer: 1,
+      taskIds: [],
+    });
     expect(res.status).toBe(422);
   });
 
@@ -144,7 +167,12 @@ describe('services and readings (replayed by the offline send queue)', () => {
   });
 
   it('returns 404 for an unknown vehicle', async () => {
-    const res = await call('PUT', '/api/odometer-readings/odo-00001', { id: 'odo-00001', vehicleId: 'nope', date: '2026-10-20', odometer: 1 });
+    const res = await call('PUT', '/api/odometer-readings/odo-00001', {
+      id: 'odo-00001',
+      vehicleId: 'nope',
+      date: '2026-10-20',
+      odometer: 1,
+    });
     expect(res.status).toBe(404);
   });
 });
@@ -163,7 +191,9 @@ describe('workshop data', () => {
     await created(`/api/vehicles/${bike.id}/part-specs`, { name: 'Engine oil', characteristics: '10W-40 JASO MA2', unit: 'litre' });
     await created(`/api/vehicles/${bike.id}/positions`, { name: 'Rear tyre' });
     const s = await snapshot();
-    expect(s.vehicleSpecs).toEqual([{ id: torque.id, vehicleId: bike.id, kind: 'torque', name: 'Drain plug', value: '30 Nm', notes: 'New washer' }]);
+    expect(s.vehicleSpecs).toEqual([
+      { id: torque.id, vehicleId: bike.id, kind: 'torque', name: 'Drain plug', value: '30 Nm', notes: 'New washer' },
+    ]);
     expect(s.partSpecs[0]).toMatchObject({ name: 'Engine oil', characteristics: '10W-40 JASO MA2', partNumbers: null, unit: 'litre' });
     expect(s.positions[0]).toMatchObject({ name: 'Rear tyre' });
   });
@@ -172,7 +202,11 @@ describe('workshop data', () => {
     const bike = await createVehicle();
     const task = await createTask(bike.id);
     const oil = await created<PartSpec>(`/api/vehicles/${bike.id}/part-specs`, { name: 'Engine oil', unit: 'litre' });
-    const filter = await created<PartSpec>(`/api/vehicles/${bike.id}/part-specs`, { name: 'Oil filter', partNumbers: 'HF204', unit: 'piece' });
+    const filter = await created<PartSpec>(`/api/vehicles/${bike.id}/part-specs`, {
+      name: 'Oil filter',
+      partNumbers: 'HF204',
+      unit: 'piece',
+    });
     const plug = await created<VehicleSpec>(`/api/vehicles/${bike.id}/specs`, { kind: 'torque', name: 'Drain plug', value: '30 Nm' });
     const card = {
       workshopNotes: 'Warm the engine first.',
@@ -186,8 +220,18 @@ describe('workshop data', () => {
     expect((await call('PUT', `/api/tasks/${task.id}/workshop`, card)).status).toBe(200);
     expect((await snapshot()).tasks[0]).toMatchObject(card);
 
-    await call('PUT', `/api/tasks/${task.id}/workshop`, { workshopNotes: null, requiredParts: [{ partSpecId: filter.id, quantity: 1 }], tools: [], specIds: [] });
-    expect((await snapshot()).tasks[0]).toMatchObject({ workshopNotes: null, requiredParts: [{ partSpecId: filter.id, quantity: 1 }], tools: [], specIds: [] });
+    await call('PUT', `/api/tasks/${task.id}/workshop`, {
+      workshopNotes: null,
+      requiredParts: [{ partSpecId: filter.id, quantity: 1 }],
+      tools: [],
+      specIds: [],
+    });
+    expect((await snapshot()).tasks[0]).toMatchObject({
+      workshopNotes: null,
+      requiredParts: [{ partSpecId: filter.id, quantity: 1 }],
+      tools: [],
+      specIds: [],
+    });
 
     // Deleting a Part Spec removes it from the Tasks that required it.
     await call('DELETE', `/api/part-specs/${filter.id}`);
@@ -199,17 +243,42 @@ describe('workshop data', () => {
     const b = await createVehicle('B');
     const task = await createTask(a.id);
     const other = await created<PartSpec>(`/api/vehicles/${b.id}/part-specs`, { name: 'Engine oil', unit: 'litre' });
-    const res = await call('PUT', `/api/tasks/${task.id}/workshop`, { requiredParts: [{ partSpecId: other.id, quantity: 1 }], tools: [], specIds: [] });
+    const res = await call('PUT', `/api/tasks/${task.id}/workshop`, {
+      requiredParts: [{ partSpecId: other.id, quantity: 1 }],
+      tools: [],
+      specIds: [],
+    });
     expect(res.status).toBe(422);
   });
 
   it('stores Parts Used with a Service, and keeps them when their Part Spec is deleted', async () => {
     const bike = await createVehicle();
     const task = await createTask(bike.id);
-    const tyre = await created<PartSpec>(`/api/vehicles/${bike.id}/part-specs`, { name: 'Rear tyre', characteristics: '180/55 ZR17', unit: 'piece' });
+    const tyre = await created<PartSpec>(`/api/vehicles/${bike.id}/part-specs`, {
+      name: 'Rear tyre',
+      characteristics: '180/55 ZR17',
+      unit: 'piece',
+    });
     const rear = await created<FitmentPosition>(`/api/vehicles/${bike.id}/positions`, { name: 'Rear tyre' });
-    const part = { partSpecId: tyre.id, positionId: rear.id, description: 'Michelin Road 6', partNumber: null, quantity: 1, unit: 'piece', price: 160, supplier: null };
-    const body = { id: 'svc-00001', vehicleId: bike.id, date: '2026-10-01', odometer: 18000, taskIds: [task.id], notes: null, partsUsed: [part] };
+    const part = {
+      partSpecId: tyre.id,
+      positionId: rear.id,
+      description: 'Michelin Road 6',
+      partNumber: null,
+      quantity: 1,
+      unit: 'piece',
+      price: 160,
+      supplier: null,
+    };
+    const body = {
+      id: 'svc-00001',
+      vehicleId: bike.id,
+      date: '2026-10-01',
+      odometer: 18000,
+      taskIds: [task.id],
+      notes: null,
+      partsUsed: [part],
+    };
     await call('PUT', '/api/services/svc-00001', body);
     await call('PUT', '/api/services/svc-00001', body);
     expect((await snapshot()).services[0]!.partsUsed).toEqual([part]);
@@ -271,7 +340,15 @@ describe('migrations', () => {
     old.exec('ALTER TABLE maintenance_tasks DROP COLUMN official_interval_km');
     old.exec('ALTER TABLE maintenance_tasks DROP COLUMN official_interval_months');
     old.exec('ALTER TABLE maintenance_tasks DROP COLUMN workshop_notes');
-    for (const table of ['parts_used', 'task_specs', 'required_tools', 'required_parts', 'fitment_positions', 'part_specs', 'vehicle_specs']) {
+    for (const table of [
+      'parts_used',
+      'task_specs',
+      'required_tools',
+      'required_parts',
+      'fitment_positions',
+      'part_specs',
+      'vehicle_specs',
+    ]) {
       old.exec(`DROP TABLE ${table}`);
     }
     old.exec('PRAGMA user_version = 1');

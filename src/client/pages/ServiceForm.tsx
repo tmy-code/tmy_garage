@@ -119,7 +119,17 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
   function addEmptyPart() {
     setParts([
       ...parts,
-      { key: nextKey++, partSpecId: null, positionId: null, description: '', partNumber: '', quantity: '1', unit: 'piece', price: '', supplier: '' },
+      {
+        key: nextKey++,
+        partSpecId: null,
+        positionId: null,
+        description: '',
+        partNumber: '',
+        quantity: '1',
+        unit: 'piece',
+        price: '',
+        supplier: '',
+      },
     ]);
   }
 
@@ -142,7 +152,15 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
     }
     await enqueue({
       kind: 'service',
-      data: { id: existing?.id ?? newId(), vehicleId: vehicle.id, date, odometer, taskIds: [...selected], notes: notes.trim() || null, partsUsed },
+      data: {
+        id: existing?.id ?? newId(),
+        vehicleId: vehicle.id,
+        date,
+        odometer,
+        taskIds: [...selected],
+        notes: notes.trim() || null,
+        partsUsed,
+      },
     });
     navigate(back, { replace: true });
   }
@@ -159,125 +177,136 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
 
   return (
     <Layout title={existing ? t.service.titleEdit : t.service.titleNew(vehicle.name)} back={back}>
-      <form onSubmit={submit} className="form">
-        <Field label={t.service.date}>
-          <input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} required />
-        </Field>
-        <Field
-          label={t.service.odometer}
-          hint={
-            lowerThanLatest
-              ? t.service.lowerThanLatest(formatKm(usage.latest!.odometer))
-              : usage.estimatedOdometer !== null && !existing
-                ? t.service.estimatedToday(formatKm(usage.estimatedOdometer))
-                : undefined
-          }
-        >
-          <input
-            inputMode="numeric"
-            autoComplete="off"
-            value={odometerText}
-            onChange={(e) => setOdometerText(e.target.value)}
-            placeholder={usage.estimatedOdometer !== null ? String(usage.estimatedOdometer) : t.service.example}
-            required
-          />
-        </Field>
+      <form onSubmit={submit} className="form form-wide">
+        <div className="form-columns">
+          <div className="form">
+            <Field label={t.service.date}>
+              <input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} required />
+            </Field>
+            <Field
+              label={t.service.odometer}
+              hint={
+                lowerThanLatest
+                  ? t.service.lowerThanLatest(formatKm(usage.latest!.odometer))
+                  : usage.estimatedOdometer !== null && !existing
+                    ? t.service.estimatedToday(formatKm(usage.estimatedOdometer))
+                    : undefined
+              }
+            >
+              <input
+                inputMode="numeric"
+                autoComplete="off"
+                value={odometerText}
+                onChange={(e) => setOdometerText(e.target.value)}
+                placeholder={usage.estimatedOdometer !== null ? String(usage.estimatedOdometer) : t.service.example}
+                required
+              />
+            </Field>
 
-        <fieldset className="field">
-          <legend className="field-label">{t.service.tasksDone}</legend>
-          {due.length === 0 ? <p className="muted">{t.service.noTasks}</p> : null}
-          {due.map((d) => (
-            <label key={d.taskId} className={`check ${selected.has(d.taskId) ? 'check-on' : ''}`}>
-              <input type="checkbox" checked={selected.has(d.taskId)} onChange={() => toggle(d.taskId)} />
-              <span className="due-name">{tasks.get(d.taskId)?.name}</span>
-              <StatusChip status={d.status} />
-            </label>
-          ))}
-        </fieldset>
-
-        <fieldset className="field">
-          <legend className="field-label">{t.workshop.partsUsed}</legend>
-          {parts.map((d) => (
-            <div key={d.key} className="card part-used">
-              <div className="section-head">
-                <span className="field-label">{t.workshop.description}</span>
-                <button type="button" className="button button-small button-danger" onClick={() => setParts(parts.filter((p) => p.key !== d.key))}>
-                  {t.workshop.remove}
+            <fieldset className="field">
+              <legend className="field-label">{t.service.tasksDone}</legend>
+              {due.length === 0 ? <p className="muted">{t.service.noTasks}</p> : null}
+              <div className="check-grid">
+                {due.map((d) => (
+                  <label key={d.taskId} className={`check ${selected.has(d.taskId) ? 'check-on' : ''}`}>
+                    <input type="checkbox" checked={selected.has(d.taskId)} onChange={() => toggle(d.taskId)} />
+                    <span className="due-name">{tasks.get(d.taskId)?.name}</span>
+                    <StatusChip status={d.status} />
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          </div>
+          <div className="form">
+            <fieldset className="field">
+              <legend className="field-label">{t.workshop.partsUsed}</legend>
+              {parts.map((d) => (
+                <div key={d.key} className="card part-used">
+                  <div className="section-head">
+                    <span className="field-label">{t.workshop.description}</span>
+                    <button
+                      type="button"
+                      className="button button-small button-danger"
+                      onClick={() => setParts(parts.filter((p) => p.key !== d.key))}
+                    >
+                      {t.workshop.remove}
+                    </button>
+                  </div>
+                  <input
+                    value={d.description}
+                    onChange={(e) => setPart(d.key, { description: e.target.value })}
+                    maxLength={200}
+                    placeholder={t.workshop.descriptionHint}
+                    aria-label={t.workshop.description}
+                  />
+                  <div className="row">
+                    <Field label={t.workshop.quantity}>
+                      <input inputMode="decimal" value={d.quantity} onChange={(e) => setPart(d.key, { quantity: e.target.value })} />
+                    </Field>
+                    <Field label={t.workshop.unit}>
+                      <select value={d.unit} onChange={(e) => setPart(d.key, { unit: e.target.value as PartUnit })}>
+                        <option value="piece">{t.workshop.piece}</option>
+                        <option value="litre">{t.workshop.litre}</option>
+                      </select>
+                    </Field>
+                  </div>
+                  {positions.length > 0 ? (
+                    <Field label={t.workshop.position}>
+                      <select value={d.positionId ?? ''} onChange={(e) => setPart(d.key, { positionId: e.target.value || null })}>
+                        <option value="">{t.workshop.noPosition}</option>
+                        {positions.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                  ) : null}
+                  <details className="part-details">
+                    <summary>{t.workshop.moreDetails}</summary>
+                    <div className="row">
+                      <Field label={t.workshop.partNumber}>
+                        <input value={d.partNumber} onChange={(e) => setPart(d.key, { partNumber: e.target.value })} maxLength={120} />
+                      </Field>
+                      <Field label={t.workshop.price}>
+                        <input inputMode="decimal" value={d.price} onChange={(e) => setPart(d.key, { price: e.target.value })} />
+                      </Field>
+                    </div>
+                    {partSpecs.length > 0 ? (
+                      <Field label={t.workshop.spec}>
+                        <select value={d.partSpecId ?? ''} onChange={(e) => setPart(d.key, { partSpecId: e.target.value || null })}>
+                          <option value="">{t.workshop.noSpec}</option>
+                          {partSpecs.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                    ) : null}
+                    <Field label={t.workshop.supplier}>
+                      <input value={d.supplier} onChange={(e) => setPart(d.key, { supplier: e.target.value })} maxLength={120} />
+                    </Field>
+                  </details>
+                </div>
+              ))}
+              <div className="actions">
+                {missingParts.length > 0 ? (
+                  <button type="button" className="button button-small" onClick={addFromTasks}>
+                    {t.workshop.addFromTasks}
+                  </button>
+                ) : null}
+                <button type="button" className="button button-small" onClick={addEmptyPart}>
+                  {t.workshop.addPartUsed}
                 </button>
               </div>
-              <input
-                value={d.description}
-                onChange={(e) => setPart(d.key, { description: e.target.value })}
-                maxLength={200}
-                placeholder={t.workshop.descriptionHint}
-                aria-label={t.workshop.description}
-              />
-              <div className="row">
-                <Field label={t.workshop.quantity}>
-                  <input inputMode="decimal" value={d.quantity} onChange={(e) => setPart(d.key, { quantity: e.target.value })} />
-                </Field>
-                <Field label={t.workshop.unit}>
-                  <select value={d.unit} onChange={(e) => setPart(d.key, { unit: e.target.value as PartUnit })}>
-                    <option value="piece">{t.workshop.piece}</option>
-                    <option value="litre">{t.workshop.litre}</option>
-                  </select>
-                </Field>
-              </div>
-              {positions.length > 0 ? (
-                <Field label={t.workshop.position}>
-                  <select value={d.positionId ?? ''} onChange={(e) => setPart(d.key, { positionId: e.target.value || null })}>
-                    <option value="">{t.workshop.noPosition}</option>
-                    {positions.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              ) : null}
-              <details className="part-details">
-                <summary>{t.workshop.moreDetails}</summary>
-                <div className="row">
-                  <Field label={t.workshop.partNumber}>
-                    <input value={d.partNumber} onChange={(e) => setPart(d.key, { partNumber: e.target.value })} maxLength={120} />
-                  </Field>
-                  <Field label={t.workshop.price}>
-                    <input inputMode="decimal" value={d.price} onChange={(e) => setPart(d.key, { price: e.target.value })} />
-                  </Field>
-                </div>
-                {partSpecs.length > 0 ? (
-                  <Field label={t.workshop.spec}>
-                    <select value={d.partSpecId ?? ''} onChange={(e) => setPart(d.key, { partSpecId: e.target.value || null })}>
-                      <option value="">{t.workshop.noSpec}</option>
-                      {partSpecs.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                ) : null}
-                <Field label={t.workshop.supplier}>
-                  <input value={d.supplier} onChange={(e) => setPart(d.key, { supplier: e.target.value })} maxLength={120} />
-                </Field>
-              </details>
-            </div>
-          ))}
-          <div className="actions">
-            {missingParts.length > 0 ? (
-              <button type="button" className="button button-small" onClick={addFromTasks}>
-                {t.workshop.addFromTasks}
-              </button>
-            ) : null}
-            <button type="button" className="button button-small" onClick={addEmptyPart}>
-              {t.workshop.addPartUsed}
-            </button>
-          </div>
-        </fieldset>
+            </fieldset>
 
-        <Field label={t.service.notes} hint={t.service.notesHint}>
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} />
-        </Field>
+            <Field label={t.service.notes} hint={t.service.notesHint}>
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} />
+            </Field>
+          </div>
+        </div>
 
         {error ? <p className="banner banner-error">{error}</p> : null}
         <button type="submit" className="button button-primary button-block">

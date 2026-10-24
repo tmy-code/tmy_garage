@@ -22,7 +22,17 @@ function task(overrides: Partial<MaintenanceTask>): MaintenanceTask {
 }
 
 function part(overrides: Partial<PartUsed>): PartUsed {
-  return { partSpecId: null, positionId: null, description: 'Part', partNumber: null, quantity: 1, unit: 'piece', price: null, supplier: null, ...overrides };
+  return {
+    partSpecId: null,
+    positionId: null,
+    description: 'Part',
+    partNumber: null,
+    quantity: 1,
+    unit: 'piece',
+    price: null,
+    supplier: null,
+    ...overrides,
+  };
 }
 
 function service(id: string, date: string, odometer: number, taskIds: string[], partsUsed: PartUsed[]): Service {
@@ -31,7 +41,19 @@ function service(id: string, date: string, odometer: number, taskIds: string[], 
 
 const base: Snapshot = {
   vehicles: [
-    { id: 'bike', kind: 'motorcycle', name: 'Bike', make: null, model: null, year: null, registration: null, status: 'owned', soldDate: null, soldOdometer: null, soldPrice: null },
+    {
+      id: 'bike',
+      kind: 'motorcycle',
+      name: 'Bike',
+      make: null,
+      model: null,
+      year: null,
+      registration: null,
+      status: 'owned',
+      soldDate: null,
+      soldOdometer: null,
+      soldPrice: null,
+    },
   ],
   tasks: [],
   services: [],
@@ -50,7 +72,13 @@ describe('fitments', () => {
       ...base,
       services: [
         service('s1', '2024-04-01', 10_000, ['tyre'], [part({ positionId: 'rear', description: 'Pilot Road 4' })]),
-        service('s2', '2026-05-02', 21_340, ['tyre'], [part({ positionId: 'rear', description: 'Road 6' }), part({ description: 'Valve' })]),
+        service(
+          's2',
+          '2026-05-02',
+          21_340,
+          ['tyre'],
+          [part({ positionId: 'rear', description: 'Road 6' }), part({ description: 'Valve' })],
+        ),
       ],
     };
     const [rear] = fitments(snapshot, 'bike');
@@ -77,7 +105,13 @@ describe('shoppingList', () => {
       ...base,
       tasks: [oilChange, task({ id: 'chain', name: 'Chain lube', intervalMonths: 1 }), task({ id: 'later', intervalMonths: 60 })],
       services: [
-        service('s1', '2025-11-01', 15_000, ['oil', 'chain', 'later'], [part({ partSpecId: 'oil-spec', description: 'Motul 7100', quantity: 4, unit: 'litre' })]),
+        service(
+          's1',
+          '2025-11-01',
+          15_000,
+          ['oil', 'chain', 'later'],
+          [part({ partSpecId: 'oil-spec', description: 'Motul 7100', quantity: 4, unit: 'litre' })],
+        ),
       ],
     };
     const [bike] = shoppingList(snapshot, '2026-10-01');

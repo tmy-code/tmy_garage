@@ -82,7 +82,14 @@ const toTask = (r: Row, w: Workshop = noWorkshop()): MaintenanceTask => ({
 
 const toReading = (r: Row): OdometerReading => ({ id: r.id, vehicleId: r.vehicle_id, date: r.date, odometer: r.odometer });
 
-const toVehicleSpec = (r: Row): VehicleSpec => ({ id: r.id, vehicleId: r.vehicle_id, kind: r.kind, name: r.name, value: r.value, notes: r.notes });
+const toVehicleSpec = (r: Row): VehicleSpec => ({
+  id: r.id,
+  vehicleId: r.vehicle_id,
+  kind: r.kind,
+  name: r.name,
+  value: r.value,
+  notes: r.notes,
+});
 
 const toPartSpec = (r: Row): PartSpec => ({
   id: r.id,
@@ -197,14 +204,12 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
 
   function snapshot(): Snapshot {
     const vehicles = (db.prepare('SELECT * FROM vehicles WHERE garage_id = ? ORDER BY created_at').all(garageId) as Row[]).map(toVehicle);
-    const tasks = (
-      db
-        .prepare(
-          `SELECT t.* FROM maintenance_tasks t JOIN vehicles v ON v.id = t.vehicle_id
+    const tasks = db
+      .prepare(
+        `SELECT t.* FROM maintenance_tasks t JOIN vehicles v ON v.id = t.vehicle_id
            WHERE v.garage_id = ? ORDER BY t.created_at`,
-        )
-        .all(garageId) as Row[]
-    );
+      )
+      .all(garageId) as Row[];
     const workshopByTask = workshops();
     const taskList = tasks.map((r) => toTask(r, workshopByTask.get(r.id)));
     const links = db

@@ -9,6 +9,8 @@ import { useT } from '../i18n.ts';
 const ICON: Record<Vehicle['kind'], string> = { car: '🚗', motorcycle: '🏍️' };
 /** Nudge for a fresh odometer reading so the projection stays honest. */
 const STALE_READING_DAYS = 30;
+/** Wide screens have room to show what comes up next, not only what is urgent. */
+const WIDE_PREVIEW = 4;
 
 export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
   const t = useT();
@@ -33,7 +35,11 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
           </a>
         </div>
       ) : (
-        owned.map((v) => <VehicleCard key={v.id} vehicle={v} snapshot={snapshot} today={today} />)
+        <div className="card-grid">
+          {owned.map((v) => (
+            <VehicleCard key={v.id} vehicle={v} snapshot={snapshot} today={today} />
+          ))}
+        </div>
       )}
       {owned.length > 0 ? (
         <a className="button button-block" href="#/shopping">
@@ -63,7 +69,8 @@ function VehicleCard({ vehicle, snapshot, today }: { vehicle: Vehicle; snapshot:
   const t = useT();
   const { usage, due } = useMemo(() => vehicleDue(snapshot, vehicle.id, today), [snapshot, vehicle.id, today]);
   const urgent = due.filter((d) => d.status === 'overdue' || d.status === 'dueSoon');
-  const next = urgent.length > 0 ? urgent : due.slice(0, 1);
+  const onPhone = urgent.length > 0 ? urgent.length : 1;
+  const next = due.slice(0, Math.max(onPhone, WIDE_PREVIEW));
   const taskName = (id: string) => snapshot.tasks.find((task) => task.id === id)?.name ?? '';
   const staleDays = usage.latest ? daysBetween(usage.latest.date, today) : null;
 
@@ -82,8 +89,8 @@ function VehicleCard({ vehicle, snapshot, today }: { vehicle: Vehicle; snapshot:
       </div>
       {due.length === 0 ? <p className="muted">{t.dashboard.noTasks}</p> : null}
       <ul className="due-list">
-        {next.map((d) => (
-          <li key={d.taskId}>
+        {next.map((d, i) => (
+          <li key={d.taskId} className={i >= onPhone ? 'wide-only' : undefined}>
             <StatusChip status={d.status} />
             <span className="due-name">{taskName(d.taskId)}</span>
             <span className="due-text">{describeDue(d, t)}</span>

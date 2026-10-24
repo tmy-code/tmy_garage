@@ -574,6 +574,107 @@ body > .banner {
   margin: 6px 0 0;
 }
 
+@media (max-width: 999px) {
+  .wide-only {
+    display: none !important;
+  }
+}
+
+/* Wide screens: the page grows and splits into columns. Phones keep the single column above. */
+@media (min-width: 1000px) {
+  .topbar {
+    padding-left: max(24px, calc((100% - 1600px) / 2 + 24px));
+    padding-right: max(24px, calc((100% - 1600px) / 2 + 24px));
+  }
+
+  main {
+    max-width: 1600px;
+    padding: 24px 24px 48px;
+  }
+
+  main > .muted,
+  main > .banner,
+  main > .empty {
+    max-width: 900px;
+  }
+
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    gap: 16px;
+    align-items: start;
+  }
+
+  .card-grid > .card,
+  .card-grid > section {
+    margin: 0;
+  }
+
+  .list-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 8px;
+    align-items: start;
+  }
+
+  .list-grid li {
+    margin: 0;
+  }
+
+  .split {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(360px, 2fr);
+    gap: 32px;
+    align-items: start;
+  }
+
+  .columns,
+  .form-columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 32px;
+    align-items: start;
+  }
+
+  /* Forms stay at a comfortable reading width; the Service form uses two columns. */
+  .form {
+    max-width: 720px;
+  }
+
+  .form-wide {
+    max-width: none;
+  }
+
+  .form-columns > .form {
+    max-width: none;
+  }
+
+  .form-wide > .button-block,
+  .form-wide > .banner,
+  .form-wide > .muted {
+    max-width: 480px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .actions-footer {
+    max-width: 720px;
+  }
+
+  /* Full-width buttons would stretch across the screen outside forms. */
+  main > .button-block,
+  .card > .button-block {
+    width: auto;
+    min-width: 320px;
+  }
+
+  .check-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    column-gap: 8px;
+  }
+}
+
 /* Last, so it overrides the light-mode defaults above. */
 @media (prefers-color-scheme: dark) and (pointer: coarse) {
   .topbar {
