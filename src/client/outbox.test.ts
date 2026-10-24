@@ -5,13 +5,16 @@ import { applyOutbox, enqueueOp, opRequest, type OutboxOp } from './outbox.ts';
 const base: Snapshot = {
   vehicles: [],
   tasks: [],
-  services: [{ id: 's1', vehicleId: 'v', date: '2026-01-01', odometer: 100, taskIds: ['t'], notes: null }],
+  services: [{ id: 's1', vehicleId: 'v', date: '2026-01-01', odometer: 100, taskIds: ['t'], notes: null, partsUsed: [] }],
   readings: [],
+  vehicleSpecs: [],
+  partSpecs: [],
+  positions: [],
 };
 
 const service = (id: string, odometer: number): OutboxOp => ({
   kind: 'service',
-  data: { id, vehicleId: 'v', date: '2026-10-01', odometer, taskIds: ['t'], notes: null },
+  data: { id, vehicleId: 'v', date: '2026-10-01', odometer, taskIds: ['t'], notes: null, partsUsed: [] },
 });
 
 describe('outbox', () => {

@@ -68,6 +68,71 @@ const MIGRATIONS: string[] = [
   ALTER TABLE maintenance_tasks ADD COLUMN official_interval_km INTEGER;
   ALTER TABLE maintenance_tasks ADD COLUMN official_interval_months INTEGER;
   `,
+  `
+  ALTER TABLE maintenance_tasks ADD COLUMN workshop_notes TEXT;
+
+  CREATE TABLE vehicle_specs (
+    id TEXT PRIMARY KEY,
+    vehicle_id TEXT NOT NULL REFERENCES vehicles(id),
+    kind TEXT NOT NULL CHECK (kind IN ('torque', 'other')),
+    name TEXT NOT NULL,
+    value TEXT NOT NULL,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE part_specs (
+    id TEXT PRIMARY KEY,
+    vehicle_id TEXT NOT NULL REFERENCES vehicles(id),
+    name TEXT NOT NULL,
+    characteristics TEXT,
+    part_numbers TEXT,
+    unit TEXT NOT NULL CHECK (unit IN ('piece', 'litre')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE fitment_positions (
+    id TEXT PRIMARY KEY,
+    vehicle_id TEXT NOT NULL REFERENCES vehicles(id),
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE required_parts (
+    task_id TEXT NOT NULL REFERENCES maintenance_tasks(id) ON DELETE CASCADE,
+    part_spec_id TEXT NOT NULL REFERENCES part_specs(id) ON DELETE CASCADE,
+    quantity REAL NOT NULL,
+    sort INTEGER NOT NULL,
+    PRIMARY KEY (task_id, part_spec_id)
+  );
+
+  CREATE TABLE required_tools (
+    task_id TEXT NOT NULL REFERENCES maintenance_tasks(id) ON DELETE CASCADE,
+    sort INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    PRIMARY KEY (task_id, sort)
+  );
+
+  CREATE TABLE task_specs (
+    task_id TEXT NOT NULL REFERENCES maintenance_tasks(id) ON DELETE CASCADE,
+    spec_id TEXT NOT NULL REFERENCES vehicle_specs(id) ON DELETE CASCADE,
+    PRIMARY KEY (task_id, spec_id)
+  );
+
+  CREATE TABLE parts_used (
+    service_id TEXT NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+    sort INTEGER NOT NULL,
+    part_spec_id TEXT REFERENCES part_specs(id) ON DELETE SET NULL,
+    position_id TEXT REFERENCES fitment_positions(id),
+    description TEXT NOT NULL,
+    part_number TEXT,
+    quantity REAL NOT NULL,
+    unit TEXT NOT NULL CHECK (unit IN ('piece', 'litre')),
+    price REAL,
+    supplier TEXT,
+    PRIMARY KEY (service_id, sort)
+  );
+  `,
 ];
 
 function schemaVersion(db: DatabaseSync): number {

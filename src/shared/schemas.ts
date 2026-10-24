@@ -12,6 +12,9 @@ const optionalText = (max: number) =>
     .transform((v) => (v ? v : null));
 
 export const vehicleKind = z.enum(['car', 'motorcycle']);
+export const vehicleSpecKind = z.enum(['torque', 'other']);
+export const partUnit = z.enum(['piece', 'litre']);
+const quantity = z.number().positive().max(10_000);
 
 export const vehicleInput = z.object({
   kind: vehicleKind,
@@ -45,6 +48,40 @@ export const taskInput = z
 
 export const copyTasksInput = z.object({ fromVehicleId: z.string().min(1) });
 
+export const workshopInput = z.object({
+  workshopNotes: optionalText(20_000),
+  requiredParts: z.array(z.object({ partSpecId: z.string().min(1), quantity })).max(50),
+  tools: z.array(z.string().trim().min(1).max(120)).max(50),
+  specIds: z.array(z.string().min(1)).max(100),
+});
+
+export const vehicleSpecInput = z.object({
+  kind: vehicleSpecKind,
+  name: z.string().trim().min(1).max(120),
+  value: z.string().trim().min(1).max(120),
+  notes: optionalText(500),
+});
+
+export const partSpecInput = z.object({
+  name: z.string().trim().min(1).max(120),
+  characteristics: optionalText(500),
+  partNumbers: optionalText(500),
+  unit: partUnit,
+});
+
+export const positionInput = z.object({ name: z.string().trim().min(1).max(80) });
+
+export const partUsedInput = z.object({
+  partSpecId: z.string().min(1).nullish().transform((v) => v ?? null),
+  positionId: z.string().min(1).nullish().transform((v) => v ?? null),
+  description: z.string().trim().min(1).max(200),
+  partNumber: optionalText(120),
+  quantity,
+  unit: partUnit,
+  price: z.number().min(0).max(1_000_000).nullish().transform((v) => v ?? null),
+  supplier: optionalText(120),
+});
+
 export const serviceInput = z.object({
   id: clientId,
   vehicleId: z.string().min(1),
@@ -52,6 +89,8 @@ export const serviceInput = z.object({
   odometer,
   taskIds: z.array(z.string().min(1)).min(1, 'A Service completes at least one Maintenance Task'),
   notes: optionalText(2000),
+  // Services queued on a phone before Parts Used existed arrive without them.
+  partsUsed: z.array(partUsedInput).max(100).default([]),
 });
 
 export const odometerReadingInput = z.object({
@@ -62,6 +101,8 @@ export const odometerReadingInput = z.object({
 });
 
 export type VehicleKind = z.infer<typeof vehicleKind>;
+export type VehicleSpecKind = z.infer<typeof vehicleSpecKind>;
+export type PartUnit = z.infer<typeof partUnit>;
 export type VehicleInput = z.infer<typeof vehicleInput>;
 export type SellInput = z.infer<typeof sellInput>;
 export type TaskInput = z.infer<typeof taskInput>;

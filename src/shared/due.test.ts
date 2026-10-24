@@ -14,12 +14,16 @@ function task(overrides: Partial<MaintenanceTask> = {}): MaintenanceTask {
     officialIntervalMonths: null,
     baselineDate: null,
     baselineOdometer: null,
+    workshopNotes: null,
+    requiredParts: [],
+    tools: [],
+    specIds: [],
     ...overrides,
   };
 }
 
 function service(date: string, odometer: number, taskIds = ['oil']): Service {
-  return { id: `s-${date}`, vehicleId: 'bike', date, odometer, taskIds, notes: null };
+  return { id: `s-${date}`, vehicleId: 'bike', date, odometer, taskIds, notes: null, partsUsed: [] };
 }
 
 const noUsage: Usage = { latest: null, kmPerDay: null, estimatedOdometer: null };
@@ -203,6 +207,9 @@ describe('vehicleDue', () => {
       tasks: [task({ id: 'oil' }), task({ id: 'brake-fluid', intervalKm: null, intervalMonths: 24 }), task({ id: 'new', intervalMonths: 6 })],
       services: [service('2025-09-01', 15_000, ['oil', 'brake-fluid'])],
       readings: [{ id: 'r1', vehicleId: 'bike', date: '2026-10-01', odometer: 21_500 }],
+      vehicleSpecs: [],
+      partSpecs: [],
+      positions: [],
     };
     const { usage, due } = vehicleDue(snapshot, 'bike', '2026-10-01');
     expect(usage.latest?.odometer).toBe(21_500);

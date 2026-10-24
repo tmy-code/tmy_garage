@@ -1,13 +1,61 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { todayIso } from '../../shared/dates.ts';
 import { vehicleDue } from '../../shared/due.ts';
-import type { Service, Snapshot, Vehicle } from '../../shared/types.ts';
+import type { PartUnit } from '../../shared/schemas.ts';
+import type { PartUsed, Service, Snapshot, Vehicle } from '../../shared/types.ts';
+import { lastUsed } from '../../shared/workshop.ts';
 import { newId } from '../api.ts';
 import { Field, Layout, StatusChip } from '../components.tsx';
 import { formatKm, parseNumber } from '../format.ts';
-import { useT } from '../i18n.ts';
+import { useT, type Messages } from '../i18n.ts';
 import { navigate } from '../router.ts';
 import { enqueue, online, useStore } from '../store.ts';
+
+/** A Part Used as typed in the form: numbers stay text until saved. */
+interface PartDraft {
+  key: number;
+  partSpecId: string | null;
+  positionId: string | null;
+  description: string;
+  partNumber: string;
+  quantity: string;
+  unit: PartUnit;
+  price: string;
+  supplier: string;
+}
+
+let nextKey = 1;
+
+function toDraft(p: PartUsed): PartDraft {
+  return {
+    key: nextKey++,
+    partSpecId: p.partSpecId,
+    positionId: p.positionId,
+    description: p.description,
+    partNumber: p.partNumber ?? '',
+    quantity: String(p.quantity),
+    unit: p.unit,
+    price: p.price === null ? '' : String(p.price),
+    supplier: p.supplier ?? '',
+  };
+}
+
+function fromDraft(d: PartDraft, t: Messages): PartUsed {
+  const quantity = parseNumber(d.quantity);
+  const price = parseNumber(d.price);
+  if (!d.description.trim() || quantity === null || Number.isNaN(quantity) || quantity <= 0) throw new Error(t.workshop.partError);
+  if (price !== null && (Number.isNaN(price) || price < 0)) throw new Error(t.workshop.priceError);
+  return {
+    partSpecId: d.partSpecId,
+    positionId: d.positionId,
+    description: d.description.trim(),
+    partNumber: d.partNumber.trim() || null,
+    quantity,
+    unit: d.unit,
+    price,
+    supplier: d.supplier.trim() || null,
+  };
+}
 
 /** Log or edit a Service. Works offline: the Service is queued and sent when back in range. */
 export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; snapshot: Snapshot; existing?: Service }) {
@@ -21,6 +69,12 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
   const [odometerText, setOdometerText] = useState(existing ? String(existing.odometer) : '');
   const [selected, setSelected] = useState<Set<string>>(new Set(existing?.taskIds ?? []));
   const [notes, setNotes] = useState(existing?.notes ?? '');
+  const [parts, setParts] = useState<PartDraft[]>(() => (existing?.partsUsed ?? []).map(toDraft));
+  const partSpecs = snapshot.partSpecs.filter((p) => p.vehicleId === vehicle.id);
+  const positions = snapshot.positions.filter((p) => p.vehicleId === vehicle.id);
+  const missingParts = [...selected]
+    .flatMap((id) => tasks.get(id)?.requiredParts ?? [])
+    .filter((r) => partSpecs.some((s) => s.id === r.partSpecId) && !parts.some((p) => p.partSpecId === r.partSpecId));
   const [error, setError] = useState<string | null>(null);
 
   const odometer = parseNumber(odometerText);
@@ -36,6 +90,39 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
     setSelected(next);
   }
 
+  function setPart(key: number, patch: Partial<PartDraft>) {
+    setParts(parts.map((p) => (p.key === key ? { ...p, ...patch } : p)));
+  }
+
+  /** Adds the Required Parts of the ticked Tasks, filled in with what was used last time. */
+  function addFromTasks() {
+    const added: PartDraft[] = [];
+    for (const r of missingParts) {
+      const spec = partSpecs.find((s) => s.id === r.partSpecId)!;
+      if (added.some((p) => p.partSpecId === spec.id)) continue;
+      const last = lastUsed(snapshot, spec)?.part;
+      added.push({
+        key: nextKey++,
+        partSpecId: spec.id,
+        positionId: last?.positionId ?? null,
+        description: last?.description ?? [spec.name, spec.characteristics].filter(Boolean).join(' '),
+        partNumber: last?.partNumber ?? '',
+        quantity: String(r.quantity),
+        unit: spec.unit,
+        price: '',
+        supplier: last?.supplier ?? '',
+      });
+    }
+    setParts([...parts, ...added]);
+  }
+
+  function addEmptyPart() {
+    setParts([
+      ...parts,
+      { key: nextKey++, partSpecId: null, positionId: null, description: '', partNumber: '', quantity: '1', unit: 'piece', price: '', supplier: '' },
+    ]);
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (odometer === null || Number.isNaN(odometer) || odometer < 0 || !Number.isInteger(odometer)) {
@@ -46,9 +133,16 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
       setError(t.service.errorTasks);
       return;
     }
+    let partsUsed: PartUsed[];
+    try {
+      partsUsed = parts.map((d) => fromDraft(d, t));
+    } catch (e) {
+      setError((e as Error).message);
+      return;
+    }
     await enqueue({
       kind: 'service',
-      data: { id: existing?.id ?? newId(), vehicleId: vehicle.id, date, odometer, taskIds: [...selected], notes: notes.trim() || null },
+      data: { id: existing?.id ?? newId(), vehicleId: vehicle.id, date, odometer, taskIds: [...selected], notes: notes.trim() || null, partsUsed },
     });
     navigate(back, { replace: true });
   }
@@ -99,6 +193,86 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
               <StatusChip status={d.status} />
             </label>
           ))}
+        </fieldset>
+
+        <fieldset className="field">
+          <legend className="field-label">{t.workshop.partsUsed}</legend>
+          {parts.map((d) => (
+            <div key={d.key} className="card part-used">
+              <div className="section-head">
+                <span className="field-label">{t.workshop.description}</span>
+                <button type="button" className="button button-small button-danger" onClick={() => setParts(parts.filter((p) => p.key !== d.key))}>
+                  {t.workshop.remove}
+                </button>
+              </div>
+              <input
+                value={d.description}
+                onChange={(e) => setPart(d.key, { description: e.target.value })}
+                maxLength={200}
+                placeholder={t.workshop.descriptionHint}
+                aria-label={t.workshop.description}
+              />
+              <div className="row">
+                <Field label={t.workshop.quantity}>
+                  <input inputMode="decimal" value={d.quantity} onChange={(e) => setPart(d.key, { quantity: e.target.value })} />
+                </Field>
+                <Field label={t.workshop.unit}>
+                  <select value={d.unit} onChange={(e) => setPart(d.key, { unit: e.target.value as PartUnit })}>
+                    <option value="piece">{t.workshop.piece}</option>
+                    <option value="litre">{t.workshop.litre}</option>
+                  </select>
+                </Field>
+              </div>
+              {positions.length > 0 ? (
+                <Field label={t.workshop.position}>
+                  <select value={d.positionId ?? ''} onChange={(e) => setPart(d.key, { positionId: e.target.value || null })}>
+                    <option value="">{t.workshop.noPosition}</option>
+                    {positions.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              ) : null}
+              <details className="part-details">
+                <summary>{t.workshop.moreDetails}</summary>
+                <div className="row">
+                  <Field label={t.workshop.partNumber}>
+                    <input value={d.partNumber} onChange={(e) => setPart(d.key, { partNumber: e.target.value })} maxLength={120} />
+                  </Field>
+                  <Field label={t.workshop.price}>
+                    <input inputMode="decimal" value={d.price} onChange={(e) => setPart(d.key, { price: e.target.value })} />
+                  </Field>
+                </div>
+                {partSpecs.length > 0 ? (
+                  <Field label={t.workshop.spec}>
+                    <select value={d.partSpecId ?? ''} onChange={(e) => setPart(d.key, { partSpecId: e.target.value || null })}>
+                      <option value="">{t.workshop.noSpec}</option>
+                      {partSpecs.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                ) : null}
+                <Field label={t.workshop.supplier}>
+                  <input value={d.supplier} onChange={(e) => setPart(d.key, { supplier: e.target.value })} maxLength={120} />
+                </Field>
+              </details>
+            </div>
+          ))}
+          <div className="actions">
+            {missingParts.length > 0 ? (
+              <button type="button" className="button button-small" onClick={addFromTasks}>
+                {t.workshop.addFromTasks}
+              </button>
+            ) : null}
+            <button type="button" className="button button-small" onClick={addEmptyPart}>
+              {t.workshop.addPartUsed}
+            </button>
+          </div>
         </fieldset>
 
         <Field label={t.service.notes} hint={t.service.notesHint}>

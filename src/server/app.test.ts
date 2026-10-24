@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Hono } from 'hono';
 import type { DatabaseSync } from 'node:sqlite';
-import type { Snapshot, Vehicle, MaintenanceTask } from '../shared/types.ts';
+import type { FitmentPosition, MaintenanceTask, PartSpec, Snapshot, Vehicle, VehicleSpec } from '../shared/types.ts';
 import { createApp } from './app.ts';
 import { openDatabase } from './db.ts';
 
@@ -106,7 +106,7 @@ describe('services and readings (replayed by the offline send queue)', () => {
     expect((await call('PUT', '/api/services/svc-00001', body)).status).toBe(200);
     expect((await call('PUT', '/api/services/svc-00001', body)).status).toBe(200);
     const s = await snapshot();
-    expect(s.services).toEqual([{ ...body }]);
+    expect(s.services).toEqual([{ ...body, partsUsed: [] }]);
   });
 
   it('updates a Service and its tasks on a later PUT', async () => {
@@ -149,6 +149,95 @@ describe('services and readings (replayed by the offline send queue)', () => {
   });
 });
 
+describe('workshop data', () => {
+  async function created<T>(path: string, body: object): Promise<T> {
+    const res = await call('POST', path, body);
+    expect(res.status).toBe(201);
+    return res.json();
+  }
+
+  it('stores Vehicle Specs, Part Specs and positions, and lists them in the snapshot', async () => {
+    const bike = await createVehicle();
+    const torque = await created<VehicleSpec>(`/api/vehicles/${bike.id}/specs`, { kind: 'torque', name: 'Drain plug', value: '30 Nm' });
+    await call('PUT', `/api/specs/${torque.id}`, { kind: 'torque', name: 'Drain plug', value: '30 Nm', notes: 'New washer' });
+    await created(`/api/vehicles/${bike.id}/part-specs`, { name: 'Engine oil', characteristics: '10W-40 JASO MA2', unit: 'litre' });
+    await created(`/api/vehicles/${bike.id}/positions`, { name: 'Rear tyre' });
+    const s = await snapshot();
+    expect(s.vehicleSpecs).toEqual([{ id: torque.id, vehicleId: bike.id, kind: 'torque', name: 'Drain plug', value: '30 Nm', notes: 'New washer' }]);
+    expect(s.partSpecs[0]).toMatchObject({ name: 'Engine oil', characteristics: '10W-40 JASO MA2', partNumbers: null, unit: 'litre' });
+    expect(s.positions[0]).toMatchObject({ name: 'Rear tyre' });
+  });
+
+  it('saves a Task’s workshop card as a whole', async () => {
+    const bike = await createVehicle();
+    const task = await createTask(bike.id);
+    const oil = await created<PartSpec>(`/api/vehicles/${bike.id}/part-specs`, { name: 'Engine oil', unit: 'litre' });
+    const filter = await created<PartSpec>(`/api/vehicles/${bike.id}/part-specs`, { name: 'Oil filter', partNumbers: 'HF204', unit: 'piece' });
+    const plug = await created<VehicleSpec>(`/api/vehicles/${bike.id}/specs`, { kind: 'torque', name: 'Drain plug', value: '30 Nm' });
+    const card = {
+      workshopNotes: 'Warm the engine first.',
+      requiredParts: [
+        { partSpecId: oil.id, quantity: 3.2 },
+        { partSpecId: filter.id, quantity: 1 },
+      ],
+      tools: ['17 mm socket', 'Torque wrench'],
+      specIds: [plug.id],
+    };
+    expect((await call('PUT', `/api/tasks/${task.id}/workshop`, card)).status).toBe(200);
+    expect((await snapshot()).tasks[0]).toMatchObject(card);
+
+    await call('PUT', `/api/tasks/${task.id}/workshop`, { workshopNotes: null, requiredParts: [{ partSpecId: filter.id, quantity: 1 }], tools: [], specIds: [] });
+    expect((await snapshot()).tasks[0]).toMatchObject({ workshopNotes: null, requiredParts: [{ partSpecId: filter.id, quantity: 1 }], tools: [], specIds: [] });
+
+    // Deleting a Part Spec removes it from the Tasks that required it.
+    await call('DELETE', `/api/part-specs/${filter.id}`);
+    expect((await snapshot()).tasks[0]!.requiredParts).toEqual([]);
+  });
+
+  it('refuses workshop links to another vehicle’s data', async () => {
+    const a = await createVehicle('A');
+    const b = await createVehicle('B');
+    const task = await createTask(a.id);
+    const other = await created<PartSpec>(`/api/vehicles/${b.id}/part-specs`, { name: 'Engine oil', unit: 'litre' });
+    const res = await call('PUT', `/api/tasks/${task.id}/workshop`, { requiredParts: [{ partSpecId: other.id, quantity: 1 }], tools: [], specIds: [] });
+    expect(res.status).toBe(422);
+  });
+
+  it('stores Parts Used with a Service, and keeps them when their Part Spec is deleted', async () => {
+    const bike = await createVehicle();
+    const task = await createTask(bike.id);
+    const tyre = await created<PartSpec>(`/api/vehicles/${bike.id}/part-specs`, { name: 'Rear tyre', characteristics: '180/55 ZR17', unit: 'piece' });
+    const rear = await created<FitmentPosition>(`/api/vehicles/${bike.id}/positions`, { name: 'Rear tyre' });
+    const part = { partSpecId: tyre.id, positionId: rear.id, description: 'Michelin Road 6', partNumber: null, quantity: 1, unit: 'piece', price: 160, supplier: null };
+    const body = { id: 'svc-00001', vehicleId: bike.id, date: '2026-10-01', odometer: 18000, taskIds: [task.id], notes: null, partsUsed: [part] };
+    await call('PUT', '/api/services/svc-00001', body);
+    await call('PUT', '/api/services/svc-00001', body);
+    expect((await snapshot()).services[0]!.partsUsed).toEqual([part]);
+
+    expect((await call('DELETE', `/api/positions/${rear.id}`)).status).toBe(409);
+    await call('DELETE', `/api/part-specs/${tyre.id}`);
+    expect((await snapshot()).services[0]!.partsUsed).toEqual([{ ...part, partSpecId: null }]);
+  });
+
+  it('accepts a Service queued before Parts Used existed, and drops links to deleted data', async () => {
+    const bike = await createVehicle();
+    const task = await createTask(bike.id);
+    const old = { id: 'svc-00001', vehicleId: bike.id, date: '2026-10-01', odometer: 1, taskIds: [task.id] };
+    expect((await call('PUT', '/api/services/svc-00001', old)).status).toBe(200);
+    const stale = { ...old, partsUsed: [{ partSpecId: 'gone', positionId: 'gone', description: 'Oil', quantity: 1, unit: 'litre' }] };
+    expect((await call('PUT', '/api/services/svc-00001', stale)).status).toBe(200);
+    expect((await snapshot()).services[0]!.partsUsed[0]).toMatchObject({ partSpecId: null, positionId: null, description: 'Oil' });
+  });
+
+  it('deletes a Task’s workshop data with the Task', async () => {
+    const bike = await createVehicle();
+    const task = await createTask(bike.id);
+    await call('PUT', `/api/tasks/${task.id}/workshop`, { tools: ['Hex key'], requiredParts: [], specIds: [] });
+    expect((await call('DELETE', `/api/tasks/${task.id}`)).status).toBe(204);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM required_tools').get()).toEqual({ n: 0 });
+  });
+});
+
 describe('garage isolation', () => {
   it('never shows another Garage’s vehicles', async () => {
     db.prepare(`INSERT INTO garages (id, name) VALUES ('friend', 'Friend')`).run();
@@ -175,12 +264,16 @@ describe('migrations', () => {
 
   it('backs up an existing database before migrating it, and keeps its data', () => {
     const path = join(dir, 'garage.sqlite');
-    // Recreate a database as the first release left it: schema version 1, without the Official Interval columns.
+    // Recreate a database as the first release left it: schema version 1, without the Official Interval or workshop data.
     const old = openDatabase(path);
     old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v1', 'default', 'car', 'Old car')`);
     old.exec(`INSERT INTO maintenance_tasks (id, vehicle_id, name, interval_km) VALUES ('t1', 'v1', 'Oil', 10000)`);
     old.exec('ALTER TABLE maintenance_tasks DROP COLUMN official_interval_km');
     old.exec('ALTER TABLE maintenance_tasks DROP COLUMN official_interval_months');
+    old.exec('ALTER TABLE maintenance_tasks DROP COLUMN workshop_notes');
+    for (const table of ['parts_used', 'task_specs', 'required_tools', 'required_parts', 'fitment_positions', 'part_specs', 'vehicle_specs']) {
+      old.exec(`DROP TABLE ${table}`);
+    }
     old.exec('PRAGMA user_version = 1');
     old.close();
 

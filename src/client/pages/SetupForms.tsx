@@ -9,7 +9,7 @@ import { online, useStore } from '../store.ts';
 
 // Vehicle and Maintenance Task setup is desk work and needs a connection (ADR 0001).
 
-function useSubmit() {
+export function useSubmit() {
   const { reachable } = useStore();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -27,7 +27,7 @@ function useSubmit() {
   return { error, setError, busy, disabled: busy || !reachable, run };
 }
 
-function Submit({ disabled, children }: { disabled: boolean; children: ReactNode }) {
+export function Submit({ disabled, children }: { disabled: boolean; children: ReactNode }) {
   return (
     <button type="submit" className="button button-primary button-block" disabled={disabled}>
       {children}

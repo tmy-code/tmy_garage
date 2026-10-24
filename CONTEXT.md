@@ -14,7 +14,7 @@ _Avoid_: Car (when meaning any vehicle), bike, asset, archived
 
 ### In the French interface
 
-The app speaks English and French. French screens use: Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Due Date → échéance, Interval → intervalle.
+The app speaks English and French. French screens use: Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Due Date → échéance, Interval → intervalle, Vehicle Spec → caractéristique, Torque Spec → couple de serrage, Required Tool → outil, Workshop Notes → notes d’atelier, Part Spec → spécification de pièce, Required Part → pièce nécessaire, Part Used → pièce utilisée, Fitment Position → emplacement, Shopping List → liste de courses.
 
 ## Maintenance
 
@@ -99,6 +99,10 @@ _Avoid_: Mod, upgrade, customisation
 **Fitment Position**:
 A named location on a Vehicle that holds one Part at a time (e.g. front tyre, rear tyre, battery, chain kit). What is currently fitted there is the most recent Part Used or Modification at that position.
 _Avoid_: Slot, component, location
+
+**Shopping List**:
+The Required Parts of the Maintenance Tasks coming due, added up per Part Spec, with what was used last time. The user checks the shelf themselves: no stock of spares is tracked.
+_Avoid_: Stock, inventory, order
 
 ## Documents
 

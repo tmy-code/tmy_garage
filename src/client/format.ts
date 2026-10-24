@@ -1,4 +1,5 @@
 import { effectiveInterval, type DueInfo } from '../shared/due.ts';
+import type { PartUnit } from '../shared/schemas.ts';
 import type { MaintenanceTask } from '../shared/types.ts';
 import { messages, type Messages } from './i18n.ts';
 
@@ -17,6 +18,12 @@ export function formatKm(km: number): string {
 
 export function formatMoney(amount: number, m: Messages = messages()): string {
   return new Intl.NumberFormat(m.locale, { style: 'currency', currency: 'EUR' }).format(amount);
+}
+
+/** A Part quantity in its unit, e.g. "3.2 L" or "2 pcs" ("3,2 L", "2 pièces" in French). */
+export function formatQuantity(quantity: number, unit: PartUnit, m: Messages = messages()): string {
+  const n = new Intl.NumberFormat(m.locale, { maximumFractionDigits: 2 }).format(quantity);
+  return `${n} ${m.workshop.units[unit](quantity)}`;
 }
 
 function formatMonths(months: number, m: Messages): string {

@@ -4,6 +4,7 @@ import { Dashboard } from './pages/Dashboard.tsx';
 import { ReadingForm, ServiceForm } from './pages/ServiceForm.tsx';
 import { CopyTasks, SellForm, TaskForm, VehicleForm } from './pages/SetupForms.tsx';
 import { VehiclePage } from './pages/VehiclePage.tsx';
+import { FittedPage, PartSpecsPage, ShoppingPage, SpecsPage, TaskPage, WorkshopForm } from './pages/Workshop.tsx';
 import { useRoute } from './router.ts';
 import { sync, useStore } from './store.ts';
 
@@ -38,6 +39,7 @@ export function App() {
   const vehicle = section === 'vehicles' && id ? snapshot.vehicles.find((v) => v.id === id) : undefined;
 
   if (section === undefined) return <Dashboard snapshot={snapshot} />;
+  if (section === 'shopping') return <ShoppingPage snapshot={snapshot} />;
   if (section === 'vehicles' && id === 'new') return <VehicleForm />;
   if (section === 'vehicles') {
     if (!vehicle) return <NotFound what="vehicle" />;
@@ -54,15 +56,23 @@ export function App() {
         return <ReadingForm vehicle={vehicle} snapshot={snapshot} />;
       case 'copy-tasks':
         return <CopyTasks vehicle={vehicle} snapshot={snapshot} />;
+      case 'specs':
+        return <SpecsPage vehicle={vehicle} snapshot={snapshot} />;
+      case 'parts':
+        return <PartSpecsPage vehicle={vehicle} snapshot={snapshot} />;
+      case 'fitted':
+        return <FittedPage vehicle={vehicle} snapshot={snapshot} />;
       case 'tasks':
         if (subId === 'new') return <TaskForm vehicle={vehicle} />;
     }
   }
-  if (section === 'tasks' && sub === 'edit') {
+  if (section === 'tasks') {
     const task = snapshot.tasks.find((t) => t.id === id);
     const owner = task && snapshot.vehicles.find((v) => v.id === task.vehicleId);
-    if (task && owner) return <TaskForm key={task.id} vehicle={owner} existing={task} />;
-    return <NotFound what="task" />;
+    if (!task || !owner) return <NotFound what="task" />;
+    if (sub === undefined) return <TaskPage key={task.id} task={task} vehicle={owner} snapshot={snapshot} />;
+    if (sub === 'edit') return <TaskForm key={task.id} vehicle={owner} existing={task} />;
+    if (sub === 'workshop') return <WorkshopForm key={task.id} task={task} vehicle={owner} snapshot={snapshot} />;
   }
   if (section === 'services' && sub === 'edit') {
     const service = snapshot.services.find((s) => s.id === id);

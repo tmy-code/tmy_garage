@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DueInfo } from '../shared/due.ts';
 import type { MaintenanceTask } from '../shared/types.ts';
-import { describeDue, describeInterval, describeOfficialInterval, formatDate } from './format.ts';
+import { describeDue, describeInterval, describeOfficialInterval, formatDate, formatQuantity } from './format.ts';
 import { messagesFor } from './i18n.ts';
 
 const en = messagesFor('en');
@@ -19,6 +19,10 @@ const task = (intervalKm: number | null, intervalMonths: number | null): Mainten
   officialIntervalMonths: null,
   baselineDate: null,
   baselineOdometer: null,
+  workshopNotes: null,
+  requiredParts: [],
+  tools: [],
+  specIds: [],
 });
 
 const due: DueInfo = {
@@ -51,6 +55,13 @@ describe('format in both languages', () => {
     expect(plain(describeOfficialInterval(airFilter, en)!)).toBe('Official: every 30 000 km or 2 years');
     expect(plain(describeOfficialInterval(airFilter, fr)!)).toBe('Constructeur : tous les 30 000 km ou 2 ans');
     expect(describeOfficialInterval(task(6000, 12), en)).toBeNull();
+  });
+
+  it('formats Part quantities in their unit', () => {
+    expect(formatQuantity(3.2, 'litre', en)).toBe('3.2 L');
+    expect(formatQuantity(3.2, 'litre', fr)).toBe('3,2 L');
+    expect(formatQuantity(1, 'piece', en)).toBe('1 pc');
+    expect(formatQuantity(2, 'piece', fr)).toBe('2 pièces');
   });
 
   it('describes a projected Due Date', () => {

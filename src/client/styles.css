@@ -495,6 +495,85 @@ body > .banner {
   font-weight: 600;
 }
 
+.item-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.inline-editor {
+  margin-bottom: 8px;
+}
+
+.list li.editing {
+  border: 0;
+  background: none;
+}
+
+.part-row {
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.part-row select {
+  flex: 1;
+  min-width: 0;
+}
+
+.part-row .quantity {
+  width: 6em;
+  flex: none;
+}
+
+.part-used {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.part-used .row .field {
+  min-width: 0;
+}
+
+.part-used .section-head {
+  margin: 0;
+  align-items: center;
+}
+
+.part-details summary {
+  cursor: pointer;
+  color: var(--muted);
+  padding: 4px 0;
+}
+
+.part-details[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card > p:first-child {
+  margin-top: 0;
+}
+
+.notes {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.history-row details p {
+  margin: 6px 0 0;
+}
+
 /* Last, so it overrides the light-mode defaults above. */
 @media (prefers-color-scheme: dark) and (pointer: coarse) {
   .topbar {

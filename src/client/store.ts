@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { get, set } from 'idb-keyval';
 import type { Snapshot } from '../shared/types.ts';
+import { normalizeSnapshot } from '../shared/workshop.ts';
 import { ApiError, NetworkError, request } from './api.ts';
 import { applyOutbox, enqueueOp, opRequest, type OutboxOp } from './outbox.ts';
 
@@ -140,7 +141,7 @@ export async function initStore(): Promise<void> {
     load<OutboxOp[]>('outbox'),
     load<StoreState['rejected']>('rejected'),
   ]);
-  update({ serverSnapshot: snapshot ?? null, outbox: outbox ?? [], rejected: rejected ?? [], loaded: true });
+  update({ serverSnapshot: snapshot ? normalizeSnapshot(snapshot) : null, outbox: outbox ?? [], rejected: rejected ?? [], loaded: true });
   void flush();
 
   window.addEventListener('online', () => void flush());

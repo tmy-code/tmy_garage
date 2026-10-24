@@ -1,4 +1,5 @@
 import type { OdometerReading, Service, Snapshot } from '../shared/types.ts';
+import { normalizeService } from '../shared/workshop.ts';
 
 /**
  * A change made on the phone that has not reached the server yet (see ADR 0001).
@@ -24,7 +25,7 @@ function upsert<T extends { id: string }>(items: T[], item: T): T[] {
 export function applyOutbox(snapshot: Snapshot, ops: OutboxOp[]): Snapshot {
   let { services, readings } = snapshot;
   for (const op of ops) {
-    if (op.kind === 'service') services = upsert(services, op.data);
+    if (op.kind === 'service') services = upsert(services, normalizeService(op.data));
     else readings = upsert(readings, op.data);
   }
   return { ...snapshot, services, readings };

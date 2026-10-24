@@ -35,6 +35,11 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
       ) : (
         owned.map((v) => <VehicleCard key={v.id} vehicle={v} snapshot={snapshot} today={today} />)
       )}
+      {owned.length > 0 ? (
+        <a className="button button-block" href="#/shopping">
+          🛒 {t.workshop.shopping}
+        </a>
+      ) : null}
       {sold.length > 0 ? (
         <details className="sold">
           <summary>{t.dashboard.soldVehicles(sold.length)}</summary>
