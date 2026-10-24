@@ -3,6 +3,7 @@ import { todayIso } from '../../shared/dates.ts';
 import type { MaintenanceTask, Snapshot, Vehicle } from '../../shared/types.ts';
 import { Field, Layout, NeedsConnection } from '../components.tsx';
 import { parseNumber } from '../format.ts';
+import { useT, type Messages } from '../i18n.ts';
 import { navigate } from '../router.ts';
 import { online, useStore } from '../store.ts';
 
@@ -34,13 +35,14 @@ function Submit({ disabled, children }: { disabled: boolean; children: ReactNode
   );
 }
 
-function optionalNumber(text: string, label: string): number | null {
+function optionalNumber(text: string, label: string, t: Messages): number | null {
   const n = parseNumber(text);
-  if (n !== null && (Number.isNaN(n) || n < 0 || !Number.isInteger(n))) throw new Error(`${label} must be a whole number.`);
+  if (n !== null && (Number.isNaN(n) || n < 0 || !Number.isInteger(n))) throw new Error(t.setup.wholeNumber(label));
   return n;
 }
 
 export function VehicleForm({ existing }: { existing?: Vehicle }) {
+  const t = useT();
   const [kind, setKind] = useState<Vehicle['kind']>(existing?.kind ?? 'motorcycle');
   const [name, setName] = useState(existing?.name ?? '');
   const [make, setMake] = useState(existing?.make ?? '');
@@ -53,7 +55,7 @@ export function VehicleForm({ existing }: { existing?: Vehicle }) {
   function submit(event: FormEvent) {
     event.preventDefault();
     void run(async () => {
-      const body = { kind, name, make, model, year: optionalNumber(year, 'Year'), registration };
+      const body = { kind, name, make, model, year: optionalNumber(year, t.setup.year, t), registration };
       const saved = existing
         ? await online<Vehicle>('PUT', `/api/vehicles/${existing.id}`, body)
         : await online<Vehicle>('POST', '/api/vehicles', body);
@@ -62,39 +64,40 @@ export function VehicleForm({ existing }: { existing?: Vehicle }) {
   }
 
   return (
-    <Layout title={existing ? 'Edit vehicle' : 'New vehicle'} back={back}>
+    <Layout title={existing ? t.setup.editVehicle : t.setup.newVehicle} back={back}>
       <NeedsConnection />
       <form onSubmit={submit} className="form">
-        <div className="segmented" role="radiogroup" aria-label="Kind">
+        <div className="segmented" role="radiogroup" aria-label={t.setup.kind}>
           {(['motorcycle', 'car'] as const).map((k) => (
             <button type="button" key={k} role="radio" aria-checked={kind === k} className={kind === k ? 'on' : ''} onClick={() => setKind(k)}>
-              {k === 'car' ? '🚗 Car' : '🏍️ Motorcycle'}
+              {k === 'car' ? t.setup.car : t.setup.motorcycle}
             </button>
           ))}
         </div>
-        <Field label="Name" hint="What you call it, e.g. “The Tracer” or “Clio”.">
+        <Field label={t.setup.name} hint={t.setup.nameHint}>
           <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={80} />
         </Field>
-        <Field label="Make">
+        <Field label={t.setup.make}>
           <input value={make} onChange={(e) => setMake(e.target.value)} maxLength={60} />
         </Field>
-        <Field label="Model">
+        <Field label={t.setup.model}>
           <input value={model} onChange={(e) => setModel(e.target.value)} maxLength={60} />
         </Field>
-        <Field label="Year">
+        <Field label={t.setup.year}>
           <input inputMode="numeric" value={year} onChange={(e) => setYear(e.target.value)} maxLength={4} />
         </Field>
-        <Field label="Registration">
+        <Field label={t.setup.registration}>
           <input value={registration} onChange={(e) => setRegistration(e.target.value.toUpperCase())} maxLength={20} />
         </Field>
         {error ? <p className="banner banner-error">{error}</p> : null}
-        <Submit disabled={disabled}>{existing ? 'Save' : 'Add vehicle'}</Submit>
+        <Submit disabled={disabled}>{existing ? t.setup.save : t.setup.addVehicle}</Submit>
       </form>
     </Layout>
   );
 }
 
 export function SellForm({ vehicle }: { vehicle: Vehicle }) {
+  const t = useT();
   const [date, setDate] = useState(vehicle.soldDate ?? todayIso());
   const [odometer, setOdometer] = useState(vehicle.soldOdometer !== null ? String(vehicle.soldOdometer) : '');
   const [price, setPrice] = useState(vehicle.soldPrice !== null ? String(vehicle.soldPrice) : '');
@@ -105,8 +108,8 @@ export function SellForm({ vehicle }: { vehicle: Vehicle }) {
     event.preventDefault();
     void run(async () => {
       const p = parseNumber(price);
-      if (p !== null && (Number.isNaN(p) || p < 0)) throw new Error('Price must be a positive number.');
-      await online('POST', `/api/vehicles/${vehicle.id}/sell`, { date, odometer: optionalNumber(odometer, 'Odometer'), price: p });
+      if (p !== null && (Number.isNaN(p) || p < 0)) throw new Error(t.setup.priceError);
+      await online('POST', `/api/vehicles/${vehicle.id}/sell`, { date, odometer: optionalNumber(odometer, t.setup.odometerLabel, t), price: p });
       navigate(back, { replace: true });
     });
   }
@@ -119,24 +122,24 @@ export function SellForm({ vehicle }: { vehicle: Vehicle }) {
   }
 
   return (
-    <Layout title={`Sell ${vehicle.name}`} back={back}>
+    <Layout title={t.setup.sellTitle(vehicle.name)} back={back}>
       <NeedsConnection />
-      <p className="muted">A sold vehicle keeps its full history but no longer shows anything due.</p>
+      <p className="muted">{t.setup.sellIntro}</p>
       <form onSubmit={submit} className="form">
-        <Field label="Sale date">
+        <Field label={t.setup.saleDate}>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
         </Field>
-        <Field label="Odometer at sale (km)">
+        <Field label={t.setup.saleOdometer}>
           <input inputMode="numeric" value={odometer} onChange={(e) => setOdometer(e.target.value)} />
         </Field>
-        <Field label="Price (€)">
+        <Field label={t.setup.price}>
           <input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} />
         </Field>
         {error ? <p className="banner banner-error">{error}</p> : null}
-        <Submit disabled={disabled}>{vehicle.status === 'sold' ? 'Save sale details' : 'Mark as sold'}</Submit>
+        <Submit disabled={disabled}>{vehicle.status === 'sold' ? t.setup.saveSale : t.setup.markSold}</Submit>
         {vehicle.status === 'sold' ? (
           <button type="button" className="button button-block" onClick={unsell} disabled={disabled}>
-            Undo: I still own it
+            {t.setup.unsell}
           </button>
         ) : null}
       </form>
@@ -145,6 +148,7 @@ export function SellForm({ vehicle }: { vehicle: Vehicle }) {
 }
 
 export function TaskForm({ vehicle, existing }: { vehicle: Vehicle; existing?: MaintenanceTask }) {
+  const t = useT();
   const [name, setName] = useState(existing?.name ?? '');
   const [intervalKm, setIntervalKm] = useState(String(existing?.intervalKm ?? ''));
   const [intervalMonths, setIntervalMonths] = useState(String(existing?.intervalMonths ?? ''));
@@ -158,13 +162,13 @@ export function TaskForm({ vehicle, existing }: { vehicle: Vehicle; existing?: M
     void run(async () => {
       const body = {
         name,
-        intervalKm: optionalNumber(intervalKm, 'Distance'),
-        intervalMonths: optionalNumber(intervalMonths, 'Months'),
+        intervalKm: optionalNumber(intervalKm, t.setup.distanceLabel, t),
+        intervalMonths: optionalNumber(intervalMonths, t.setup.monthsLabel, t),
         baselineDate: baselineDate || null,
-        baselineOdometer: optionalNumber(baselineOdometer, 'Odometer'),
+        baselineOdometer: optionalNumber(baselineOdometer, t.setup.odometerLabel, t),
       };
-      if (body.intervalKm === null && body.intervalMonths === null) throw new Error('Give a distance, a duration, or both.');
-      if (body.baselineOdometer !== null && body.baselineDate === null) throw new Error('Add the date it was last done too.');
+      if (body.intervalKm === null && body.intervalMonths === null) throw new Error(t.setup.needInterval);
+      if (body.baselineOdometer !== null && body.baselineDate === null) throw new Error(t.setup.needBaselineDate);
       if (existing) await online('PUT', `/api/tasks/${existing.id}`, body);
       else await online('POST', `/api/vehicles/${vehicle.id}/tasks`, body);
       navigate(back, { replace: true });
@@ -172,7 +176,7 @@ export function TaskForm({ vehicle, existing }: { vehicle: Vehicle; existing?: M
   }
 
   function remove() {
-    if (!existing || !window.confirm(`Delete “${existing.name}”?`)) return;
+    if (!existing || !window.confirm(t.setup.confirmDeleteTask(existing.name))) return;
     void run(async () => {
       await online('DELETE', `/api/tasks/${existing.id}`);
       navigate(back, { replace: true });
@@ -180,36 +184,36 @@ export function TaskForm({ vehicle, existing }: { vehicle: Vehicle; existing?: M
   }
 
   return (
-    <Layout title={existing ? 'Edit task' : `New task · ${vehicle.name}`} back={back}>
+    <Layout title={existing ? t.setup.editTask : t.setup.newTask(vehicle.name)} back={back}>
       <NeedsConnection />
       <form onSubmit={submit} className="form">
-        <Field label="Task" hint="e.g. “Engine oil and filter change”.">
+        <Field label={t.setup.task} hint={t.setup.taskHint}>
           <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} />
         </Field>
-        <p className="field-label">Interval: whichever comes first</p>
+        <p className="field-label">{t.setup.interval}</p>
         <div className="row">
-          <Field label="Every (km)">
+          <Field label={t.setup.everyKm}>
             <input inputMode="numeric" value={intervalKm} onChange={(e) => setIntervalKm(e.target.value)} placeholder="6000" />
           </Field>
-          <Field label="or every (months)">
+          <Field label={t.setup.everyMonths}>
             <input inputMode="numeric" value={intervalMonths} onChange={(e) => setIntervalMonths(e.target.value)} placeholder="12" />
           </Field>
         </div>
-        <p className="field-label">Last done before you started tracking (optional)</p>
+        <p className="field-label">{t.setup.baseline}</p>
         <div className="row">
-          <Field label="Date">
+          <Field label={t.setup.baselineDate}>
             <input type="date" value={baselineDate} onChange={(e) => setBaselineDate(e.target.value)} />
           </Field>
-          <Field label="At (km)">
+          <Field label={t.setup.baselineKm}>
             <input inputMode="numeric" value={baselineOdometer} onChange={(e) => setBaselineOdometer(e.target.value)} />
           </Field>
         </div>
-        <p className="muted">Once you log a Service including this task, the Service takes over from this.</p>
+        <p className="muted">{t.setup.baselineHint}</p>
         {error ? <p className="banner banner-error">{error}</p> : null}
-        <Submit disabled={disabled}>{existing ? 'Save' : 'Add task'}</Submit>
+        <Submit disabled={disabled}>{existing ? t.setup.save : t.setup.addTask}</Submit>
         {existing ? (
           <button type="button" className="button button-danger button-block" onClick={remove} disabled={disabled}>
-            Delete task
+            {t.setup.deleteTask}
           </button>
         ) : null}
       </form>
@@ -218,11 +222,12 @@ export function TaskForm({ vehicle, existing }: { vehicle: Vehicle; existing?: M
 }
 
 export function CopyTasks({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: Snapshot }) {
-  const sources = snapshot.vehicles.filter((v) => v.id !== vehicle.id && snapshot.tasks.some((t) => t.vehicleId === v.id));
+  const t = useT();
+  const sources = snapshot.vehicles.filter((v) => v.id !== vehicle.id && snapshot.tasks.some((task) => task.vehicleId === v.id));
   const [fromVehicleId, setFrom] = useState(sources[0]?.id ?? '');
   const { error, disabled, run } = useSubmit();
   const back = `/vehicles/${vehicle.id}`;
-  const count = snapshot.tasks.filter((t) => t.vehicleId === fromVehicleId).length;
+  const count = snapshot.tasks.filter((task) => task.vehicleId === fromVehicleId).length;
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -233,13 +238,13 @@ export function CopyTasks({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: S
   }
 
   return (
-    <Layout title="Copy tasks" back={back}>
+    <Layout title={t.setup.copyTitle} back={back}>
       <NeedsConnection />
       {sources.length === 0 ? (
-        <p className="empty">No other vehicle has Maintenance Tasks to copy yet.</p>
+        <p className="empty">{t.setup.nothingToCopy}</p>
       ) : (
         <form onSubmit={submit} className="form">
-          <Field label="Copy from" hint={`${count} task${count === 1 ? '' : 's'} will be added to ${vehicle.name}. Their history is not copied.`}>
+          <Field label={t.setup.copyFrom} hint={t.setup.copyHint(count, vehicle.name)}>
             <select value={fromVehicleId} onChange={(e) => setFrom(e.target.value)}>
               {sources.map((v) => (
                 <option key={v.id} value={v.id}>
@@ -249,7 +254,7 @@ export function CopyTasks({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: S
             </select>
           </Field>
           {error ? <p className="banner banner-error">{error}</p> : null}
-          <Submit disabled={disabled}>Copy tasks</Submit>
+          <Submit disabled={disabled}>{t.setup.copy}</Submit>
         </form>
       )}
     </Layout>

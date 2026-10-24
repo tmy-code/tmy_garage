@@ -1,14 +1,16 @@
 import type { ReactNode } from 'react';
 import type { DueInfo } from '../shared/due.ts';
-import { STATUS_LABEL } from './format.ts';
+import { formatDate } from './format.ts';
+import { LANGS, setLang, useT } from './i18n.ts';
 import { dismissRejected, sync, useStore } from './store.ts';
 
 export function Layout({ title, back, actions, children }: { title: string; back?: string; actions?: ReactNode; children: ReactNode }) {
+  const t = useT();
   return (
     <>
       <header className="topbar">
         {back !== undefined ? (
-          <a className="back" href={`#${back}`} aria-label="Back">
+          <a className="back" href={`#${back}`} aria-label={t.back}>
             ‹
           </a>
         ) : null}
@@ -23,54 +25,56 @@ export function Layout({ title, back, actions, children }: { title: string; back
 }
 
 function SyncBadge() {
+  const t = useT();
   const { outbox, reachable, contacted, syncing } = useStore();
   const waiting = outbox.length;
   let label: string;
   let tone: string;
   if (reachable && !contacted) {
-    label = 'Connecting…';
+    label = t.sync.connecting;
     tone = 'syncing';
   } else if (!reachable) {
-    label = waiting > 0 ? `Offline · ${waiting} waiting` : 'Offline';
+    label = waiting > 0 ? t.sync.offlineWaiting(waiting) : t.sync.offline;
     tone = 'offline';
   } else if (syncing || waiting > 0) {
-    label = waiting > 0 ? `Syncing ${waiting}…` : 'Syncing…';
+    label = waiting > 0 ? t.sync.syncingCount(waiting) : t.sync.syncing;
     tone = 'syncing';
   } else {
-    label = 'Synced';
+    label = t.sync.synced;
     tone = 'synced';
   }
   return (
-    <button type="button" className={`sync sync-${tone}`} onClick={() => void sync()} title="Tap to sync now">
+    <button type="button" className={`sync sync-${tone}`} onClick={() => void sync()} title={t.sync.tapToSync}>
       {label}
     </button>
   );
 }
 
 function RejectedBanner() {
+  const t = useT();
   const { rejected } = useStore();
   if (rejected.length === 0) return null;
   return (
     <div className="banner banner-error" role="alert">
-      <p>
-        {rejected.length === 1 ? 'A change' : `${rejected.length} changes`} made offline could not be saved:
-      </p>
+      <p>{t.rejected.title(rejected.length)}</p>
       <ul>
         {rejected.map(({ op, reason }) => (
           <li key={op.data.id}>
-            {op.kind === 'service' ? `Service of ${op.data.date}` : `Odometer reading of ${op.data.date}`}: {reason}
+            {op.kind === 'service' ? t.rejected.service(formatDate(op.data.date, t)) : t.rejected.reading(formatDate(op.data.date, t))}:{' '}
+            {reason}
           </li>
         ))}
       </ul>
       <button type="button" onClick={() => void dismissRejected()}>
-        Dismiss
+        {t.rejected.dismiss}
       </button>
     </div>
   );
 }
 
 export function StatusChip({ status }: { status: DueInfo['status'] }) {
-  return <span className={`chip chip-${status}`}>{STATUS_LABEL[status]}</span>;
+  const t = useT();
+  return <span className={`chip chip-${status}`}>{t.status[status]}</span>;
 }
 
 export function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
@@ -84,15 +88,38 @@ export function Field({ label, hint, children }: { label: string; hint?: ReactNo
 }
 
 export function NeedsConnection() {
+  const t = useT();
   const { reachable } = useStore();
   if (reachable) return null;
-  return <p className="banner banner-warn">This needs a connection to the garage server. Services and odometer readings work offline.</p>;
+  return <p className="banner banner-warn">{t.needsConnection}</p>;
 }
 
-export function NotFound({ what }: { what: string }) {
+export function NotFound({ what }: { what: 'vehicle' | 'task' | 'service' | 'page' }) {
+  const t = useT();
   return (
-    <Layout title="Not found" back="/">
-      <p className="empty">This {what} doesn't exist, or hasn't been synced to this phone yet.</p>
+    <Layout title={t.notFound.title} back="/">
+      <p className="empty">{t.notFound[what]}</p>
     </Layout>
+  );
+}
+
+export function LanguageSwitch() {
+  const t = useT();
+  return (
+    <div className="language" role="radiogroup" aria-label={t.language}>
+      <span className="muted">{t.language}</span>
+      {LANGS.map(({ code, label }) => (
+        <button
+          type="button"
+          key={code}
+          role="radio"
+          aria-checked={t.lang === code}
+          className={t.lang === code ? 'on' : ''}
+          onClick={() => setLang(code)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
   );
 }

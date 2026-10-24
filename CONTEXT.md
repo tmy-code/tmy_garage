@@ -12,6 +12,10 @@ _Avoid_: Account, workspace, fleet
 A car or motorcycle belonging to a Garage. It is either owned or sold; a sold Vehicle (with sale date, Odometer Reading and price) keeps its full history but no longer has anything due. "Owned" means the user keeps and maintains it, even if it is registered or insured in someone else's name (e.g. a family member).
 _Avoid_: Car (when meaning any vehicle), bike, asset, archived
 
+### In the French interface
+
+The app speaks English and French. French screens use: Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Due Date → échéance, Interval → intervalle.
+
 ## Maintenance
 
 **Maintenance Task**:

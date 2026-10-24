@@ -1,4 +1,5 @@
-import { Layout, NotFound } from './components.tsx';
+import { LanguageSwitch, Layout, NotFound } from './components.tsx';
+import { useT } from './i18n.ts';
 import { Dashboard } from './pages/Dashboard.tsx';
 import { ReadingForm, ServiceForm } from './pages/ServiceForm.tsx';
 import { CopyTasks, SellForm, TaskForm, VehicleForm } from './pages/SetupForms.tsx';
@@ -7,26 +8,28 @@ import { useRoute } from './router.ts';
 import { sync, useStore } from './store.ts';
 
 export function App() {
+  const t = useT();
   const { view: snapshot, loaded, reachable, syncing } = useStore();
   const route = useRoute();
 
   if (!loaded) return null;
   if (!snapshot) {
     return (
-      <Layout title="Garage">
+      <Layout title={t.garage}>
         <div className="empty">
           {syncing ? (
-            <p>Loading your garage…</p>
+            <p>{t.startup.loading}</p>
           ) : (
             <>
-              <p>{reachable ? 'Loading your garage…' : 'Can’t reach the garage server, and there is no offline copy on this phone yet.'}</p>
-              <p className="muted">Open the app once with a connection so it can work offline afterwards.</p>
+              <p>{reachable ? t.startup.loading : t.startup.unreachable}</p>
+              <p className="muted">{t.startup.openOnce}</p>
               <button type="button" className="button" onClick={() => void sync()}>
-                Try again
+                {t.startup.tryAgain}
               </button>
             </>
           )}
         </div>
+        <LanguageSwitch />
       </Layout>
     );
   }
@@ -65,7 +68,7 @@ export function App() {
     const service = snapshot.services.find((s) => s.id === id);
     const owner = service && snapshot.vehicles.find((v) => v.id === service.vehicleId);
     if (service && owner) return <ServiceForm key={service.id} vehicle={owner} snapshot={snapshot} existing={service} />;
-    return <NotFound what="Service" />;
+    return <NotFound what="service" />;
   }
   return <NotFound what="page" />;
 }

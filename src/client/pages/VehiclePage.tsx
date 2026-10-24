@@ -4,6 +4,7 @@ import { vehicleDue } from '../../shared/due.ts';
 import type { Snapshot, Vehicle } from '../../shared/types.ts';
 import { Layout, StatusChip } from '../components.tsx';
 import { describeDue, describeInterval, formatDate, formatKm, formatMoney } from '../format.ts';
+import { useT } from '../i18n.ts';
 import { useStore } from '../store.ts';
 
 type HistoryEntry =
@@ -11,10 +12,11 @@ type HistoryEntry =
   | { kind: 'reading'; id: string; date: string; odometer: number };
 
 export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: Snapshot }) {
+  const t = useT();
   const { outbox } = useStore();
   const today = todayIso();
   const { usage, due } = useMemo(() => vehicleDue(snapshot, vehicle.id, today), [snapshot, vehicle.id, today]);
-  const tasks = new Map(snapshot.tasks.filter((t) => t.vehicleId === vehicle.id).map((t) => [t.id, t]));
+  const tasks = new Map(snapshot.tasks.filter((task) => task.vehicleId === vehicle.id).map((task) => [task.id, task]));
   const pending = new Set(outbox.map((op) => op.data.id));
   const owned = vehicle.status === 'owned';
 
@@ -27,27 +29,26 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
         date: s.date,
         odometer: s.odometer,
         notes: s.notes,
-        text: s.taskIds.map((id) => tasks.get(id)?.name ?? 'Deleted task').join(', '),
+        text: s.taskIds.map((id) => tasks.get(id)?.name ?? t.vehicle.deletedTask).join(', '),
       })),
     ...snapshot.readings.filter((r) => r.vehicleId === vehicle.id).map((r) => ({ kind: 'reading' as const, ...r })),
   ].sort((a, b) => (a.date === b.date ? b.odometer - a.odometer : a.date < b.date ? 1 : -1));
 
   const subtitle = [vehicle.make, vehicle.model, vehicle.year, vehicle.registration].filter(Boolean).join(' · ');
+  const saleDetails = [
+    vehicle.soldDate ? t.vehicle.soldDate(formatDate(vehicle.soldDate, t)) : '',
+    vehicle.soldOdometer !== null ? t.vehicle.soldAt(formatKm(vehicle.soldOdometer)) : '',
+    vehicle.soldPrice !== null ? t.vehicle.soldFor(formatMoney(vehicle.soldPrice, t)) : '',
+  ].join('');
 
   return (
     <Layout title={vehicle.name} back="/">
       <section className="card">
         {subtitle ? <p className="muted">{subtitle}</p> : null}
-        {vehicle.status === 'sold' ? (
-          <p className="banner banner-warn">
-            Sold {vehicle.soldDate ? formatDate(vehicle.soldDate) : ''}
-            {vehicle.soldOdometer !== null ? ` at ${formatKm(vehicle.soldOdometer)}` : ''}
-            {vehicle.soldPrice !== null ? ` for ${formatMoney(vehicle.soldPrice)}` : ''}. History is kept; nothing is due.
-          </p>
-        ) : null}
+        {vehicle.status === 'sold' ? <p className="banner banner-warn">{t.vehicle.sold(saleDetails)}</p> : null}
         <p className="odometer">
           {usage.estimatedOdometer === null ? (
-            'No odometer reading yet'
+            t.vehicle.noReading
           ) : (
             <>
               <strong>
@@ -55,8 +56,8 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
                 {formatKm(usage.estimatedOdometer)}
               </strong>
               <span className="muted">
-                {usage.kmPerDay ? ` today, at ~${Math.round(usage.kmPerDay * 30)} km/month` : ''}
-                {usage.latest ? ` · last reading ${formatKm(usage.latest.odometer)} on ${formatDate(usage.latest.date)}` : ''}
+                {usage.kmPerDay ? t.vehicle.rate(Math.round(usage.kmPerDay * 30)) : ''}
+                {usage.latest ? t.vehicle.lastReading(formatKm(usage.latest.odometer), formatDate(usage.latest.date, t)) : ''}
               </span>
             </>
           )}
@@ -64,10 +65,10 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
         {owned ? (
           <div className="actions">
             <a className="button button-primary" href={`#/vehicles/${vehicle.id}/service`}>
-              Log Service
+              {t.vehicle.logService}
             </a>
             <a className="button" href={`#/vehicles/${vehicle.id}/reading`}>
-              Odometer reading
+              {t.vehicle.odometerReading}
             </a>
           </div>
         ) : null}
@@ -75,19 +76,19 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
 
       <section>
         <div className="section-head">
-          <h2>Maintenance Tasks</h2>
+          <h2>{t.vehicle.tasks}</h2>
           {owned ? (
             <a className="button button-small" href={`#/vehicles/${vehicle.id}/tasks/new`}>
-              + Task
+              {t.vehicle.addTask}
             </a>
           ) : null}
         </div>
         {due.length === 0 ? (
           <div className="empty">
-            <p>No Maintenance Tasks yet. Add them from the owner's manual, or copy them from another vehicle of the same model.</p>
+            <p>{t.vehicle.noTasks}</p>
             {owned ? (
               <a className="button" href={`#/vehicles/${vehicle.id}/copy-tasks`}>
-                Copy tasks from another vehicle
+                {t.vehicle.copyTasks}
               </a>
             ) : null}
           </div>
@@ -102,13 +103,13 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
                       {owned ? <StatusChip status={d.status} /> : null}
                       <span className="due-name">{task.name}</span>
                     </div>
-                    <span className="muted">{describeInterval(task)}</span>
-                    {owned ? <span className="due-text">{describeDue(d)}</span> : null}
+                    <span className="muted">{describeInterval(task, t)}</span>
+                    {owned ? <span className="due-text">{describeDue(d, t)}</span> : null}
                     {d.lastDone ? (
                       <span className="muted">
-                        Last done {formatDate(d.lastDone.date)}
-                        {d.lastDone.odometer !== null ? ` at ${formatKm(d.lastDone.odometer)}` : ''}
-                        {d.lastDone.source === 'baseline' ? ' (before tracking)' : ''}
+                        {t.vehicle.lastDone(formatDate(d.lastDone.date, t))}
+                        {d.lastDone.odometer !== null ? ` ${t.due.at(formatKm(d.lastDone.odometer))}` : ''}
+                        {d.lastDone.source === 'baseline' ? t.vehicle.beforeTracking : ''}
                       </span>
                     ) : null}
                   </a>
@@ -120,16 +121,16 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
       </section>
 
       <section>
-        <h2>History</h2>
-        {history.length === 0 ? <p className="empty">Nothing logged yet.</p> : null}
+        <h2>{t.vehicle.history}</h2>
+        {history.length === 0 ? <p className="empty">{t.vehicle.nothingLogged}</p> : null}
         <ul className="list">
           {history.map((h) => (
             <li key={`${h.kind}-${h.id}`}>
               {h.kind === 'service' ? (
                 <a href={`#/services/${h.id}/edit`} className="history-row">
                   <span>
-                    <strong>{formatDate(h.date)}</strong> · {formatKm(h.odometer)}
-                    {pending.has(h.id) ? <span className="chip chip-pending">Waiting to sync</span> : null}
+                    <strong>{formatDate(h.date, t)}</strong> · {formatKm(h.odometer)}
+                    {pending.has(h.id) ? <span className="chip chip-pending">{t.vehicle.waitingToSync}</span> : null}
                   </span>
                   <span>🔧 {h.text}</span>
                   {h.notes ? <span className="muted">{h.notes}</span> : null}
@@ -137,10 +138,10 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
               ) : (
                 <div className="history-row">
                   <span>
-                    <strong>{formatDate(h.date)}</strong> · {formatKm(h.odometer)}
-                    {pending.has(h.id) ? <span className="chip chip-pending">Waiting to sync</span> : null}
+                    <strong>{formatDate(h.date, t)}</strong> · {formatKm(h.odometer)}
+                    {pending.has(h.id) ? <span className="chip chip-pending">{t.vehicle.waitingToSync}</span> : null}
                   </span>
-                  <span className="muted">Odometer reading</span>
+                  <span className="muted">{t.vehicle.readingEntry}</span>
                 </div>
               )}
             </li>
@@ -150,15 +151,15 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
 
       <section className="actions actions-footer">
         <a className="button" href={`#/vehicles/${vehicle.id}/edit`}>
-          Edit vehicle
+          {t.vehicle.edit}
         </a>
         {owned && due.length > 0 ? (
           <a className="button" href={`#/vehicles/${vehicle.id}/copy-tasks`}>
-            Copy tasks from…
+            {t.vehicle.copyTasksShort}
           </a>
         ) : null}
         <a className="button" href={`#/vehicles/${vehicle.id}/sell`}>
-          {owned ? 'Mark as sold' : 'Sale details'}
+          {owned ? t.vehicle.markSold : t.vehicle.saleDetails}
         </a>
       </section>
     </Layout>

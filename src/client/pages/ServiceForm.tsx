@@ -5,15 +5,17 @@ import type { Service, Snapshot, Vehicle } from '../../shared/types.ts';
 import { newId } from '../api.ts';
 import { Field, Layout, StatusChip } from '../components.tsx';
 import { formatKm, parseNumber } from '../format.ts';
+import { useT } from '../i18n.ts';
 import { navigate } from '../router.ts';
 import { enqueue, online, useStore } from '../store.ts';
 
 /** Log or edit a Service. Works offline: the Service is queued and sent when back in range. */
 export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; snapshot: Snapshot; existing?: Service }) {
+  const t = useT();
   const { outbox, reachable } = useStore();
   const today = todayIso();
   const { usage, due } = useMemo(() => vehicleDue(snapshot, vehicle.id, today), [snapshot, vehicle.id, today]);
-  const tasks = new Map(snapshot.tasks.map((t) => [t.id, t]));
+  const tasks = new Map(snapshot.tasks.map((task) => [task.id, task]));
 
   const [date, setDate] = useState(existing?.date ?? today);
   const [odometerText, setOdometerText] = useState(existing ? String(existing.odometer) : '');
@@ -37,11 +39,11 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (odometer === null || Number.isNaN(odometer) || odometer < 0 || !Number.isInteger(odometer)) {
-      setError('Enter the odometer reading in whole km.');
+      setError(t.service.errorOdometer);
       return;
     }
     if (selected.size === 0) {
-      setError('Tick at least one Maintenance Task done in this Service.');
+      setError(t.service.errorTasks);
       return;
     }
     await enqueue({
@@ -52,7 +54,7 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
   }
 
   async function remove() {
-    if (!existing || !window.confirm('Delete this Service? Due Dates will be recalculated without it.')) return;
+    if (!existing || !window.confirm(t.service.confirmDelete)) return;
     try {
       await online('DELETE', `/api/services/${existing.id}`);
       navigate(back, { replace: true });
@@ -62,18 +64,18 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
   }
 
   return (
-    <Layout title={existing ? 'Edit Service' : `Service · ${vehicle.name}`} back={back}>
+    <Layout title={existing ? t.service.titleEdit : t.service.titleNew(vehicle.name)} back={back}>
       <form onSubmit={submit} className="form">
-        <Field label="Date">
+        <Field label={t.service.date}>
           <input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} required />
         </Field>
         <Field
-          label="Odometer (km)"
+          label={t.service.odometer}
           hint={
             lowerThanLatest
-              ? `Lower than the latest reading (${formatKm(usage.latest!.odometer)}). Check the number.`
+              ? t.service.lowerThanLatest(formatKm(usage.latest!.odometer))
               : usage.estimatedOdometer !== null && !existing
-                ? `Estimated today: ${formatKm(usage.estimatedOdometer)}`
+                ? t.service.estimatedToday(formatKm(usage.estimatedOdometer))
                 : undefined
           }
         >
@@ -82,14 +84,14 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
             autoComplete="off"
             value={odometerText}
             onChange={(e) => setOdometerText(e.target.value)}
-            placeholder={usage.estimatedOdometer !== null ? String(usage.estimatedOdometer) : 'e.g. 24000'}
+            placeholder={usage.estimatedOdometer !== null ? String(usage.estimatedOdometer) : t.service.example}
             required
           />
         </Field>
 
         <fieldset className="field">
-          <legend className="field-label">Tasks done</legend>
-          {due.length === 0 ? <p className="muted">This vehicle has no Maintenance Tasks yet. Add them first.</p> : null}
+          <legend className="field-label">{t.service.tasksDone}</legend>
+          {due.length === 0 ? <p className="muted">{t.service.noTasks}</p> : null}
           {due.map((d) => (
             <label key={d.taskId} className={`check ${selected.has(d.taskId) ? 'check-on' : ''}`}>
               <input type="checkbox" checked={selected.has(d.taskId)} onChange={() => toggle(d.taskId)} />
@@ -99,18 +101,18 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
           ))}
         </fieldset>
 
-        <Field label="Notes" hint="Optional: oil brand, observations, anything to remember.">
+        <Field label={t.service.notes} hint={t.service.notesHint}>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} />
         </Field>
 
         {error ? <p className="banner banner-error">{error}</p> : null}
         <button type="submit" className="button button-primary button-block">
-          {existing ? 'Save changes' : 'Save Service'}
+          {existing ? t.service.saveChanges : t.service.save}
         </button>
-        {!reachable ? <p className="muted center">You're offline: it will be sent when you're back in range.</p> : null}
+        {!reachable ? <p className="muted center">{t.service.offlineHint}</p> : null}
         {existing ? (
           <button type="button" className="button button-danger button-block" onClick={remove} disabled={!reachable || pending}>
-            {pending ? 'Delete (available once synced)' : 'Delete Service'}
+            {pending ? t.service.deleteAfterSync : t.service.delete}
           </button>
         ) : null}
       </form>
@@ -119,6 +121,7 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
 }
 
 export function ReadingForm({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: Snapshot }) {
+  const t = useT();
   const today = todayIso();
   const { usage } = useMemo(() => vehicleDue(snapshot, vehicle.id, today), [snapshot, vehicle.id, today]);
   const [date, setDate] = useState(today);
@@ -132,7 +135,7 @@ export function ReadingForm({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (odometer === null || Number.isNaN(odometer) || odometer < 0 || !Number.isInteger(odometer)) {
-      setError('Enter the odometer reading in whole km.');
+      setError(t.service.errorOdometer);
       return;
     }
     await enqueue({ kind: 'reading', data: { id: newId(), vehicleId: vehicle.id, date, odometer } });
@@ -140,18 +143,18 @@ export function ReadingForm({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
   }
 
   return (
-    <Layout title={`Odometer · ${vehicle.name}`} back={back}>
+    <Layout title={t.service.readingTitle(vehicle.name)} back={back}>
       <form onSubmit={submit} className="form">
-        <Field label="Date">
+        <Field label={t.service.date}>
           <input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} required />
         </Field>
         <Field
-          label="Odometer (km)"
+          label={t.service.odometer}
           hint={
             lowerThanLatest
-              ? `Lower than the latest reading (${formatKm(usage.latest!.odometer)}). Check the number.`
+              ? t.service.lowerThanLatest(formatKm(usage.latest!.odometer))
               : usage.latest
-                ? `Last reading: ${formatKm(usage.latest.odometer)}`
+                ? t.service.lastReading(formatKm(usage.latest.odometer))
                 : undefined
           }
         >
@@ -161,13 +164,13 @@ export function ReadingForm({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
             autoFocus
             value={odometerText}
             onChange={(e) => setOdometerText(e.target.value)}
-            placeholder={usage.estimatedOdometer !== null ? String(usage.estimatedOdometer) : 'e.g. 24000'}
+            placeholder={usage.estimatedOdometer !== null ? String(usage.estimatedOdometer) : t.service.example}
             required
           />
         </Field>
         {error ? <p className="banner banner-error">{error}</p> : null}
         <button type="submit" className="button button-primary button-block">
-          Save reading
+          {t.service.saveReading}
         </button>
       </form>
     </Layout>
