@@ -1,0 +1,11 @@
+# For Synology Container Manager: Project > Create > paste this file.
+# Adjust the left side of "volumes" to a folder on your NAS, and the left side of "ports" if 3010 is taken.
+services:
+  garage:
+    image: ghcr.io/tmy-code/tmy_garage:latest
+    container_name: tmy-garage
+    restart: unless-stopped
+    ports:
+      - "3010:3000"
+    volumes:
+      - /volume1/docker/tmy-garage:/data
