@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addMonths, daysBetween } from './dates.ts';
-import { computeDue, estimateUsage, vehicleDue, type Usage } from './due.ts';
+import { computeDue, effectiveInterval, estimateUsage, vehicleDue, type Usage } from './due.ts';
 import type { MaintenanceTask, Service, Snapshot } from './types.ts';
 
 function task(overrides: Partial<MaintenanceTask> = {}): MaintenanceTask {
@@ -10,6 +10,8 @@ function task(overrides: Partial<MaintenanceTask> = {}): MaintenanceTask {
     name: 'Engine oil and filter change',
     intervalKm: 6000,
     intervalMonths: 12,
+    officialIntervalKm: null,
+    officialIntervalMonths: null,
     baselineDate: null,
     baselineOdometer: null,
     ...overrides,
@@ -167,6 +169,30 @@ describe('computeDue', () => {
     const timeOnly = computeDue(task({ intervalKm: null, intervalMonths: 24 }), services, usage, '2026-01-01');
     expect(timeOnly.dueDate).toBe('2028-01-01');
     expect(timeOnly.dueOdometer).toBeNull();
+  });
+});
+
+describe('Official Interval', () => {
+  const services = [service('2026-01-01', 10_000)];
+  const usage = estimateUsage([{ date: '2026-01-01', odometer: 10_000 }], '2026-01-01');
+
+  it('applies the stricter interval for distance and time separately', () => {
+    // Air filter: yours "1 year", official "19 200 km or 2 years" → 19 200 km or 1 year.
+    const t = task({ intervalKm: null, intervalMonths: 12, officialIntervalKm: 19_200, officialIntervalMonths: 24 });
+    expect(effectiveInterval(t)).toEqual({ km: 19_200, months: 12 });
+    const due = computeDue(t, services, usage, '2026-01-01');
+    expect(due.dueOdometer).toBe(29_200);
+    expect(due.timeDueDate).toBe('2027-01-01');
+  });
+
+  it('keeps your interval when it is stricter than the official one', () => {
+    const t = task({ intervalKm: 10_000, intervalMonths: 12, officialIntervalKm: 30_000, officialIntervalMonths: 24 });
+    expect(effectiveInterval(t)).toEqual({ km: 10_000, months: 12 });
+  });
+
+  it('uses the official interval when it is stricter', () => {
+    const t = task({ intervalKm: 48_000, intervalMonths: null, officialIntervalKm: 38_400 });
+    expect(computeDue(t, services, usage, '2026-01-01').dueOdometer).toBe(48_400);
   });
 });
 

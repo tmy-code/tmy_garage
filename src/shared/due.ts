@@ -72,6 +72,20 @@ export function usageOf(snapshot: Snapshot, vehicleId: string, today: IsoDate): 
   return estimateUsage(points, today);
 }
 
+function stricter(a: number | null, b: number | null): number | null {
+  if (a === null) return b;
+  if (b === null) return a;
+  return Math.min(a, b);
+}
+
+/** The Interval that applies: for distance and time separately, the stricter of the user's and the Official Interval. */
+export function effectiveInterval(task: MaintenanceTask): { km: number | null; months: number | null } {
+  return {
+    km: stricter(task.intervalKm, task.officialIntervalKm),
+    months: stricter(task.intervalMonths, task.officialIntervalMonths),
+  };
+}
+
 function lastDoneOf(task: MaintenanceTask, services: Service[]): DueInfo['lastDone'] {
   const last = services
     .filter((s) => s.taskIds.includes(task.id))
@@ -86,9 +100,10 @@ function lastDoneOf(task: MaintenanceTask, services: Service[]): DueInfo['lastDo
 
 export function computeDue(task: MaintenanceTask, services: Service[], usage: Usage, today: IsoDate): DueInfo {
   const lastDone = lastDoneOf(task, services);
-  const timeDueDate = lastDone && task.intervalMonths !== null ? addMonths(lastDone.date, task.intervalMonths) : null;
+  const interval = effectiveInterval(task);
+  const timeDueDate = lastDone && interval.months !== null ? addMonths(lastDone.date, interval.months) : null;
   const dueOdometer =
-    lastDone && lastDone.odometer !== null && task.intervalKm !== null ? lastDone.odometer + task.intervalKm : null;
+    lastDone && lastDone.odometer !== null && interval.km !== null ? lastDone.odometer + interval.km : null;
 
   let distanceDueDate: IsoDate | null = null;
   if (dueOdometer !== null && usage.latest) {
@@ -110,8 +125,8 @@ export function computeDue(task: MaintenanceTask, services: Service[], usage: Us
   } else if ((timeDueDate !== null && timeDueDate < today) || (kmRemaining !== null && kmRemaining < 0)) {
     status = 'overdue';
   } else if (
-    (timeDueDate !== null && daysBetween(today, timeDueDate) <= Math.min(30, task.intervalMonths! * 3)) ||
-    (kmRemaining !== null && kmRemaining <= Math.min(1000, task.intervalKm! * 0.1))
+    (timeDueDate !== null && daysBetween(today, timeDueDate) <= Math.min(30, interval.months! * 3)) ||
+    (kmRemaining !== null && kmRemaining <= Math.min(1000, interval.km! * 0.1))
   ) {
     status = 'dueSoon';
   } else {

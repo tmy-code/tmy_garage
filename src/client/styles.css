@@ -24,14 +24,13 @@
   line-height: 1.4;
 }
 
-/* Dark mode is true black, so OLED screens switch those pixels off; cards are told apart by their borders. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #000000;
-    --surface: #000000;
+    --bg: #111827;
+    --surface: #1f2937;
     --text: #f3f4f6;
     --muted: #9ca3af;
-    --border: #2a2a2a;
+    --border: #374151;
     --accent: #f59e0b;
     --accent-text: #111827;
     --overdue: #fca5a5;
@@ -44,6 +43,17 @@
     --unknown-bg: #374151;
     --pending: #93c5fd;
     --pending-bg: #172554;
+    --topbar: #030712;
+  }
+}
+
+/* On phones, dark mode is true black so OLED screens switch those pixels off; cards are told apart by borders.
+   Keyed on the touchscreen, so a desktop browser keeps the grey dark theme even in a narrow window. */
+@media (prefers-color-scheme: dark) and (pointer: coarse) {
+  :root {
+    --bg: #000000;
+    --surface: #000000;
+    --border: #2a2a2a;
     --topbar: #000000;
   }
 }
@@ -486,7 +496,7 @@ body > .banner {
 }
 
 /* Last, so it overrides the light-mode defaults above. */
-@media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: dark) and (pointer: coarse) {
   .topbar {
     border-bottom: 1px solid var(--border);
   }

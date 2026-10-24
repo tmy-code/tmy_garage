@@ -21,6 +21,9 @@ export interface MaintenanceTask {
   name: string;
   intervalKm: number | null;
   intervalMonths: number | null;
+  /** The Official Interval from the Vehicle's Service Schedule; the stricter of the two applies. */
+  officialIntervalKm: number | null;
+  officialIntervalMonths: number | null;
   /** When the Task was last done before the garage started tracking it; superseded by any Service. */
   baselineDate: IsoDate | null;
   baselineOdometer: number | null;

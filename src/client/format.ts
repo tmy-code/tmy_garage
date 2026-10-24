@@ -1,4 +1,4 @@
-import type { DueInfo } from '../shared/due.ts';
+import { effectiveInterval, type DueInfo } from '../shared/due.ts';
 import type { MaintenanceTask } from '../shared/types.ts';
 import { messages, type Messages } from './i18n.ts';
 
@@ -23,12 +23,20 @@ function formatMonths(months: number, m: Messages): string {
   return months % 12 === 0 ? m.due.years(months / 12) : m.due.months(months);
 }
 
+function intervalParts(km: number | null, months: number | null, m: Messages): string[] {
+  return [km !== null ? formatKm(km) : null, months !== null ? formatMonths(months, m) : null].filter((p): p is string => p !== null);
+}
+
+/** The Interval that applies (the stricter of yours and the official one), e.g. "Every 10 000 km or 1 year". */
 export function describeInterval(task: MaintenanceTask, m: Messages = messages()): string {
-  const parts = [
-    task.intervalKm !== null ? formatKm(task.intervalKm) : null,
-    task.intervalMonths !== null ? formatMonths(task.intervalMonths, m) : null,
-  ];
-  return m.due.every(parts.filter((p): p is string => p !== null));
+  const { km, months } = effectiveInterval(task);
+  return m.due.every(intervalParts(km, months, m));
+}
+
+/** The Official Interval, e.g. "Official: every 30 000 km or 2 years", or null when the Task has none. */
+export function describeOfficialInterval(task: MaintenanceTask, m: Messages = messages()): string | null {
+  const parts = intervalParts(task.officialIntervalKm, task.officialIntervalMonths, m);
+  return parts.length > 0 ? m.due.official(parts) : null;
 }
 
 /** One line saying when the task is due, e.g. "Due 14 Mar 2027 (in 141 days) · at 24 000 km (1 200 km left)". */

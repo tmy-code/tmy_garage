@@ -55,6 +55,8 @@ const toTask = (r: Row): MaintenanceTask => ({
   name: r.name,
   intervalKm: r.interval_km,
   intervalMonths: r.interval_months,
+  officialIntervalKm: r.official_interval_km,
+  officialIntervalMonths: r.official_interval_months,
   baselineDate: r.baseline_date,
   baselineOdometer: r.baseline_odometer,
 });
@@ -209,9 +211,20 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     const t = await parse(c, taskInput);
     const id = randomUUID();
     db.prepare(
-      `INSERT INTO maintenance_tasks (id, vehicle_id, name, interval_km, interval_months, baseline_date, baseline_odometer)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, vehicleId, t.name, t.intervalKm, t.intervalMonths, t.baselineDate, t.baselineOdometer);
+      `INSERT INTO maintenance_tasks
+         (id, vehicle_id, name, interval_km, interval_months, official_interval_km, official_interval_months, baseline_date, baseline_odometer)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      id,
+      vehicleId,
+      t.name,
+      t.intervalKm,
+      t.intervalMonths,
+      t.officialIntervalKm,
+      t.officialIntervalMonths,
+      t.baselineDate,
+      t.baselineOdometer,
+    );
     return c.json(toTask(taskOrThrow(id)), 201);
   });
 
@@ -223,11 +236,14 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     if (fromVehicleId === vehicleId) throw new HttpError(422, 'Cannot copy a Vehicle onto itself');
     const source = db.prepare('SELECT * FROM maintenance_tasks WHERE vehicle_id = ? ORDER BY created_at').all(fromVehicleId) as Row[];
     const insert = db.prepare(
-      'INSERT INTO maintenance_tasks (id, vehicle_id, name, interval_km, interval_months) VALUES (?, ?, ?, ?, ?)',
+      `INSERT INTO maintenance_tasks (id, vehicle_id, name, interval_km, interval_months, official_interval_km, official_interval_months)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     );
     // History is not copied: the copies start with no baseline, since they were never done on this Vehicle.
     transaction(() => {
-      for (const t of source) insert.run(randomUUID(), vehicleId, t.name, t.interval_km, t.interval_months);
+      for (const t of source) {
+        insert.run(randomUUID(), vehicleId, t.name, t.interval_km, t.interval_months, t.official_interval_km, t.official_interval_months);
+      }
     });
     return c.json({ copied: source.length }, 201);
   });
@@ -237,9 +253,10 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     taskOrThrow(id);
     const t = await parse(c, taskInput);
     db.prepare(
-      `UPDATE maintenance_tasks SET name = ?, interval_km = ?, interval_months = ?, baseline_date = ?, baseline_odometer = ?
+      `UPDATE maintenance_tasks SET name = ?, interval_km = ?, interval_months = ?, official_interval_km = ?,
+         official_interval_months = ?, baseline_date = ?, baseline_odometer = ?
        WHERE id = ?`,
-    ).run(t.name, t.intervalKm, t.intervalMonths, t.baselineDate, t.baselineOdometer, id);
+    ).run(t.name, t.intervalKm, t.intervalMonths, t.officialIntervalKm, t.officialIntervalMonths, t.baselineDate, t.baselineOdometer, id);
     return c.json(toTask(taskOrThrow(id)));
   });
 

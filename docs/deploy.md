@@ -23,9 +23,14 @@
 
 ## Updating
 
-When a new version has been pushed, in *Container Manager* → *Project* → `tmy-garage` → *Action* → **Build**
-(it pulls `latest` and restarts). Before changing the database structure, the app saves a copy in
-`docker/tmy-garage/backups`.
+When a new version has been pushed, in *Container Manager* → *Project* → `tmy-garage` → *Action* → **Build**.
+This downloads `latest` and restarts **only if the project's YAML contains `pull_policy: always`** (as in
+[`docker-compose.yml`](../docker-compose.yml)); without it, Build reuses the image already on the NAS. In that case,
+update the image first: *Image* → `ghcr.io/tmy-code/tmy_garage` → *Update*, then *Build*.
+Before changing the database structure, the app saves a copy in `docker/tmy-garage/backups`.
+
+**Check which version is running:** the dashboard shows the *Langue / Language* switch and true-black dark mode from
+commit `48ac066` onwards.
 
 **Rolling back:** every build is also tagged with its commit, e.g. `ghcr.io/tmy-code/tmy_garage:sha-e48cb83`.
 Put that tag instead of `latest` in the project's YAML and build again.

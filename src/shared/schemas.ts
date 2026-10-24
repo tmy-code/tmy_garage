@@ -33,6 +33,8 @@ export const taskInput = z
     name: z.string().trim().min(1).max(120),
     intervalKm: z.number().int().positive().max(1_000_000).nullish().transform((v) => v ?? null),
     intervalMonths: z.number().int().positive().max(600).nullish().transform((v) => v ?? null),
+    officialIntervalKm: z.number().int().positive().max(1_000_000).nullish().transform((v) => v ?? null),
+    officialIntervalMonths: z.number().int().positive().max(600).nullish().transform((v) => v ?? null),
     baselineDate: isoDate.nullish().transform((v) => v ?? null),
     baselineOdometer: odometer.nullish().transform((v) => v ?? null),
   })

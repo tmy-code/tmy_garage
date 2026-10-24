@@ -23,8 +23,16 @@ A recurring job defined for one Vehicle (e.g. "engine oil and filter change"), w
 _Avoid_: Job, service item, schedule entry
 
 **Interval**:
-How often a Maintenance Task recurs: a distance, a duration, or both, in which case it is due at whichever is reached first.
+How often a Maintenance Task recurs: a distance, a duration, or both, in which case it is due at whichever is reached first. Where the user's own interval and the Official Interval differ, the stricter one applies.
 _Avoid_: Frequency, period
+
+**Service Schedule**:
+The manufacturer's list of maintenance jobs and intervals for one Vehicle's exact version, taken from its owner's manual or service booklet; the source of that Vehicle's Maintenance Tasks.
+_Avoid_: Maintenance plan, manufacturer schedule, plan d'entretien
+
+**Official Interval**:
+The Interval the Service Schedule gives for a Maintenance Task, kept alongside the Task so the user can see how their own Interval differs from it.
+_Avoid_: Recommended interval, OEM interval
 
 **Service**:
 One occasion on which the user performed one or more Maintenance Tasks on a Vehicle, at a given date and odometer reading.

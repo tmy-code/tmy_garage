@@ -3,6 +3,8 @@
 services:
   garage:
     image: ghcr.io/tmy-code/tmy_garage:latest
+    # Without this, "Build" in Container Manager reuses the image already on the NAS.
+    pull_policy: always
     container_name: tmy-garage
     restart: unless-stopped
     ports:

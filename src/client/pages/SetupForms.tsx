@@ -152,6 +152,8 @@ export function TaskForm({ vehicle, existing }: { vehicle: Vehicle; existing?: M
   const [name, setName] = useState(existing?.name ?? '');
   const [intervalKm, setIntervalKm] = useState(String(existing?.intervalKm ?? ''));
   const [intervalMonths, setIntervalMonths] = useState(String(existing?.intervalMonths ?? ''));
+  const [officialKm, setOfficialKm] = useState(String(existing?.officialIntervalKm ?? ''));
+  const [officialMonths, setOfficialMonths] = useState(String(existing?.officialIntervalMonths ?? ''));
   const [baselineDate, setBaselineDate] = useState(existing?.baselineDate ?? '');
   const [baselineOdometer, setBaselineOdometer] = useState(String(existing?.baselineOdometer ?? ''));
   const { error, disabled, run } = useSubmit();
@@ -164,6 +166,8 @@ export function TaskForm({ vehicle, existing }: { vehicle: Vehicle; existing?: M
         name,
         intervalKm: optionalNumber(intervalKm, t.setup.distanceLabel, t),
         intervalMonths: optionalNumber(intervalMonths, t.setup.monthsLabel, t),
+        officialIntervalKm: optionalNumber(officialKm, t.setup.distanceLabel, t),
+        officialIntervalMonths: optionalNumber(officialMonths, t.setup.monthsLabel, t),
         baselineDate: baselineDate || null,
         baselineOdometer: optionalNumber(baselineOdometer, t.setup.odometerLabel, t),
       };
@@ -199,6 +203,16 @@ export function TaskForm({ vehicle, existing }: { vehicle: Vehicle; existing?: M
             <input inputMode="numeric" value={intervalMonths} onChange={(e) => setIntervalMonths(e.target.value)} placeholder="12" />
           </Field>
         </div>
+        <p className="field-label">{t.setup.official}</p>
+        <div className="row">
+          <Field label={t.setup.everyKm}>
+            <input inputMode="numeric" value={officialKm} onChange={(e) => setOfficialKm(e.target.value)} />
+          </Field>
+          <Field label={t.setup.everyMonths}>
+            <input inputMode="numeric" value={officialMonths} onChange={(e) => setOfficialMonths(e.target.value)} />
+          </Field>
+        </div>
+        <p className="muted">{t.setup.officialHint}</p>
         <p className="field-label">{t.setup.baseline}</p>
         <div className="row">
           <Field label={t.setup.baselineDate}>

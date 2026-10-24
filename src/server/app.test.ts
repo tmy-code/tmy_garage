@@ -70,6 +70,20 @@ describe('vehicles and tasks', () => {
     expect(copies[0]).toMatchObject({ baselineDate: null, baselineOdometer: null });
   });
 
+  it('stores, updates and copies the Official Interval', async () => {
+    const a = await createVehicle('A');
+    const b = await createVehicle('B');
+    const task = await createTask(a.id, { intervalKm: 10000, intervalMonths: 12, officialIntervalKm: 30000, officialIntervalMonths: 24 });
+    expect(task).toMatchObject({ officialIntervalKm: 30000, officialIntervalMonths: 24 });
+    await call('PUT', `/api/tasks/${task.id}`, { name: 'Oil change', intervalKm: 10000, intervalMonths: 12, officialIntervalKm: 25000 });
+    await call('POST', `/api/vehicles/${b.id}/copy-tasks`, { fromVehicleId: a.id });
+    const tasks = (await snapshot()).tasks;
+    expect(tasks.map((t) => [t.vehicleId, t.officialIntervalKm, t.officialIntervalMonths])).toEqual([
+      [a.id, 25000, null],
+      [b.id, 25000, null],
+    ]);
+  });
+
   it('marks a vehicle as sold and keeps its history', async () => {
     const bike = await createVehicle();
     const res = await call('POST', `/api/vehicles/${bike.id}/sell`, { date: '2028-05-01', odometer: 40000, price: 4500 });
@@ -157,5 +171,25 @@ describe('migrations', () => {
     openDatabase(path, join(dir, 'backups')).close();
     openDatabase(path, join(dir, 'backups')).close();
     expect(() => readdirSync(join(dir, 'backups'))).toThrow();
+  });
+
+  it('backs up an existing database before migrating it, and keeps its data', () => {
+    const path = join(dir, 'garage.sqlite');
+    // Recreate a database as the first release left it: schema version 1, without the Official Interval columns.
+    const old = openDatabase(path);
+    old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v1', 'default', 'car', 'Old car')`);
+    old.exec(`INSERT INTO maintenance_tasks (id, vehicle_id, name, interval_km) VALUES ('t1', 'v1', 'Oil', 10000)`);
+    old.exec('ALTER TABLE maintenance_tasks DROP COLUMN official_interval_km');
+    old.exec('ALTER TABLE maintenance_tasks DROP COLUMN official_interval_months');
+    old.exec('PRAGMA user_version = 1');
+    old.close();
+
+    const migrated = openDatabase(path, join(dir, 'backups'));
+    const backups = readdirSync(join(dir, 'backups'));
+    expect(backups).toHaveLength(1);
+    expect(backups[0]).toMatch(/^garage-v1-.*\.sqlite$/);
+    const task = migrated.prepare('SELECT * FROM maintenance_tasks').get() as Record<string, unknown>;
+    expect(task).toMatchObject({ id: 't1', interval_km: 10000, official_interval_km: null });
+    migrated.close();
   });
 });

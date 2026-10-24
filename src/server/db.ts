@@ -64,6 +64,10 @@ const MIGRATIONS: string[] = [
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   `,
+  `
+  ALTER TABLE maintenance_tasks ADD COLUMN official_interval_km INTEGER;
+  ALTER TABLE maintenance_tasks ADD COLUMN official_interval_months INTEGER;
+  `,
 ];
 
 function schemaVersion(db: DatabaseSync): number {

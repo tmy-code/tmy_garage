@@ -3,7 +3,7 @@ import { todayIso } from '../../shared/dates.ts';
 import { vehicleDue } from '../../shared/due.ts';
 import type { Snapshot, Vehicle } from '../../shared/types.ts';
 import { Layout, StatusChip } from '../components.tsx';
-import { describeDue, describeInterval, formatDate, formatKm, formatMoney } from '../format.ts';
+import { describeDue, describeInterval, describeOfficialInterval, formatDate, formatKm, formatMoney } from '../format.ts';
 import { useT } from '../i18n.ts';
 import { useStore } from '../store.ts';
 
@@ -96,6 +96,7 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
           <ul className="list">
             {due.map((d) => {
               const task = tasks.get(d.taskId)!;
+              const official = describeOfficialInterval(task, t);
               return (
                 <li key={d.taskId}>
                   <a href={`#/tasks/${task.id}/edit`} className="task-row">
@@ -104,6 +105,7 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
                       <span className="due-name">{task.name}</span>
                     </div>
                     <span className="muted">{describeInterval(task, t)}</span>
+                    {official ? <span className="muted">{official}</span> : null}
                     {owned ? <span className="due-text">{describeDue(d, t)}</span> : null}
                     {d.lastDone ? (
                       <span className="muted">

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DueInfo } from '../shared/due.ts';
 import type { MaintenanceTask } from '../shared/types.ts';
-import { describeDue, describeInterval, formatDate } from './format.ts';
+import { describeDue, describeInterval, describeOfficialInterval, formatDate } from './format.ts';
 import { messagesFor } from './i18n.ts';
 
 const en = messagesFor('en');
@@ -15,6 +15,8 @@ const task = (intervalKm: number | null, intervalMonths: number | null): Mainten
   name: 'Oil',
   intervalKm,
   intervalMonths,
+  officialIntervalKm: null,
+  officialIntervalMonths: null,
   baselineDate: null,
   baselineOdometer: null,
 });
@@ -41,6 +43,14 @@ describe('format in both languages', () => {
     expect(plain(describeInterval(task(6000, 12), en))).toBe('Every 6 000 km or 1 year');
     expect(plain(describeInterval(task(null, 24), fr))).toBe('Tous les 2 ans');
     expect(plain(describeInterval(task(500, 1), fr))).toBe('Tous les 500 km ou 1 mois');
+  });
+
+  it('shows the stricter interval with the official one alongside', () => {
+    const airFilter = { ...task(null, 12), officialIntervalKm: 30_000, officialIntervalMonths: 24 };
+    expect(plain(describeInterval(airFilter, en))).toBe('Every 30 000 km or 1 year');
+    expect(plain(describeOfficialInterval(airFilter, en)!)).toBe('Official: every 30 000 km or 2 years');
+    expect(plain(describeOfficialInterval(airFilter, fr)!)).toBe('Constructeur : tous les 30 000 km ou 2 ans');
+    expect(describeOfficialInterval(task(6000, 12), en)).toBeNull();
   });
 
   it('describes a projected Due Date', () => {
