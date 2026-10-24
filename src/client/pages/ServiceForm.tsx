@@ -3,10 +3,10 @@ import { todayIso } from '../../shared/dates.ts';
 import { vehicleDue } from '../../shared/due.ts';
 import type { PartUnit } from '../../shared/schemas.ts';
 import type { PartUsed, Service, Snapshot, Vehicle } from '../../shared/types.ts';
-import { lastUsed } from '../../shared/workshop.ts';
+import { lastUsed, partSpecsOf } from '../../shared/workshop.ts';
 import { newId } from '../api.ts';
 import { Field, Layout, StatusChip } from '../components.tsx';
-import { formatKm, parseNumber } from '../format.ts';
+import { formatKm, parseNumber, partName } from '../format.ts';
 import { useT, type Messages } from '../i18n.ts';
 import { navigate } from '../router.ts';
 import { enqueue, online, useStore } from '../store.ts';
@@ -70,7 +70,7 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
   const [selected, setSelected] = useState<Set<string>>(new Set(existing?.taskIds ?? []));
   const [notes, setNotes] = useState(existing?.notes ?? '');
   const [parts, setParts] = useState<PartDraft[]>(() => (existing?.partsUsed ?? []).map(toDraft));
-  const partSpecs = snapshot.partSpecs.filter((p) => p.vehicleId === vehicle.id);
+  const partSpecs = partSpecsOf(snapshot, vehicle, { keep: (existing?.partsUsed ?? []).map((p) => p.partSpecId) });
   const positions = snapshot.positions.filter((p) => p.vehicleId === vehicle.id);
   const missingParts = [...selected]
     .flatMap((id) => tasks.get(id)?.requiredParts ?? [])
@@ -105,7 +105,7 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
         key: nextKey++,
         partSpecId: spec.id,
         positionId: last?.positionId ?? null,
-        description: last?.description ?? [spec.name, spec.characteristics].filter(Boolean).join(' '),
+        description: last?.description ?? [partName(spec, t), spec.characteristics].filter(Boolean).join(' '),
         partNumber: last?.partNumber ?? '',
         quantity: String(r.quantity),
         unit: spec.unit,
@@ -278,7 +278,7 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
                           <option value="">{t.workshop.noSpec}</option>
                           {partSpecs.map((s) => (
                             <option key={s.id} value={s.id}>
-                              {s.name}
+                              {partName(s, t)}
                             </option>
                           ))}
                         </select>

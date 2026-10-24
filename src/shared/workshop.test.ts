@@ -60,8 +60,26 @@ const base: Snapshot = {
   readings: [],
   vehicleSpecs: [],
   partSpecs: [
-    { id: 'oil-spec', vehicleId: 'bike', name: 'Engine oil', characteristics: '10W-40', partNumbers: null, unit: 'litre' },
-    { id: 'filter-spec', vehicleId: 'bike', name: 'Oil filter', characteristics: null, partNumbers: 'HF204', unit: 'piece' },
+    {
+      id: 'oil-spec',
+      vehicleId: 'bike',
+      standardPart: 'engineOil',
+      notFitted: false,
+      name: 'Engine oil',
+      characteristics: '10W-40',
+      partNumbers: null,
+      unit: 'litre',
+    },
+    {
+      id: 'filter-spec',
+      vehicleId: 'bike',
+      standardPart: 'oilFilter',
+      notFitted: false,
+      name: 'Oil filter',
+      characteristics: null,
+      partNumbers: 'HF204',
+      unit: 'piece',
+    },
   ],
   positions: [{ id: 'rear', vehicleId: 'bike', name: 'Rear tyre' }],
 };

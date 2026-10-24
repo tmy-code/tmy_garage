@@ -25,6 +25,8 @@ import type {
   Vehicle,
   VehicleSpec,
 } from '../shared/types.ts';
+import { STANDARD_PARTS } from '../shared/catalogue.ts';
+import type { VehicleKind } from '../shared/schemas.ts';
 import { DEFAULT_GARAGE_ID } from './db.ts';
 
 class HttpError extends Error {
@@ -94,10 +96,12 @@ const toVehicleSpec = (r: Row): VehicleSpec => ({
 const toPartSpec = (r: Row): PartSpec => ({
   id: r.id,
   vehicleId: r.vehicle_id,
+  standardPart: r.standard_part,
   name: r.name,
   characteristics: r.characteristics,
   partNumbers: r.part_numbers,
   unit: r.unit,
+  notFitted: r.not_fitted === 1,
 });
 
 const toPosition = (r: Row): FitmentPosition => ({ id: r.id, vehicleId: r.vehicle_id, name: r.name });
@@ -266,6 +270,25 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     };
   }
 
+  /** Gives a Vehicle the Standard Parts of its kind it does not list yet, so each only needs its Part Spec filled in. */
+  function ensureStandardParts(vehicleId: string, kind: VehicleKind) {
+    const existing = new Set(
+      (db.prepare('SELECT standard_part FROM part_specs WHERE vehicle_id = ? AND standard_part IS NOT NULL').all(vehicleId) as Row[]).map(
+        (r) => r.standard_part as string,
+      ),
+    );
+    const insert = db.prepare('INSERT INTO part_specs (id, vehicle_id, standard_part, name, unit) VALUES (?, ?, ?, ?, ?)');
+    for (const [key, unit] of STANDARD_PARTS[kind]) {
+      if (!existing.has(key)) insert.run(randomUUID(), vehicleId, key, key, unit);
+    }
+  }
+
+  // Vehicles added before Standard Parts existed, or after the catalogue grew, get the missing ones.
+  transaction(() => {
+    for (const v of db.prepare('SELECT id, kind FROM vehicles WHERE garage_id = ?').all(garageId) as Row[])
+      ensureStandardParts(v.id, v.kind);
+  });
+
   app.onError((error, c) => {
     if (error instanceof HttpError) return c.json({ error: error.message }, error.status);
     console.error(error);
@@ -285,6 +308,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       `INSERT INTO vehicles (id, garage_id, kind, name, make, model, year, registration)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(id, garageId, v.kind, v.name, v.make, v.model, v.year, v.registration);
+    ensureStandardParts(id, v.kind);
     return c.json(toVehicle(vehicleOrThrow(id)), 201);
   });
 
@@ -301,6 +325,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       v.registration,
       id,
     );
+    ensureStandardParts(id, v.kind);
     return c.json(toVehicle(vehicleOrThrow(id)));
   });
 
@@ -473,22 +498,33 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
 
   app.put('/api/part-specs/:id', async (c) => {
     const id = c.req.param('id');
-    ownedRowOrThrow('part_specs', id, 'Part Spec');
+    const row = ownedRowOrThrow('part_specs', id, 'Part Spec');
     const p = await parse(c, partSpecInput);
-    db.prepare('UPDATE part_specs SET name = ?, characteristics = ?, part_numbers = ?, unit = ? WHERE id = ?').run(
-      p.name,
-      p.characteristics,
-      p.partNumbers,
-      p.unit,
-      id,
-    );
+    if (row.standard_part) {
+      // A Standard Part's name and unit come from the catalogue: only its Part Spec is edited.
+      db.prepare('UPDATE part_specs SET characteristics = ?, part_numbers = ?, not_fitted = ? WHERE id = ?').run(
+        p.characteristics,
+        p.partNumbers,
+        p.notFitted ? 1 : 0,
+        id,
+      );
+    } else {
+      db.prepare('UPDATE part_specs SET name = ?, characteristics = ?, part_numbers = ?, unit = ? WHERE id = ?').run(
+        p.name,
+        p.characteristics,
+        p.partNumbers,
+        p.unit,
+        id,
+      );
+    }
     return c.json(toPartSpec(ownedRowOrThrow('part_specs', id, 'Part Spec')));
   });
 
   // Tasks stop requiring it; Parts Used keep their own description, so history is unchanged.
   app.delete('/api/part-specs/:id', (c) => {
     const id = c.req.param('id');
-    ownedRowOrThrow('part_specs', id, 'Part Spec');
+    const row = ownedRowOrThrow('part_specs', id, 'Part Spec');
+    if (row.standard_part) throw new HttpError(409, 'A Standard Part cannot be deleted; mark it as not on this vehicle instead');
     db.prepare('DELETE FROM part_specs WHERE id = ?').run(id);
     return c.body(null, 204);
   });

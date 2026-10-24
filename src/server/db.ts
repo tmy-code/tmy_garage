@@ -133,6 +133,11 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (service_id, sort)
   );
   `,
+  `
+  ALTER TABLE part_specs ADD COLUMN standard_part TEXT;
+  ALTER TABLE part_specs ADD COLUMN not_fitted INTEGER NOT NULL DEFAULT 0;
+  CREATE UNIQUE INDEX part_specs_standard ON part_specs (vehicle_id, standard_part) WHERE standard_part IS NOT NULL;
+  `,
 ];
 
 function schemaVersion(db: DatabaseSync): number {

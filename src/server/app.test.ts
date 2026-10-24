@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Hono } from 'hono';
 import type { DatabaseSync } from 'node:sqlite';
 import type { FitmentPosition, MaintenanceTask, PartSpec, Snapshot, Vehicle, VehicleSpec } from '../shared/types.ts';
+import { STANDARD_PARTS } from '../shared/catalogue.ts';
 import { createApp } from './app.ts';
 import { openDatabase } from './db.ts';
 
@@ -194,8 +195,42 @@ describe('workshop data', () => {
     expect(s.vehicleSpecs).toEqual([
       { id: torque.id, vehicleId: bike.id, kind: 'torque', name: 'Drain plug', value: '30 Nm', notes: 'New washer' },
     ]);
-    expect(s.partSpecs[0]).toMatchObject({ name: 'Engine oil', characteristics: '10W-40 JASO MA2', partNumbers: null, unit: 'litre' });
+    expect(s.partSpecs.find((p) => p.standardPart === null)).toMatchObject({
+      name: 'Engine oil',
+      characteristics: '10W-40 JASO MA2',
+      partNumbers: null,
+      unit: 'litre',
+    });
     expect(s.positions[0]).toMatchObject({ name: 'Rear tyre' });
+  });
+
+  it('lists the Standard Parts of its kind on every vehicle', async () => {
+    const bike = await createVehicle();
+    const car = (await (await call('POST', '/api/vehicles', { kind: 'car', name: 'Test car' })).json()) as Vehicle;
+    const parts = (await snapshot()).partSpecs;
+    const of = (v: Vehicle) => parts.filter((p) => p.vehicleId === v.id).map((p) => p.standardPart);
+    expect(of(bike)).toEqual(STANDARD_PARTS.motorcycle.map(([key]) => key));
+    expect(of(car)).toEqual(expect.arrayContaining(['timingBeltKit', 'timingChainKit', 'cabinFilter']));
+    expect(parts.find((p) => p.vehicleId === bike.id && p.standardPart === 'engineOil')).toMatchObject({ unit: 'litre', notFitted: false });
+  });
+
+  it('edits only the Part Spec of a Standard Part, and never deletes it', async () => {
+    const bike = await createVehicle();
+    const filter = (await snapshot()).partSpecs.find((p) => p.standardPart === 'oilFilter')!;
+    await call('PUT', `/api/part-specs/${filter.id}`, { name: 'Renamed', partNumbers: 'HF204', unit: 'litre' });
+    const chain = (await snapshot()).partSpecs.find((p) => p.vehicleId === bike.id && p.standardPart === 'chainKit')!;
+    await call('PUT', `/api/part-specs/${chain.id}`, { name: chain.name, unit: chain.unit, notFitted: true });
+    const parts = (await snapshot()).partSpecs;
+    expect(parts.find((p) => p.id === filter.id)).toMatchObject({ name: 'oilFilter', partNumbers: 'HF204', unit: 'piece' });
+    expect(parts.find((p) => p.id === chain.id)!.notFitted).toBe(true);
+    expect((await call('DELETE', `/api/part-specs/${filter.id}`)).status).toBe(409);
+  });
+
+  it('adds the Standard Parts to vehicles created before they existed', async () => {
+    db.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('old', 'default', 'car', 'Old car')`);
+    const later = createApp(db);
+    const parts = (await (await later.request('/api/snapshot')).json()) as Snapshot;
+    expect(parts.partSpecs.filter((p) => p.vehicleId === 'old')).toHaveLength(STANDARD_PARTS.car.length);
   });
 
   it('saves a Task’s workshop card as a whole', async () => {

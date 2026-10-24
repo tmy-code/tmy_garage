@@ -1,6 +1,6 @@
 import { effectiveInterval, type DueInfo } from '../shared/due.ts';
 import type { PartUnit } from '../shared/schemas.ts';
-import type { MaintenanceTask } from '../shared/types.ts';
+import type { MaintenanceTask, PartSpec } from '../shared/types.ts';
 import { messages, type Messages } from './i18n.ts';
 
 // Distances use French digit grouping ("24 000 km") in both languages.
@@ -18,6 +18,11 @@ export function formatKm(km: number): string {
 
 export function formatMoney(amount: number, m: Messages = messages()): string {
   return new Intl.NumberFormat(m.locale, { style: 'currency', currency: 'EUR' }).format(amount);
+}
+
+/** A Standard Part is named in the interface language; another Part by the name the user gave it. */
+export function partName(spec: PartSpec, m: Messages = messages()): string {
+  return spec.standardPart ? m.workshop.standardParts[spec.standardPart] : spec.name;
 }
 
 /** A Part quantity in its unit, e.g. "3.2 L" or "2 pcs" ("3,2 L", "2 pièces" in French). */

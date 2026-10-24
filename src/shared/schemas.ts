@@ -67,6 +67,7 @@ export const partSpecInput = z.object({
   characteristics: optionalText(500),
   partNumbers: optionalText(500),
   unit: partUnit,
+  notFitted: z.boolean().default(false),
 });
 
 export const positionInput = z.object({ name: z.string().trim().min(1).max(80) });

@@ -1,3 +1,4 @@
+import { catalogueOrder } from './catalogue.ts';
 import { addDays, type IsoDate } from './dates.ts';
 import { vehicleDue, type DueInfo } from './due.ts';
 import type { FitmentPosition, MaintenanceTask, PartSpec, PartUsed, Service, Snapshot, Vehicle } from './types.ts';
@@ -19,6 +20,16 @@ function usages(snapshot: Snapshot, vehicleId: string, matches: (p: PartUsed) =>
     .filter((s) => s.vehicleId === vehicleId)
     .sort(newestFirst)
     .flatMap((s) => s.partsUsed.filter(matches).map((part) => ({ part, serviceId: s.id, date: s.date, odometer: s.odometer })));
+}
+
+/**
+ * A Vehicle's Part Specs, Standard Parts first in catalogue order. Standard Parts marked as not on the
+ * Vehicle are left out unless asked for, or unless one of `keep` (already chosen somewhere) is among them.
+ */
+export function partSpecsOf(snapshot: Snapshot, vehicle: Vehicle, { notFitted = false, keep = [] as (string | null)[] } = {}): PartSpec[] {
+  return snapshot.partSpecs
+    .filter((p) => p.vehicleId === vehicle.id && (notFitted || !p.notFitted || keep.includes(p.id)))
+    .sort((a, b) => catalogueOrder(vehicle.kind, a.standardPart) - catalogueOrder(vehicle.kind, b.standardPart));
 }
 
 /** The most recent Part Used for a Part Spec: what to buy again. */
@@ -111,7 +122,7 @@ export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
     })),
     services: snapshot.services.map(normalizeService),
     vehicleSpecs: snapshot.vehicleSpecs ?? [],
-    partSpecs: snapshot.partSpecs ?? [],
+    partSpecs: (snapshot.partSpecs ?? []).map((p) => ({ ...p, standardPart: p.standardPart ?? null, notFitted: p.notFitted ?? false })),
     positions: snapshot.positions ?? [],
   };
 }

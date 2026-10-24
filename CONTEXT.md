@@ -14,7 +14,7 @@ _Avoid_: Car (when meaning any vehicle), bike, asset, archived
 
 ### In the French interface
 
-The app speaks English and French. French screens use: Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Due Date → échéance, Interval → intervalle, Vehicle Spec → caractéristique, Torque Spec → couple de serrage, Required Tool → outil, Workshop Notes → notes d’atelier, Part Spec → spécification de pièce, Required Part → pièce nécessaire, Part Used → pièce utilisée, Fitment Position → emplacement, Shopping List → liste de courses.
+The app speaks English and French. French screens use: Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Due Date → échéance, Interval → intervalle, Vehicle Spec → caractéristique, Torque Spec → couple de serrage, Required Tool → outil, Workshop Notes → notes d’atelier, Standard Part → pièce standard, Part Spec → spécification de pièce, Required Part → pièce nécessaire, Part Used → pièce utilisée, Fitment Position → emplacement, Shopping List → liste de courses.
 
 ## Maintenance
 
@@ -80,8 +80,12 @@ _Avoid_: Défaillance, failure, issue
 Anything fitted to or consumed by a Vehicle during maintenance, measured in pieces or by volume (filters, pads, plugs, oil, coolant, chain lube).
 _Avoid_: Consumable, supply, spare (as separate categories)
 
+**Standard Part**:
+A Part every Vehicle of one kind has (e.g. engine oil, oil filter, front tyre for a motorcycle; cabin filter, timing belt kit for a car). Every Vehicle lists the Standard Parts of its kind; what varies between Vehicles is only their Part Spec. A Standard Part can be marked as not on a Vehicle (e.g. a timing belt kit on an engine with a timing chain). A Part outside this list is named by the user.
+_Avoid_: Part type, category, catalogue entry
+
 **Part Spec**:
-The technical description of a Part a Vehicle takes, without quantity: characteristics such as viscosity, API/JASO grade or dimensions, and/or acceptable part numbers (e.g. "engine oil 10W-40, JASO MA2").
+The technical description of what a Vehicle takes for one Part, without quantity: characteristics such as viscosity, API/JASO grade or dimensions, and/or acceptable part numbers (e.g. "engine oil 10W-40, JASO MA2").
 _Avoid_: Requirement, recommended part
 
 **Required Part**:

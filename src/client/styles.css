@@ -513,6 +513,15 @@ body > .banner {
   margin-bottom: 8px;
 }
 
+/* A Standard Part whose Part Spec is not filled in yet. */
+.list li.unset {
+  border-style: dashed;
+}
+
+.list li.unset strong {
+  color: var(--muted);
+}
+
 .list li.editing {
   border: 0;
   background: none;
@@ -619,6 +628,11 @@ body > .banner {
 
   .list-grid li {
     margin: 0;
+  }
+
+  /* An item being edited takes a row of its own instead of stretching its neighbours. */
+  .list-grid li.editing {
+    grid-column: 1 / -1;
   }
 
   .split {

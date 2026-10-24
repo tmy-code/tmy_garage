@@ -3,9 +3,18 @@ import { todayIso } from '../../shared/dates.ts';
 import { vehicleDue } from '../../shared/due.ts';
 import type { PartUnit, VehicleSpecKind } from '../../shared/schemas.ts';
 import type { FitmentPosition, MaintenanceTask, PartSpec, PartUsed, Snapshot, Vehicle, VehicleSpec } from '../../shared/types.ts';
-import { fitments, lastUsed, SHOPPING_HORIZON_DAYS, shoppingList, type PartUsage } from '../../shared/workshop.ts';
+import { fitments, lastUsed, partSpecsOf, SHOPPING_HORIZON_DAYS, shoppingList, type PartUsage } from '../../shared/workshop.ts';
 import { Field, Layout, NeedsConnection, StatusChip } from '../components.tsx';
-import { describeDue, describeInterval, describeOfficialInterval, formatDate, formatKm, formatQuantity, parseNumber } from '../format.ts';
+import {
+  describeDue,
+  describeInterval,
+  describeOfficialInterval,
+  formatDate,
+  formatKm,
+  formatQuantity,
+  parseNumber,
+  partName,
+} from '../format.ts';
 import { messages, useT, type Messages } from '../i18n.ts';
 import { navigate } from '../router.ts';
 import { online } from '../store.ts';
@@ -109,12 +118,12 @@ function InlineEditor({
 
 type Editing = string | 'new' | null;
 
-function AddButton({ editor }: { editor: ReturnType<typeof useEditor> }) {
+function AddButton({ editor, label }: { editor: ReturnType<typeof useEditor>; label?: string }) {
   const t = useT();
   if (editor.editing === 'new') return null;
   return (
     <button type="button" className="button button-small" onClick={() => editor.setEditing('new')}>
-      + {t.workshop.add}
+      + {label ?? t.workshop.add}
     </button>
   );
 }
@@ -235,7 +244,9 @@ function PartSpecEditor({ vehicle, existing, editor }: { vehicle: Vehicle; exist
   const [characteristics, setCharacteristics] = useState(existing?.characteristics ?? '');
   const [partNumbers, setPartNumbers] = useState(existing?.partNumbers ?? '');
   const [unit, setUnit] = useState<PartUnit>(existing?.unit ?? 'piece');
-  const body = { name, characteristics, partNumbers, unit };
+  const [notFitted, setNotFitted] = useState(existing?.notFitted ?? false);
+  const standard = existing?.standardPart ? existing : null;
+  const body = { name, characteristics, partNumbers, unit, notFitted };
   return (
     <InlineEditor
       onSubmit={() =>
@@ -244,67 +255,105 @@ function PartSpecEditor({ vehicle, existing, editor }: { vehicle: Vehicle; exist
         )
       }
       onCancel={() => editor.setEditing(null)}
-      onDelete={existing ? () => editor.remove(existing.name, () => online('DELETE', `/api/part-specs/${existing.id}`)) : undefined}
+      onDelete={
+        existing && !standard ? () => editor.remove(existing.name, () => online('DELETE', `/api/part-specs/${existing.id}`)) : undefined
+      }
       disabled={editor.disabled}
       error={editor.error}
     >
-      <Field label={t.workshop.partName} hint={t.workshop.partNameHint}>
-        <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} autoFocus />
-      </Field>
+      {standard ? (
+        <h2>{partName(standard, t)}</h2>
+      ) : (
+        <Field label={t.workshop.partName} hint={t.workshop.partNameHint}>
+          <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} autoFocus />
+        </Field>
+      )}
       <Field label={t.workshop.characteristics} hint={t.workshop.characteristicsHint}>
-        <input value={characteristics} onChange={(e) => setCharacteristics(e.target.value)} maxLength={500} />
+        <input value={characteristics} onChange={(e) => setCharacteristics(e.target.value)} maxLength={500} autoFocus={!!standard} />
       </Field>
       <Field label={t.workshop.partNumbers} hint={t.workshop.partNumbersHint}>
         <input value={partNumbers} onChange={(e) => setPartNumbers(e.target.value)} maxLength={500} />
       </Field>
-      <p className="field-label">{t.workshop.unit}</p>
-      <Segmented
-        label={t.workshop.unit}
-        value={unit}
-        onChange={setUnit}
-        options={[
-          ['piece', t.workshop.piece],
-          ['litre', t.workshop.litre],
-        ]}
-      />
+      {standard ? (
+        <label className={`check ${notFitted ? 'check-on' : ''}`}>
+          <input type="checkbox" checked={notFitted} onChange={(e) => setNotFitted(e.target.checked)} />
+          <span>
+            {t.workshop.notFitted}
+            <span className="field-hint"> · {t.workshop.notFittedHint}</span>
+          </span>
+        </label>
+      ) : (
+        <>
+          <p className="field-label">{t.workshop.unit}</p>
+          <Segmented
+            label={t.workshop.unit}
+            value={unit}
+            onChange={setUnit}
+            options={[
+              ['piece', t.workshop.piece],
+              ['litre', t.workshop.litre],
+            ]}
+          />
+        </>
+      )}
     </InlineEditor>
   );
 }
 
 function PartSpecLine({ spec }: { spec: PartSpec }) {
+  const t = useT();
+  const empty = !spec.characteristics && !spec.partNumbers;
   return (
     <>
-      <strong>{spec.name}</strong>
+      <strong>{partName(spec, t)}</strong>
       {spec.characteristics ? <span>{spec.characteristics}</span> : null}
       {spec.partNumbers ? <span className="muted">{spec.partNumbers}</span> : null}
+      {empty && !spec.notFitted ? <span className="muted">{t.workshop.notSet}</span> : null}
     </>
+  );
+}
+
+function PartSpecList({ vehicle, specs, editor }: { vehicle: Vehicle; specs: PartSpec[]; editor: ReturnType<typeof useEditor> }) {
+  return (
+    <ul className="list list-grid">
+      {specs.map((spec) =>
+        editor.editing === spec.id ? (
+          <li key={spec.id} className="editing">
+            <PartSpecEditor vehicle={vehicle} existing={spec} editor={editor} />
+          </li>
+        ) : (
+          <li key={spec.id} className={!spec.characteristics && !spec.partNumbers ? 'unset' : undefined}>
+            <button type="button" className="item-row" onClick={() => editor.setEditing(spec.id)}>
+              <PartSpecLine spec={spec} />
+            </button>
+          </li>
+        ),
+      )}
+    </ul>
   );
 }
 
 export function PartSpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: Snapshot }) {
   const t = useT();
   const editor = useEditor();
-  const specs = snapshot.partSpecs.filter((s) => s.vehicleId === vehicle.id);
+  const all = partSpecsOf(snapshot, vehicle, { notFitted: true });
+  const notFitted = all.filter((s) => s.notFitted);
   return (
-    <Layout title={t.workshop.partsTitle(vehicle.name)} back={`/vehicles/${vehicle.id}`} actions={<AddButton editor={editor} />}>
+    <Layout
+      title={t.workshop.partsTitle(vehicle.name)}
+      back={`/vehicles/${vehicle.id}`}
+      actions={<AddButton editor={editor} label={t.workshop.otherPart} />}
+    >
       <NeedsConnection />
+      <p className="muted">{t.workshop.partsIntro}</p>
       {editor.editing === 'new' ? <PartSpecEditor vehicle={vehicle} editor={editor} /> : null}
-      {specs.length === 0 && editor.editing !== 'new' ? <p className="empty">{t.workshop.noPartSpecs}</p> : null}
-      <ul className="list list-grid">
-        {specs.map((spec) =>
-          editor.editing === spec.id ? (
-            <li key={spec.id} className="editing">
-              <PartSpecEditor vehicle={vehicle} existing={spec} editor={editor} />
-            </li>
-          ) : (
-            <li key={spec.id}>
-              <button type="button" className="item-row" onClick={() => editor.setEditing(spec.id)}>
-                <PartSpecLine spec={spec} />
-              </button>
-            </li>
-          ),
-        )}
-      </ul>
+      <PartSpecList vehicle={vehicle} specs={all.filter((s) => !s.notFitted)} editor={editor} />
+      {notFitted.length > 0 ? (
+        <details className="sold">
+          <summary>{t.workshop.notFittedSection(notFitted.length)}</summary>
+          <PartSpecList vehicle={vehicle} specs={notFitted} editor={editor} />
+        </details>
+      ) : null}
     </Layout>
   );
 }
@@ -501,7 +550,7 @@ export function TaskPage({ task, vehicle, snapshot }: { task: MaintenanceTask; v
                   <li key={spec.id}>
                     <div className="history-row">
                       <span>
-                        <strong>{spec.name}</strong> · {formatQuantity(quantity, spec.unit, t)}
+                        <strong>{partName(spec, t)}</strong> · {formatQuantity(quantity, spec.unit, t)}
                       </span>
                       {spec.characteristics ? <span>{spec.characteristics}</span> : null}
                       {spec.partNumbers ? <span className="muted">{spec.partNumbers}</span> : null}
@@ -557,7 +606,7 @@ export function TaskPage({ task, vehicle, snapshot }: { task: MaintenanceTask; v
 
 export function WorkshopForm({ task, vehicle, snapshot }: { task: MaintenanceTask; vehicle: Vehicle; snapshot: Snapshot }) {
   const t = useT();
-  const partSpecs = snapshot.partSpecs.filter((p) => p.vehicleId === vehicle.id);
+  const partSpecs = partSpecsOf(snapshot, vehicle, { keep: task.requiredParts.map((r) => r.partSpecId) });
   const vehicleSpecs = snapshot.vehicleSpecs.filter((s) => s.vehicleId === vehicle.id);
   const [notes, setNotes] = useState(task.workshopNotes ?? '');
   const [tools, setTools] = useState(task.tools.join('\n'));
@@ -611,7 +660,7 @@ export function WorkshopForm({ task, vehicle, snapshot }: { task: MaintenanceTas
                 <select value={p.partSpecId} onChange={(e) => setPart(i, { partSpecId: e.target.value })} aria-label={t.workshop.partName}>
                   {partSpecs.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name}
+                      {partName(s, t)}
                       {s.characteristics ? ` (${s.characteristics})` : ''}
                     </option>
                   ))}
@@ -700,7 +749,7 @@ export function ShoppingPage({ snapshot }: { snapshot: Snapshot }) {
                 <li key={item.partSpec.id}>
                   <div className="history-row">
                     <span>
-                      <strong>{item.partSpec.name}</strong> · {formatQuantity(item.quantity, item.partSpec.unit, t)}
+                      <strong>{partName(item.partSpec, t)}</strong> · {formatQuantity(item.quantity, item.partSpec.unit, t)}
                     </span>
                     {item.partSpec.characteristics ? <span>{item.partSpec.characteristics}</span> : null}
                     {item.partSpec.partNumbers ? <span className="muted">{item.partSpec.partNumbers}</span> : null}

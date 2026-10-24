@@ -1,4 +1,5 @@
 import type { IsoDate } from './dates.ts';
+import type { StandardPartKey } from './catalogue.ts';
 import type { PartUnit, VehicleKind, VehicleSpecKind } from './schemas.ts';
 
 export interface Vehicle {
@@ -56,10 +57,15 @@ export interface VehicleSpec {
 export interface PartSpec {
   id: string;
   vehicleId: string;
+  /** Which Standard Part this is; null for another Part, named by the user. */
+  standardPart: StandardPartKey | null;
+  /** Only meaningful for another Part: a Standard Part is named by the interface language. */
   name: string;
   characteristics: string | null;
   partNumbers: string | null;
   unit: PartUnit;
+  /** A Standard Part this Vehicle does not have (e.g. a timing chain on a belt engine). */
+  notFitted: boolean;
 }
 
 /** A named location on a Vehicle that holds one Part at a time. */
