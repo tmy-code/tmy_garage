@@ -1,0 +1,32 @@
+# --- Personal data: never commit (the repo is public) ---
+# Runtime data lives on the NAS volume, never in the repo
+/data/
+/uploads/
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+backups/
+
+# Secrets and machine-specific settings
+.env
+.env.*
+!.env.example
+
+# Real documents dropped into the working copy by mistake
+*.pdf
+*.heic
+!docs/**/*.pdf
+
+# --- Build and tooling ---
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+*.log
+.DS_Store
+Thumbs.db
+.claude/settings.local.json
