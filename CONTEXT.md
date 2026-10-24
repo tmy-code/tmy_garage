@@ -9,7 +9,7 @@ One person's own, isolated collection of Vehicles, Insurance Policies, Drivers a
 _Avoid_: Account, workspace, fleet
 
 **Vehicle**:
-A car or motorcycle belonging to a Garage. It is either owned or sold; a sold Vehicle (with sale date, Odometer Reading and price) keeps its full history but no longer has anything due.
+A car or motorcycle belonging to a Garage. It is either owned or sold; a sold Vehicle (with sale date, Odometer Reading and price) keeps its full history but no longer has anything due. "Owned" means the user keeps and maintains it, even if it is registered or insured in someone else's name (e.g. a family member).
 _Avoid_: Car (when meaning any vehicle), bike, asset, archived
 
 ## Maintenance

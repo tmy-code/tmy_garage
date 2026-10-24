@@ -19,7 +19,7 @@ export default defineConfig({
         short_name: 'Garage',
         description: 'Maintenance logbook for your cars and motorcycles',
         theme_color: '#1f2937',
-        background_color: '#111827',
+        background_color: '#000000',
         display: 'standalone',
         start_url: '/',
         icons: [
