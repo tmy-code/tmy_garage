@@ -20,6 +20,11 @@ export function formatMoney(amount: number, m: Messages = messages()): string {
   return new Intl.NumberFormat(m.locale, { style: 'currency', currency: 'EUR' }).format(amount);
 }
 
+/** A bonus-malus coefficient as printed on a relevé d’information, e.g. "0.50" ("0,50" in French). */
+export function formatCrm(crm: number, m: Messages = messages()): string {
+  return new Intl.NumberFormat(m.locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(crm);
+}
+
 /** A Standard Part is named in the interface language; another Part by the name the user gave it. */
 export function partName(spec: PartSpec, m: Messages = messages()): string {
   return spec.standardPart ? m.workshop.standardParts[spec.standardPart] : spec.name;

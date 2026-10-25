@@ -13,6 +13,10 @@ const base: Snapshot = {
   inspections: [],
   modifications: [],
   documents: [],
+  drivers: [],
+  policies: [],
+  claims: [],
+  quotes: [],
 };
 
 const service = (id: string, odometer: number): OutboxOp => ({

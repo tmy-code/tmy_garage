@@ -14,7 +14,7 @@ _Avoid_: Car (when meaning any vehicle), bike, asset, archived
 
 ### In the French interface
 
-The app speaks English and French. French screens use: Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Due Date → échéance, Interval → intervalle, Vehicle Spec → caractéristique, Torque Spec → couple de serrage, Required Tool → outil, Workshop Notes → notes d’atelier, Standard Part → pièce standard, Part Spec → spécification de pièce, Required Part → pièce nécessaire, Part Used → pièce utilisée, Fitment Position → emplacement, Shopping List → liste de courses, Technical Inspection → contrôle technique, Inspection Defect → défaillance, Modification → modification, Document → document.
+The app speaks English and French. French screens use: Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Due Date → échéance, Interval → intervalle, Vehicle Spec → caractéristique, Torque Spec → couple de serrage, Required Tool → outil, Workshop Notes → notes d’atelier, Standard Part → pièce standard, Part Spec → spécification de pièce, Required Part → pièce nécessaire, Part Used → pièce utilisée, Fitment Position → emplacement, Shopping List → liste de courses, Technical Inspection → contrôle technique, Inspection Defect → défaillance, Modification → modification, Document → document, Insurer → assureur, Insurance Policy → contrat, Policy Term → période, Cover → garantie, Driver → conducteur, Claim → sinistre, Quote → devis, Quote Pack → dossier devis.
 
 ## Maintenance
 

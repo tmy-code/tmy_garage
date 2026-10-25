@@ -112,7 +112,13 @@ describe('computeDue', () => {
 
   it('takes the time-based due date when riding is slow', () => {
     const services = [service('2026-04-01', 18_000)];
-    const usage = estimateUsage([{ date: '2026-04-01', odometer: 18_000 }, { date: '2026-10-01', odometer: 19_830 }], '2026-10-01');
+    const usage = estimateUsage(
+      [
+        { date: '2026-04-01', odometer: 18_000 },
+        { date: '2026-10-01', odometer: 19_830 },
+      ],
+      '2026-10-01',
+    );
     const due = computeDue(task(), services, usage, '2026-10-01');
     expect(due.timeDueDate).toBe('2027-04-01');
     expect(due.dueOdometer).toBe(24_000);
@@ -122,7 +128,13 @@ describe('computeDue', () => {
 
   it('takes the projected distance date when riding is heavy', () => {
     const services = [service('2026-04-01', 18_000)];
-    const usage = estimateUsage([{ date: '2026-04-01', odometer: 18_000 }, { date: '2026-05-01', odometer: 21_000 }], '2026-05-01');
+    const usage = estimateUsage(
+      [
+        { date: '2026-04-01', odometer: 18_000 },
+        { date: '2026-05-01', odometer: 21_000 },
+      ],
+      '2026-05-01',
+    );
     const due = computeDue(task(), services, usage, '2026-05-01');
     expect(usage.kmPerDay).toBe(100);
     expect(due.distanceDueDate).toBe('2026-05-31');
@@ -133,13 +145,25 @@ describe('computeDue', () => {
 
   it('is due soon within 10% of the distance interval', () => {
     const services = [service('2026-04-01', 18_000)];
-    const usage = estimateUsage([{ date: '2026-04-01', odometer: 18_000 }, { date: '2026-05-01', odometer: 23_500 }], '2026-05-01');
+    const usage = estimateUsage(
+      [
+        { date: '2026-04-01', odometer: 18_000 },
+        { date: '2026-05-01', odometer: 23_500 },
+      ],
+      '2026-05-01',
+    );
     expect(computeDue(task(), services, usage, '2026-05-01').status).toBe('dueSoon');
   });
 
   it('is overdue once the projected odometer passes the due point', () => {
     const services = [service('2026-04-01', 18_000)];
-    const usage = estimateUsage([{ date: '2026-04-01', odometer: 18_000 }, { date: '2026-05-01', odometer: 23_500 }], '2026-05-15');
+    const usage = estimateUsage(
+      [
+        { date: '2026-04-01', odometer: 18_000 },
+        { date: '2026-05-01', odometer: 23_500 },
+      ],
+      '2026-05-15',
+    );
     const due = computeDue(task(), services, usage, '2026-05-15');
     expect(usage.estimatedOdometer).toBe(26_067);
     expect(due.status).toBe('overdue');
@@ -204,7 +228,11 @@ describe('vehicleDue', () => {
   it('sorts the most urgent tasks first and merges readings with Services', () => {
     const snapshot: Snapshot = {
       vehicles: [],
-      tasks: [task({ id: 'oil' }), task({ id: 'brake-fluid', intervalKm: null, intervalMonths: 24 }), task({ id: 'new', intervalMonths: 6 })],
+      tasks: [
+        task({ id: 'oil' }),
+        task({ id: 'brake-fluid', intervalKm: null, intervalMonths: 24 }),
+        task({ id: 'new', intervalMonths: 6 }),
+      ],
       services: [service('2025-09-01', 15_000, ['oil', 'brake-fluid'])],
       readings: [{ id: 'r1', vehicleId: 'bike', date: '2026-10-01', odometer: 21_500 }],
       vehicleSpecs: [],
@@ -213,6 +241,10 @@ describe('vehicleDue', () => {
       inspections: [],
       modifications: [],
       documents: [],
+      drivers: [],
+      policies: [],
+      claims: [],
+      quotes: [],
     };
     const { usage, due } = vehicleDue(snapshot, 'bike', '2026-10-01');
     expect(usage.latest?.odometer).toBe(21_500);

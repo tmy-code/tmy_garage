@@ -191,6 +191,117 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX documents_owner ON documents (owner_kind, owner_id);
   `,
+  `
+  ALTER TABLE vehicles ADD COLUMN vin TEXT;
+  ALTER TABLE vehicles ADD COLUMN version TEXT;
+  ALTER TABLE vehicles ADD COLUMN fiscal_power INTEGER;
+  ALTER TABLE vehicles ADD COLUMN national_type TEXT;
+  ALTER TABLE vehicles ADD COLUMN purchase_date TEXT;
+  ALTER TABLE vehicles ADD COLUMN overnight_parking TEXT;
+
+  CREATE TABLE drivers (
+    id TEXT PRIMARY KEY,
+    garage_id TEXT NOT NULL REFERENCES garages(id),
+    name TEXT NOT NULL,
+    birth_date TEXT,
+    car_licence_date TEXT,
+    motorcycle_licence_date TEXT,
+    motorcycle_licence TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE insurance_policies (
+    id TEXT PRIMARY KEY,
+    garage_id TEXT NOT NULL REFERENCES garages(id),
+    insurer TEXT NOT NULL,
+    policy_number TEXT,
+    start_date TEXT NOT NULL,
+    cancelled_date TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE policy_drivers (
+    policy_id TEXT NOT NULL REFERENCES insurance_policies(id) ON DELETE CASCADE,
+    driver_id TEXT NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+    PRIMARY KEY (policy_id, driver_id)
+  );
+
+  CREATE TABLE policy_terms (
+    id TEXT PRIMARY KEY,
+    policy_id TEXT NOT NULL REFERENCES insurance_policies(id) ON DELETE CASCADE,
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    CHECK (end_date > start_date)
+  );
+
+  CREATE TABLE covers (
+    id TEXT PRIMARY KEY,
+    term_id TEXT NOT NULL REFERENCES policy_terms(id) ON DELETE CASCADE,
+    vehicle_id TEXT NOT NULL REFERENCES vehicles(id),
+    level TEXT NOT NULL CHECK (level IN ('thirdParty', 'thirdPartyExtended', 'comprehensive')),
+    guarantees TEXT,
+    excess REAL,
+    premium REAL,
+    crm REAL,
+    notes TEXT,
+    UNIQUE (term_id, vehicle_id)
+  );
+
+  CREATE TABLE claims (
+    id TEXT PRIMARY KEY,
+    policy_id TEXT NOT NULL REFERENCES insurance_policies(id) ON DELETE CASCADE,
+    vehicle_id TEXT NOT NULL REFERENCES vehicles(id),
+    driver_id TEXT REFERENCES drivers(id) ON DELETE SET NULL,
+    date TEXT NOT NULL,
+    responsibility TEXT NOT NULL CHECK (responsibility IN ('notAtFault', 'partlyAtFault', 'atFault')),
+    amount REAL,
+    description TEXT NOT NULL,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE quotes (
+    id TEXT PRIMARY KEY,
+    vehicle_id TEXT NOT NULL REFERENCES vehicles(id),
+    insurer TEXT NOT NULL,
+    date TEXT NOT NULL,
+    level TEXT NOT NULL CHECK (level IN ('thirdParty', 'thirdPartyExtended', 'comprehensive')),
+    guarantees TEXT,
+    excess REAL,
+    premium REAL NOT NULL,
+    valid_until TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- A Policy's Documents belong to no single Vehicle, so Documents now belong to the Garage directly.
+  CREATE TABLE documents_new (
+    id TEXT PRIMARY KEY,
+    garage_id TEXT NOT NULL REFERENCES garages(id),
+    vehicle_id TEXT REFERENCES vehicles(id),
+    owner_kind TEXT NOT NULL CHECK (owner_kind IN ('vehicle', 'service', 'modification', 'inspection', 'policy', 'cover', 'claim')),
+    owner_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    title TEXT,
+    issue_date TEXT,
+    expiry_date TEXT,
+    file_name TEXT NOT NULL,
+    content_type TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  INSERT INTO documents_new
+    SELECT d.id, v.garage_id, d.vehicle_id, d.owner_kind, d.owner_id, d.type, d.title, d.issue_date, d.expiry_date,
+           d.file_name, d.content_type, d.size, d.created_at
+    FROM documents d JOIN vehicles v ON v.id = d.vehicle_id;
+  DROP TABLE documents;
+  ALTER TABLE documents_new RENAME TO documents;
+  CREATE INDEX documents_owner ON documents (owner_kind, owner_id);
+  `,
 ];
 
 function schemaVersion(db: DatabaseSync): number {
@@ -200,22 +311,23 @@ function schemaVersion(db: DatabaseSync): number {
 /**
  * Opens the garage database and brings its schema up to date.
  * Before migrating an existing database, a copy is written to `backupDir` so an update can never lose history.
+ * `targetVersion` stops short of the latest schema, so tests can recreate a database an older release left behind.
  */
-export function openDatabase(path: string, backupDir?: string): DatabaseSync {
+export function openDatabase(path: string, backupDir?: string, targetVersion = MIGRATIONS.length): DatabaseSync {
   const isNew = path === ':memory:' || !existsSync(path);
   const db = new DatabaseSync(path);
   db.exec('PRAGMA foreign_keys = ON');
   if (path !== ':memory:') db.exec('PRAGMA journal_mode = WAL');
 
   const current = schemaVersion(db);
-  if (current < MIGRATIONS.length && !isNew && backupDir) {
+  if (current < targetVersion && !isNew && backupDir) {
     mkdirSync(backupDir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const target = join(backupDir, `garage-v${current}-${stamp}.sqlite`);
     db.prepare('VACUUM INTO ?').run(target);
   }
 
-  for (let version = current; version < MIGRATIONS.length; version++) {
+  for (let version = current; version < targetVersion; version++) {
     db.exec('BEGIN');
     try {
       db.exec(MIGRATIONS[version]!);

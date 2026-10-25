@@ -12,6 +12,12 @@ function vehicle(overrides: Partial<Vehicle> = {}): Vehicle {
     year: null,
     registration: null,
     firstRegistration: null,
+    vin: null,
+    version: null,
+    fiscalPower: null,
+    nationalType: null,
+    purchaseDate: null,
+    overnightParking: null,
     status: 'owned',
     soldDate: null,
     soldOdometer: null,
@@ -47,6 +53,10 @@ function snapshot(inspections: TechnicalInspection[] = [], documents: GarageDocu
     inspections,
     modifications: [],
     documents,
+    drivers: [],
+    policies: [],
+    claims: [],
+    quotes: [],
   };
 }
 

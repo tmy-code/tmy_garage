@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { todayIso } from '../../shared/dates.ts';
+import type { OvernightParking } from '../../shared/schemas.ts';
 import type { MaintenanceTask, Snapshot, Vehicle } from '../../shared/types.ts';
 import { Field, Layout, NeedsConnection } from '../components.tsx';
 import { parseNumber } from '../format.ts';
@@ -50,6 +51,12 @@ export function VehicleForm({ existing }: { existing?: Vehicle }) {
   const [year, setYear] = useState(existing?.year ? String(existing.year) : '');
   const [registration, setRegistration] = useState(existing?.registration ?? '');
   const [firstRegistration, setFirstRegistration] = useState(existing?.firstRegistration ?? '');
+  const [vin, setVin] = useState(existing?.vin ?? '');
+  const [version, setVersion] = useState(existing?.version ?? '');
+  const [nationalType, setNationalType] = useState(existing?.nationalType ?? '');
+  const [fiscalPower, setFiscalPower] = useState(existing?.fiscalPower ? String(existing.fiscalPower) : '');
+  const [purchaseDate, setPurchaseDate] = useState(existing?.purchaseDate ?? '');
+  const [overnightParking, setOvernightParking] = useState<OvernightParking | ''>(existing?.overnightParking ?? '');
   const { error, disabled, run } = useSubmit();
   const back = existing ? `/vehicles/${existing.id}` : '/';
 
@@ -64,6 +71,12 @@ export function VehicleForm({ existing }: { existing?: Vehicle }) {
         year: optionalNumber(year, t.setup.year, t),
         registration,
         firstRegistration: firstRegistration || null,
+        vin,
+        version,
+        nationalType,
+        fiscalPower: optionalNumber(fiscalPower, t.insurance.fiscalPower, t),
+        purchaseDate: purchaseDate || null,
+        overnightParking: overnightParking || null,
       };
       const saved = existing
         ? await online<Vehicle>('PUT', `/api/vehicles/${existing.id}`, body)
@@ -108,6 +121,39 @@ export function VehicleForm({ existing }: { existing?: Vehicle }) {
         <Field label={t.setup.firstRegistration} hint={t.setup.firstRegistrationHint}>
           <input type="date" value={firstRegistration} onChange={(e) => setFirstRegistration(e.target.value)} />
         </Field>
+        <details className="part-details" open={Boolean(existing?.vin || existing?.fiscalPower || existing?.overnightParking)}>
+          <summary>{t.insurance.factsSection}</summary>
+          <p className="muted">{t.insurance.factsHint}</p>
+          <Field label={t.insurance.vin}>
+            <input value={vin} onChange={(e) => setVin(e.target.value.toUpperCase())} maxLength={17} />
+          </Field>
+          <Field label={t.insurance.version}>
+            <input value={version} onChange={(e) => setVersion(e.target.value)} maxLength={80} />
+          </Field>
+          <div className="row">
+            <Field label={t.insurance.nationalType} hint={t.insurance.nationalTypeHint}>
+              <input value={nationalType} onChange={(e) => setNationalType(e.target.value.toUpperCase())} maxLength={10} />
+            </Field>
+            <Field label={t.insurance.fiscalPower}>
+              <input inputMode="numeric" value={fiscalPower} onChange={(e) => setFiscalPower(e.target.value)} maxLength={3} />
+            </Field>
+          </div>
+          <div className="row">
+            <Field label={t.insurance.purchaseDate}>
+              <input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} />
+            </Field>
+            <Field label={t.insurance.parking}>
+              <select value={overnightParking} onChange={(e) => setOvernightParking(e.target.value as OvernightParking | '')}>
+                <option value="">—</option>
+                {(['closedGarage', 'privateParking', 'street'] as const).map((k) => (
+                  <option key={k} value={k}>
+                    {t.insurance.parkings[k]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        </details>
         {error ? <p className="banner banner-error">{error}</p> : null}
         <Submit disabled={disabled}>{existing ? t.setup.save : t.setup.addVehicle}</Submit>
       </form>

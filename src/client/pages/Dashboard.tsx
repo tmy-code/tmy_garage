@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { daysBetween, todayIso } from '../../shared/dates.ts';
 import { vehicleDue } from '../../shared/due.ts';
 import { expiringDocuments, nextInspection, openDefects } from '../../shared/inspections.ts';
+import { currentCover, renewal } from '../../shared/insurance.ts';
 import type { Snapshot, Vehicle } from '../../shared/types.ts';
 import { LanguageSwitch, Layout, StatusChip } from '../components.tsx';
 import { describeDue, formatDate, formatKm } from '../format.ts';
@@ -43,9 +44,14 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
         </div>
       )}
       {owned.length > 0 ? (
-        <a className="button button-block" href="#/shopping">
-          🛒 {t.workshop.shopping}
-        </a>
+        <div className="actions">
+          <a className="button" href="#/shopping">
+            🛒 {t.workshop.shopping}
+          </a>
+          <a className="button" href="#/insurance">
+            🛡️ {t.insurance.title}
+          </a>
+        </div>
       ) : null}
       {sold.length > 0 ? (
         <details className="sold">
@@ -77,6 +83,8 @@ function VehicleCard({ vehicle, snapshot, today }: { vehicle: Vehicle; snapshot:
   const inspection = nextInspection(snapshot, vehicle, today);
   const defects = openDefects(snapshot, vehicle).length;
   const expiring = expiringDocuments(snapshot, vehicle.id, today);
+  const cover = currentCover(snapshot, vehicle.id, today);
+  const insuranceDue = cover ? renewal(cover.policy, today) : null;
 
   return (
     <a className="card vehicle-card" href={`#/vehicles/${vehicle.id}`}>
@@ -98,6 +106,17 @@ function VehicleCard({ vehicle, snapshot, today }: { vehicle: Vehicle; snapshot:
             <span className={`chip chip-${inspection.status}`}>{t.status[inspection.status]}</span>
             <span className="due-name">{t.papers.nextInspection}</span>
             <span className="due-text">{t.papers.dueBy(formatDate(inspection.dueDate, t))}</span>
+          </li>
+        ) : null}
+        {insuranceDue && insuranceDue.status !== 'ok' ? (
+          <li>
+            <span className={`chip chip-${insuranceDue.status}`}>{t.status[insuranceDue.status]}</span>
+            <span className="due-name">🛡️ {cover!.policy.insurer}</span>
+            <span className="due-text">
+              {insuranceDue.status === 'overdue'
+                ? t.insurance.renewalPassed(formatDate(insuranceDue.date, t))
+                : t.insurance.renewsOn(formatDate(insuranceDue.date, t))}
+            </span>
           </li>
         ) : null}
         {defects > 0 ? (

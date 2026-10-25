@@ -1,11 +1,15 @@
 import type { IsoDate } from './dates.ts';
 import type { StandardPartKey } from './catalogue.ts';
 import type {
+  CoverLevel,
   DefectSeverity,
   DocumentOwnerKind,
   DocumentType,
   InspectionResult,
+  MotorcycleLicence,
+  OvernightParking,
   PartUnit,
+  Responsibility,
   VehicleKind,
   VehicleSpecKind,
 } from './schemas.ts';
@@ -20,6 +24,13 @@ export interface Vehicle {
   registration: string | null;
   /** Date of first registration (carte grise, field B): sets when the first Technical Inspection is due. */
   firstRegistration: IsoDate | null;
+  /** Registration certificate facts for a Quote Pack: VIN (field E), version (D.2), fiscal power (P.6), national type (J.1). */
+  vin: string | null;
+  version: string | null;
+  fiscalPower: number | null;
+  nationalType: string | null;
+  purchaseDate: IsoDate | null;
+  overnightParking: OvernightParking | null;
   status: 'owned' | 'sold';
   soldDate: IsoDate | null;
   soldOdometer: number | null;
@@ -148,10 +159,89 @@ export interface Modification {
   notes: string | null;
 }
 
-/** A stored file (PDF or photo), attached to exactly one Vehicle, Service, Modification or Technical Inspection. */
-export interface GarageDocument {
+/** A person declared on Insurance Policies as allowed to drive their Vehicles. */
+export interface Driver {
+  id: string;
+  name: string;
+  birthDate: IsoDate | null;
+  /** Date the car licence (B) was obtained. */
+  carLicenceDate: IsoDate | null;
+  motorcycleLicenceDate: IsoDate | null;
+  motorcycleLicence: MotorcycleLicence | null;
+  notes: string | null;
+}
+
+/** A contract with one Insurer covering one or more Vehicles, running from a start date until cancelled. */
+export interface InsurancePolicy {
+  id: string;
+  insurer: string;
+  policyNumber: string | null;
+  startDate: IsoDate;
+  cancelledDate: IsoDate | null;
+  driverIds: string[];
+  notes: string | null;
+  /** Oldest first. */
+  terms: PolicyTerm[];
+}
+
+/** One period of a Policy, ending at its renewal date (échéance), during which its Covers are fixed. */
+export interface PolicyTerm {
+  id: string;
+  policyId: string;
+  startDate: IsoDate;
+  /** The renewal date. */
+  endDate: IsoDate;
+  notes: string | null;
+  covers: Cover[];
+}
+
+/** What a Policy provides for one Vehicle during one Policy Term. */
+export interface Cover {
   id: string;
   vehicleId: string;
+  level: CoverLevel;
+  /** Optional guarantees, free text (e.g. "rider gear, assistance 0 km"). */
+  guarantees: string | null;
+  excess: number | null;
+  /** Yearly premium. */
+  premium: number | null;
+  /** The bonus-malus coefficient (CRM) of this Vehicle on this Policy. */
+  crm: number | null;
+  notes: string | null;
+}
+
+/** An incident declared to an Insurer under a Policy (sinistre). */
+export interface Claim {
+  id: string;
+  policyId: string;
+  vehicleId: string;
+  driverId: string | null;
+  date: IsoDate;
+  responsibility: Responsibility;
+  amount: number | null;
+  description: string;
+  notes: string | null;
+}
+
+/** A price offered by an Insurer for one Vehicle, in the same terms as a Cover. */
+export interface Quote {
+  id: string;
+  vehicleId: string;
+  insurer: string;
+  date: IsoDate;
+  level: CoverLevel;
+  guarantees: string | null;
+  excess: number | null;
+  premium: number;
+  validUntil: IsoDate | null;
+  notes: string | null;
+}
+
+/** A stored file (PDF or photo), attached to exactly one Vehicle, Service, Modification, Technical Inspection, Policy, Cover or Claim. */
+export interface GarageDocument {
+  id: string;
+  /** Null for a Document of a Policy, which may cover several Vehicles. */
+  vehicleId: string | null;
   ownerKind: DocumentOwnerKind;
   ownerId: string;
   type: DocumentType;
@@ -176,4 +266,8 @@ export interface Snapshot {
   modifications: Modification[];
   /** Document details only; the files are fetched on demand. */
   documents: GarageDocument[];
+  drivers: Driver[];
+  policies: InsurancePolicy[];
+  claims: Claim[];
+  quotes: Quote[];
 }

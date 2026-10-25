@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { todayIso } from '../../shared/dates.ts';
 import { vehicleDue } from '../../shared/due.ts';
 import { nextInspection, openDefects } from '../../shared/inspections.ts';
+import { currentCover, renewal } from '../../shared/insurance.ts';
 import type { PartUsed, Snapshot, Vehicle } from '../../shared/types.ts';
 import { Layout, StatusChip } from '../components.tsx';
 import { describeDue, describeInterval, describeOfficialInterval, formatDate, formatKm, formatMoney } from '../format.ts';
@@ -28,6 +29,8 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
   const positionCount = snapshot.positions.filter((p) => p.vehicleId === vehicle.id).length;
   const partSpecCount = snapshot.partSpecs.filter((p) => p.vehicleId === vehicle.id).length;
   const specCount = snapshot.vehicleSpecs.filter((s) => s.vehicleId === vehicle.id).length;
+  const cover = currentCover(snapshot, vehicle.id, today);
+  const insuranceDue = cover ? renewal(cover.policy, today) : null;
 
   const history: HistoryEntry[] = [
     ...snapshot.services
@@ -147,6 +150,15 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
           <section>
             <h2>{t.papers.section}</h2>
             <ul className="list">
+              <li>
+                <a href={`#/vehicles/${vehicle.id}/insurance`} className="history-row">
+                  <span>{t.insurance.title}</span>
+                  <span className="muted">
+                    {cover ? `${cover.policy.insurer} · ${t.insurance.levels[cover.cover.level]}` : t.insurance.notInsured}
+                    {insuranceDue ? ` · ${t.insurance.renewsOn(formatDate(insuranceDue.date, t))}` : ''}
+                  </span>
+                </a>
+              </li>
               <li>
                 <a href={`#/vehicles/${vehicle.id}/documents`}>
                   {t.papers.documents} <span className="muted">{t.workshop.count(documentCount)}</span>

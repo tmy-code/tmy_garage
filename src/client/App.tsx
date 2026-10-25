@@ -1,6 +1,17 @@
 import { LanguageSwitch, Layout, NotFound } from './components.tsx';
 import { useT } from './i18n.ts';
 import { Dashboard } from './pages/Dashboard.tsx';
+import {
+  ClaimForm,
+  DriverForm,
+  InsurancePage,
+  PolicyForm,
+  PolicyPage,
+  QuoteForm,
+  QuotePackPage,
+  TermForm,
+  VehicleInsurancePage,
+} from './pages/Insurance.tsx';
 import { DocumentsPage, InspectionForm, InspectionsPage, ModificationForm, ModificationsPage } from './pages/Papers.tsx';
 import { ReadingForm, ServiceForm } from './pages/ServiceForm.tsx';
 import { CopyTasks, SellForm, TaskForm, VehicleForm } from './pages/SetupForms.tsx';
@@ -41,6 +52,7 @@ export function App() {
 
   if (section === undefined) return <Dashboard snapshot={snapshot} />;
   if (section === 'shopping') return <ShoppingPage snapshot={snapshot} />;
+  if (section === 'insurance') return <InsurancePage snapshot={snapshot} />;
   if (section === 'vehicles' && id === 'new') return <VehicleForm />;
   if (section === 'vehicles') {
     if (!vehicle) return <NotFound what="vehicle" />;
@@ -71,6 +83,13 @@ export function App() {
       case 'modifications':
         if (subId === 'new') return <ModificationForm vehicle={vehicle} snapshot={snapshot} />;
         return <ModificationsPage vehicle={vehicle} snapshot={snapshot} />;
+      case 'insurance':
+        return <VehicleInsurancePage vehicle={vehicle} snapshot={snapshot} />;
+      case 'quote-pack':
+        return <QuotePackPage vehicle={vehicle} snapshot={snapshot} />;
+      case 'quotes':
+        if (subId === 'new') return <QuoteForm vehicle={vehicle} snapshot={snapshot} />;
+        break;
       case 'tasks':
         if (subId === 'new') return <TaskForm vehicle={vehicle} />;
     }
@@ -99,6 +118,34 @@ export function App() {
     const owner = modification && snapshot.vehicles.find((v) => v.id === modification.vehicleId);
     if (modification && owner)
       return <ModificationForm key={modification.id} vehicle={owner} snapshot={snapshot} existing={modification} />;
+  }
+  if (section === 'policies' && id === 'new') return <PolicyForm snapshot={snapshot} />;
+  if (section === 'policies') {
+    const policy = snapshot.policies.find((p) => p.id === id);
+    if (policy && sub === undefined) return <PolicyPage policy={policy} snapshot={snapshot} />;
+    if (policy && sub === 'edit') return <PolicyForm key={policy.id} snapshot={snapshot} existing={policy} />;
+    if (policy && sub === 'terms' && subId === 'new') return <TermForm policy={policy} snapshot={snapshot} />;
+    if (policy && sub === 'claims' && subId === 'new') return <ClaimForm policy={policy} snapshot={snapshot} />;
+  }
+  if (section === 'terms') {
+    const policy = snapshot.policies.find((p) => p.terms.some((term) => term.id === id));
+    const term = policy?.terms.find((x) => x.id === id);
+    if (policy && term) return <TermForm key={term.id} policy={policy} snapshot={snapshot} existing={term} />;
+  }
+  if (section === 'claims') {
+    const claim = snapshot.claims.find((c) => c.id === id);
+    const policy = claim && snapshot.policies.find((p) => p.id === claim.policyId);
+    if (claim && policy) return <ClaimForm key={claim.id} policy={policy} snapshot={snapshot} existing={claim} />;
+  }
+  if (section === 'drivers' && id === 'new') return <DriverForm />;
+  if (section === 'drivers') {
+    const driver = snapshot.drivers.find((d) => d.id === id);
+    if (driver) return <DriverForm key={driver.id} existing={driver} />;
+  }
+  if (section === 'quotes') {
+    const quote = snapshot.quotes.find((q) => q.id === id);
+    const owner = quote && snapshot.vehicles.find((v) => v.id === quote.vehicleId);
+    if (quote && owner) return <QuoteForm key={quote.id} vehicle={owner} snapshot={snapshot} existing={quote} />;
   }
   return <NotFound what="page" />;
 }

@@ -7,37 +7,48 @@ import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import type { ZodType } from 'zod';
 import {
+  claimInput,
   copyTasksInput,
   documentInput,
   documentOwner,
+  driverInput,
   inspectionInput,
   modificationInput,
   odometerReadingInput,
   partSpecInput,
+  policyInput,
   positionInput,
+  quoteInput,
   sellInput,
   serviceInput,
   taskInput,
+  termInput,
   vehicleInput,
   vehicleSpecInput,
   workshopInput,
 } from '../shared/schemas.ts';
 import type {
+  Claim,
+  Cover,
+  Driver,
   FitmentPosition,
   GarageDocument,
+  InsurancePolicy,
   MaintenanceTask,
   Modification,
   TechnicalInspection,
   OdometerReading,
   PartSpec,
   PartUsed,
+  PolicyTerm,
+  Quote,
   Service,
   Snapshot,
   Vehicle,
   VehicleSpec,
 } from '../shared/types.ts';
 import { STANDARD_PARTS } from '../shared/catalogue.ts';
-import type { VehicleKind } from '../shared/schemas.ts';
+import type { ClaimInput, TermInput, VehicleInput, VehicleKind } from '../shared/schemas.ts';
 import { DEFAULT_GARAGE_ID } from './db.ts';
 
 type ErrorStatus = 400 | 404 | 409 | 413 | 415 | 422 | 503;
@@ -73,6 +84,12 @@ const toVehicle = (r: Row): Vehicle => ({
   year: r.year,
   registration: r.registration,
   firstRegistration: r.first_registration,
+  vin: r.vin,
+  version: r.version,
+  fiscalPower: r.fiscal_power,
+  nationalType: r.national_type,
+  purchaseDate: r.purchase_date,
+  overnightParking: r.overnight_parking,
   status: r.status,
   soldDate: r.sold_date,
   soldOdometer: r.sold_odometer,
@@ -144,6 +161,52 @@ const toDocument = (r: Row): GarageDocument => ({
   fileName: r.file_name,
   contentType: r.content_type,
   size: r.size,
+});
+
+const toDriver = (r: Row): Driver => ({
+  id: r.id,
+  name: r.name,
+  birthDate: r.birth_date,
+  carLicenceDate: r.car_licence_date,
+  motorcycleLicenceDate: r.motorcycle_licence_date,
+  motorcycleLicence: r.motorcycle_licence,
+  notes: r.notes,
+});
+
+const toCover = (r: Row): Cover => ({
+  id: r.id,
+  vehicleId: r.vehicle_id,
+  level: r.level,
+  guarantees: r.guarantees,
+  excess: r.excess,
+  premium: r.premium,
+  crm: r.crm,
+  notes: r.notes,
+});
+
+const toClaim = (r: Row): Claim => ({
+  id: r.id,
+  policyId: r.policy_id,
+  vehicleId: r.vehicle_id,
+  driverId: r.driver_id,
+  date: r.date,
+  responsibility: r.responsibility,
+  amount: r.amount,
+  description: r.description,
+  notes: r.notes,
+});
+
+const toQuote = (r: Row): Quote => ({
+  id: r.id,
+  vehicleId: r.vehicle_id,
+  insurer: r.insurer,
+  date: r.date,
+  level: r.level,
+  guarantees: r.guarantees,
+  excess: r.excess,
+  premium: r.premium,
+  validUntil: r.valid_until,
+  notes: r.notes,
 });
 
 /** Files a Document may be: what a phone camera or a scanner produces. */
@@ -319,8 +382,92 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       positions: ownedRows('fitment_positions').map(toPosition),
       inspections: ownedRows('technical_inspections').map((r) => toInspection(r)),
       modifications: ownedRows('modifications').map(toModification),
-      documents: ownedRows('documents').map(toDocument),
+      documents: (db.prepare('SELECT * FROM documents WHERE garage_id = ? ORDER BY created_at').all(garageId) as Row[]).map(toDocument),
+      drivers: (db.prepare('SELECT * FROM drivers WHERE garage_id = ? ORDER BY created_at').all(garageId) as Row[]).map(toDriver),
+      policies: policies(),
+      claims: (
+        db
+          .prepare(
+            `SELECT c.* FROM claims c JOIN insurance_policies p ON p.id = c.policy_id
+             WHERE p.garage_id = ? ORDER BY c.date`,
+          )
+          .all(garageId) as Row[]
+      ).map(toClaim),
+      quotes: ownedRows('quotes').map(toQuote),
     };
+  }
+
+  /** This Garage's Policies with their Terms and Covers, or only one Policy when an id is given. */
+  function policies(policyId?: string): InsurancePolicy[] {
+    const scope = policyId === undefined ? '' : 'AND p.id = ?';
+    const params = policyId === undefined ? [garageId] : [garageId, policyId];
+    const query = (sql: string) => db.prepare(sql.replace('$scope', scope)).all(...params) as Row[];
+    const covers = groupBy(
+      query(
+        `SELECT c.* FROM covers c JOIN policy_terms t ON t.id = c.term_id JOIN insurance_policies p ON p.id = t.policy_id
+         WHERE p.garage_id = ? $scope ORDER BY c.rowid`,
+      ),
+      'term_id',
+      toCover,
+    );
+    const drivers = groupBy(
+      query(
+        `SELECT d.* FROM policy_drivers d JOIN insurance_policies p ON p.id = d.policy_id WHERE p.garage_id = ? $scope ORDER BY d.rowid`,
+      ),
+      'policy_id',
+      (r) => r.driver_id as string,
+    );
+    const terms = groupBy(
+      query(
+        `SELECT t.* FROM policy_terms t JOIN insurance_policies p ON p.id = t.policy_id WHERE p.garage_id = ? $scope ORDER BY t.start_date`,
+      ),
+      'policy_id',
+      (r): PolicyTerm => ({
+        id: r.id,
+        policyId: r.policy_id,
+        startDate: r.start_date,
+        endDate: r.end_date,
+        notes: r.notes,
+        covers: covers.get(r.id) ?? [],
+      }),
+    );
+    return query('SELECT p.* FROM insurance_policies p WHERE p.garage_id = ? $scope ORDER BY p.start_date').map((r) => ({
+      id: r.id,
+      insurer: r.insurer,
+      policyNumber: r.policy_number,
+      startDate: r.start_date,
+      cancelledDate: r.cancelled_date,
+      notes: r.notes,
+      driverIds: drivers.get(r.id) ?? [],
+      terms: terms.get(r.id) ?? [],
+    }));
+  }
+
+  function policyOrThrow(id: string): InsurancePolicy {
+    const policy = policies(id)[0];
+    if (!policy) throw new HttpError(404, 'Insurance Policy not found');
+    return policy;
+  }
+
+  /** A row of a table hanging off a Policy (Terms, Claims), checked to be in this Garage. */
+  function policyRowOrThrow(table: string, id: string, what: string): Row {
+    const row = db
+      .prepare(`SELECT x.* FROM ${table} x JOIN insurance_policies p ON p.id = x.policy_id WHERE x.id = ? AND p.garage_id = ?`)
+      .get(id, garageId) as Row | undefined;
+    if (!row) throw new HttpError(404, `${what} not found`);
+    return row;
+  }
+
+  function driverOrThrow(id: string): Row {
+    const row = db.prepare('SELECT * FROM drivers WHERE id = ? AND garage_id = ?').get(id, garageId) as Row | undefined;
+    if (!row) throw new HttpError(404, 'Driver not found');
+    return row;
+  }
+
+  function documentOrThrow(id: string): Row {
+    const row = db.prepare('SELECT * FROM documents WHERE id = ? AND garage_id = ?').get(id, garageId) as Row | undefined;
+    if (!row) throw new HttpError(404, 'Document not found');
+    return row;
   }
 
   function toInspection(r: Row): TechnicalInspection {
@@ -376,13 +523,31 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
 
   // --- Vehicles ---
 
+  const vehicleValues = (v: VehicleInput) =>
+    [
+      v.kind,
+      v.name,
+      v.make,
+      v.model,
+      v.year,
+      v.registration,
+      v.firstRegistration,
+      v.vin,
+      v.version,
+      v.fiscalPower,
+      v.nationalType,
+      v.purchaseDate,
+      v.overnightParking,
+    ] as const;
+
   app.post('/api/vehicles', async (c) => {
     const v = await parse(c, vehicleInput);
     const id = randomUUID();
     db.prepare(
-      `INSERT INTO vehicles (id, garage_id, kind, name, make, model, year, registration, first_registration)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, garageId, v.kind, v.name, v.make, v.model, v.year, v.registration, v.firstRegistration);
+      `INSERT INTO vehicles (id, garage_id, kind, name, make, model, year, registration, first_registration,
+         vin, version, fiscal_power, national_type, purchase_date, overnight_parking)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, garageId, ...vehicleValues(v));
     ensureStandardParts(id, v.kind);
     return c.json(toVehicle(vehicleOrThrow(id)), 201);
   });
@@ -392,8 +557,10 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     vehicleOrThrow(id);
     const v = await parse(c, vehicleInput);
     db.prepare(
-      'UPDATE vehicles SET kind = ?, name = ?, make = ?, model = ?, year = ?, registration = ?, first_registration = ? WHERE id = ?',
-    ).run(v.kind, v.name, v.make, v.model, v.year, v.registration, v.firstRegistration, id);
+      `UPDATE vehicles SET kind = ?, name = ?, make = ?, model = ?, year = ?, registration = ?, first_registration = ?,
+         vin = ?, version = ?, fiscal_power = ?, national_type = ?, purchase_date = ?, overnight_parking = ?
+       WHERE id = ?`,
+    ).run(...vehicleValues(v), id);
     ensureStandardParts(id, v.kind);
     return c.json(toVehicle(vehicleOrThrow(id)));
   });
@@ -746,12 +913,18 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
 
   // --- Documents: details in the database, files in uploadsDir under their id ---
 
-  /** The Vehicle a Document's owner belongs to, checking the owner is in this Garage. */
-  function ownerVehicle(ownerKind: string, ownerId: string): string {
+  /** The Vehicle a Document's owner belongs to (none for a Policy), checking the owner is in this Garage. */
+  function ownerVehicle(ownerKind: string, ownerId: string): string | null {
     const table = { vehicle: 'vehicles', service: 'services', modification: 'modifications', inspection: 'technical_inspections' }[
       ownerKind
     ];
     if (ownerKind === 'vehicle') return vehicleOrThrow(ownerId).id;
+    if (ownerKind === 'policy') {
+      policyOrThrow(ownerId);
+      return null;
+    }
+    if (ownerKind === 'cover') return coverOrThrow(ownerId).vehicle_id;
+    if (ownerKind === 'claim') return policyRowOrThrow('claims', ownerId, 'Claim').vehicle_id;
     const row = table ? ownedRows(table, 'x.id = ?', ownerId)[0] : undefined;
     if (!row) throw new HttpError(404, 'What this Document is attached to was not found');
     return row.vehicle_id;
@@ -787,10 +960,11 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       const id = randomUUID();
       await writeFile(join(uploadsDir, id), Buffer.from(await file.arrayBuffer()));
       db.prepare(
-        `INSERT INTO documents (id, vehicle_id, owner_kind, owner_id, type, title, issue_date, expiry_date, file_name, content_type, size)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO documents (id, garage_id, vehicle_id, owner_kind, owner_id, type, title, issue_date, expiry_date, file_name, content_type, size)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         id,
+        garageId,
         vehicleId,
         owner.ownerKind,
         owner.ownerId,
@@ -802,13 +976,13 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
         file.type,
         file.size,
       );
-      return c.json(toDocument(ownedRowOrThrow('documents', id, 'Document')), 201);
+      return c.json(toDocument(documentOrThrow(id)), 201);
     },
   );
 
   app.put('/api/documents/:id', async (c) => {
     const id = c.req.param('id');
-    ownedRowOrThrow('documents', id, 'Document');
+    documentOrThrow(id);
     const d = await parse(c, documentInput);
     db.prepare('UPDATE documents SET type = ?, title = ?, issue_date = ?, expiry_date = ? WHERE id = ?').run(
       d.type,
@@ -817,11 +991,11 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       d.expiryDate,
       id,
     );
-    return c.json(toDocument(ownedRowOrThrow('documents', id, 'Document')));
+    return c.json(toDocument(documentOrThrow(id)));
   });
 
   app.get('/api/documents/:id/file', async (c) => {
-    const row = ownedRowOrThrow('documents', c.req.param('id'), 'Document');
+    const row = documentOrThrow(c.req.param('id'));
     if (!uploadsDir) throw new HttpError(503, 'Document storage is not configured');
     const data = await readFile(join(uploadsDir, row.id)).catch(() => {
       throw new HttpError(404, 'The file of this Document is missing');
@@ -835,9 +1009,249 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
   });
 
   app.delete('/api/documents/:id', (c) => {
-    const row = ownedRowOrThrow('documents', c.req.param('id'), 'Document');
+    const row = documentOrThrow(c.req.param('id'));
     db.prepare('DELETE FROM documents WHERE id = ?').run(row.id);
     if (uploadsDir) rmSync(join(uploadsDir, row.id), { force: true });
+    return c.body(null, 204);
+  });
+
+  // --- Insurance (desk work, online only) ---
+
+  function coverOrThrow(id: string): Row {
+    const row = db
+      .prepare(
+        `SELECT c.* FROM covers c JOIN policy_terms t ON t.id = c.term_id JOIN insurance_policies p ON p.id = t.policy_id
+         WHERE c.id = ? AND p.garage_id = ?`,
+      )
+      .get(id, garageId) as Row | undefined;
+    if (!row) throw new HttpError(404, 'Cover not found');
+    return row;
+  }
+
+  app.post('/api/drivers', async (c) => {
+    const d = await parse(c, driverInput);
+    const id = randomUUID();
+    db.prepare(
+      `INSERT INTO drivers (id, garage_id, name, birth_date, car_licence_date, motorcycle_licence_date, motorcycle_licence, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, garageId, d.name, d.birthDate, d.carLicenceDate, d.motorcycleLicenceDate, d.motorcycleLicence, d.notes);
+    return c.json(toDriver(driverOrThrow(id)), 201);
+  });
+
+  app.put('/api/drivers/:id', async (c) => {
+    const id = c.req.param('id');
+    driverOrThrow(id);
+    const d = await parse(c, driverInput);
+    db.prepare(
+      `UPDATE drivers SET name = ?, birth_date = ?, car_licence_date = ?, motorcycle_licence_date = ?, motorcycle_licence = ?, notes = ?
+       WHERE id = ?`,
+    ).run(d.name, d.birthDate, d.carLicenceDate, d.motorcycleLicenceDate, d.motorcycleLicence, d.notes, id);
+    return c.json(toDriver(driverOrThrow(id)));
+  });
+
+  // Policies stop listing the Driver; their Claims stay, with nobody named as driving.
+  app.delete('/api/drivers/:id', (c) => {
+    const id = c.req.param('id');
+    driverOrThrow(id);
+    db.prepare('DELETE FROM drivers WHERE id = ?').run(id);
+    return c.body(null, 204);
+  });
+
+  function savePolicyDrivers(policyId: string, driverIds: string[]) {
+    const ids = [...new Set(driverIds)];
+    for (const driverId of ids) driverOrThrow(driverId);
+    db.prepare('DELETE FROM policy_drivers WHERE policy_id = ?').run(policyId);
+    const link = db.prepare('INSERT INTO policy_drivers (policy_id, driver_id) VALUES (?, ?)');
+    for (const driverId of ids) link.run(policyId, driverId);
+  }
+
+  app.post('/api/policies', async (c) => {
+    const p = await parse(c, policyInput);
+    const id = randomUUID();
+    transaction(() => {
+      db.prepare(
+        `INSERT INTO insurance_policies (id, garage_id, insurer, policy_number, start_date, cancelled_date, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).run(id, garageId, p.insurer, p.policyNumber, p.startDate, p.cancelledDate, p.notes);
+      savePolicyDrivers(id, p.driverIds);
+    });
+    return c.json(policyOrThrow(id), 201);
+  });
+
+  app.put('/api/policies/:id', async (c) => {
+    const id = c.req.param('id');
+    policyOrThrow(id);
+    const p = await parse(c, policyInput);
+    transaction(() => {
+      db.prepare(
+        'UPDATE insurance_policies SET insurer = ?, policy_number = ?, start_date = ?, cancelled_date = ?, notes = ? WHERE id = ?',
+      ).run(p.insurer, p.policyNumber, p.startDate, p.cancelledDate, p.notes, id);
+      savePolicyDrivers(id, p.driverIds);
+    });
+    return c.json(policyOrThrow(id));
+  });
+
+  app.delete('/api/policies/:id', (c) => {
+    const policy = policyOrThrow(c.req.param('id'));
+    const claimIds = (db.prepare('SELECT id FROM claims WHERE policy_id = ?').all(policy.id) as Row[]).map((r) => r.id as string);
+    transaction(() => {
+      deleteDocumentsOf('policy', policy.id);
+      for (const term of policy.terms) for (const cover of term.covers) deleteDocumentsOf('cover', cover.id);
+      for (const claimId of claimIds) deleteDocumentsOf('claim', claimId);
+      db.prepare('DELETE FROM insurance_policies WHERE id = ?').run(policy.id);
+    });
+    return c.body(null, 204);
+  });
+
+  /** Saves a Term's Covers, keeping each Vehicle's Cover id (and so its Documents) across edits. */
+  function saveCovers(termId: string, covers: TermInput['covers']) {
+    const vehicleIds = covers.map((cover) => cover.vehicleId);
+    if (new Set(vehicleIds).size !== vehicleIds.length) throw new HttpError(422, 'A Vehicle has two Covers in this Term');
+    for (const vehicleId of vehicleIds) vehicleOrThrow(vehicleId);
+    const existing = new Map(
+      (db.prepare('SELECT id, vehicle_id FROM covers WHERE term_id = ?').all(termId) as Row[]).map((r) => [
+        r.vehicle_id as string,
+        r.id as string,
+      ]),
+    );
+    for (const [vehicleId, coverId] of existing) {
+      if (!vehicleIds.includes(vehicleId)) {
+        deleteDocumentsOf('cover', coverId);
+        db.prepare('DELETE FROM covers WHERE id = ?').run(coverId);
+      }
+    }
+    const upsert = db.prepare(
+      `INSERT INTO covers (id, term_id, vehicle_id, level, guarantees, excess, premium, crm, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (term_id, vehicle_id) DO UPDATE SET level = excluded.level, guarantees = excluded.guarantees,
+         excess = excluded.excess, premium = excluded.premium, crm = excluded.crm, notes = excluded.notes`,
+    );
+    for (const cover of covers) {
+      upsert.run(
+        existing.get(cover.vehicleId) ?? randomUUID(),
+        termId,
+        cover.vehicleId,
+        cover.level,
+        cover.guarantees,
+        cover.excess,
+        cover.premium,
+        cover.crm,
+        cover.notes,
+      );
+    }
+  }
+
+  function loadTerm(id: string): PolicyTerm {
+    const row = policyRowOrThrow('policy_terms', id, 'Policy Term');
+    return policyOrThrow(row.policy_id).terms.find((t) => t.id === id)!;
+  }
+
+  app.post('/api/policies/:id/terms', async (c) => {
+    const policy = policyOrThrow(c.req.param('id'));
+    const body = await parse(c, termInput);
+    const id = randomUUID();
+    transaction(() => {
+      db.prepare('INSERT INTO policy_terms (id, policy_id, start_date, end_date, notes) VALUES (?, ?, ?, ?, ?)').run(
+        id,
+        policy.id,
+        body.startDate,
+        body.endDate,
+        body.notes,
+      );
+      saveCovers(id, body.covers);
+    });
+    return c.json(loadTerm(id), 201);
+  });
+
+  app.put('/api/terms/:id', async (c) => {
+    const id = c.req.param('id');
+    policyRowOrThrow('policy_terms', id, 'Policy Term');
+    const body = await parse(c, termInput);
+    transaction(() => {
+      db.prepare('UPDATE policy_terms SET start_date = ?, end_date = ?, notes = ? WHERE id = ?').run(
+        body.startDate,
+        body.endDate,
+        body.notes,
+        id,
+      );
+      saveCovers(id, body.covers);
+    });
+    return c.json(loadTerm(id));
+  });
+
+  app.delete('/api/terms/:id', (c) => {
+    const term = loadTerm(c.req.param('id'));
+    transaction(() => {
+      for (const cover of term.covers) deleteDocumentsOf('cover', cover.id);
+      db.prepare('DELETE FROM policy_terms WHERE id = ?').run(term.id);
+    });
+    return c.body(null, 204);
+  });
+
+  function claimValues(body: ClaimInput) {
+    vehicleOrThrow(body.vehicleId);
+    if (body.driverId !== null) driverOrThrow(body.driverId);
+    return [body.vehicleId, body.driverId, body.date, body.responsibility, body.amount, body.description, body.notes] as const;
+  }
+
+  app.post('/api/policies/:id/claims', async (c) => {
+    const policy = policyOrThrow(c.req.param('id'));
+    const body = await parse(c, claimInput);
+    const id = randomUUID();
+    db.prepare(
+      `INSERT INTO claims (id, policy_id, vehicle_id, driver_id, date, responsibility, amount, description, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, policy.id, ...claimValues(body));
+    return c.json(toClaim(policyRowOrThrow('claims', id, 'Claim')), 201);
+  });
+
+  app.put('/api/claims/:id', async (c) => {
+    const id = c.req.param('id');
+    policyRowOrThrow('claims', id, 'Claim');
+    const body = await parse(c, claimInput);
+    db.prepare(
+      `UPDATE claims SET vehicle_id = ?, driver_id = ?, date = ?, responsibility = ?, amount = ?, description = ?, notes = ?
+       WHERE id = ?`,
+    ).run(...claimValues(body), id);
+    return c.json(toClaim(policyRowOrThrow('claims', id, 'Claim')));
+  });
+
+  app.delete('/api/claims/:id', (c) => {
+    const id = c.req.param('id');
+    policyRowOrThrow('claims', id, 'Claim');
+    transaction(() => {
+      deleteDocumentsOf('claim', id);
+      db.prepare('DELETE FROM claims WHERE id = ?').run(id);
+    });
+    return c.body(null, 204);
+  });
+
+  app.post('/api/vehicles/:id/quotes', async (c) => {
+    const vehicleId = c.req.param('id');
+    vehicleOrThrow(vehicleId);
+    const q = await parse(c, quoteInput);
+    const id = randomUUID();
+    db.prepare(
+      `INSERT INTO quotes (id, vehicle_id, insurer, date, level, guarantees, excess, premium, valid_until, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, vehicleId, q.insurer, q.date, q.level, q.guarantees, q.excess, q.premium, q.validUntil, q.notes);
+    return c.json(toQuote(ownedRowOrThrow('quotes', id, 'Quote')), 201);
+  });
+
+  app.put('/api/quotes/:id', async (c) => {
+    const id = c.req.param('id');
+    ownedRowOrThrow('quotes', id, 'Quote');
+    const q = await parse(c, quoteInput);
+    db.prepare(
+      `UPDATE quotes SET insurer = ?, date = ?, level = ?, guarantees = ?, excess = ?, premium = ?, valid_until = ?, notes = ?
+       WHERE id = ?`,
+    ).run(q.insurer, q.date, q.level, q.guarantees, q.excess, q.premium, q.validUntil, q.notes, id);
+    return c.json(toQuote(ownedRowOrThrow('quotes', id, 'Quote')));
+  });
+
+  app.delete('/api/quotes/:id', (c) => {
+    const id = c.req.param('id');
+    ownedRowOrThrow('quotes', id, 'Quote');
+    db.prepare('DELETE FROM quotes WHERE id = ?').run(id);
     return c.body(null, 204);
   });
 

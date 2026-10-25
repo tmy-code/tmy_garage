@@ -5,11 +5,16 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Hono } from 'hono';
 import type { DatabaseSync } from 'node:sqlite';
 import type {
+  Claim,
+  Driver,
   FitmentPosition,
   GarageDocument,
+  InsurancePolicy,
   MaintenanceTask,
   Modification,
   PartSpec,
+  PolicyTerm,
+  Quote,
   Snapshot,
   TechnicalInspection,
   Vehicle,
@@ -481,6 +486,18 @@ describe('documents', () => {
     expect(readdirSync(uploads)).toEqual([]);
   });
 
+  it('attaches to a Policy, which belongs to no single Vehicle', async () => {
+    const policy = (await (
+      await call('POST', '/api/policies', { insurer: 'Assurance Exemple', startDate: '2025-04-01', driverIds: [] })
+    ).json()) as InsurancePolicy;
+    const res = await upload({ ownerKind: 'policy', ownerId: policy.id, type: 'claimsStatement' });
+    expect(res.status).toBe(201);
+    expect(await res.json()).toMatchObject({ vehicleId: null, ownerKind: 'policy', type: 'claimsStatement' });
+    await call('DELETE', `/api/policies/${policy.id}`);
+    expect((await snapshot()).documents).toEqual([]);
+    expect(readdirSync(uploads)).toEqual([]);
+  });
+
   it('refuses to attach to something of another Garage', async () => {
     db.prepare(`INSERT INTO garages (id, name) VALUES ('friend', 'Friend')`).run();
     const car = await createVehicle('Mine');
@@ -491,6 +508,123 @@ describe('documents', () => {
     form.set('ownerId', car.id);
     form.set('type', 'other');
     expect((await friendApp.request('/api/documents', { method: 'POST', body: form })).status).toBe(404);
+  });
+});
+
+describe('insurance', () => {
+  async function createPolicy(body: object = {}): Promise<InsurancePolicy> {
+    const res = await call('POST', '/api/policies', { insurer: 'Assurance Exemple', startDate: '2025-04-01', driverIds: [], ...body });
+    expect(res.status).toBe(201);
+    return res.json();
+  }
+
+  it('keeps registration certificate facts on the Vehicle', async () => {
+    const bike = await createVehicle();
+    const res = await call('PUT', `/api/vehicles/${bike.id}`, {
+      kind: 'motorcycle',
+      name: 'Test bike',
+      vin: 'VF1TESTVIN0000001',
+      fiscalPower: 7,
+      nationalType: 'MTT2',
+      overnightParking: 'closedGarage',
+    });
+    expect(await res.json()).toMatchObject({
+      vin: 'VF1TESTVIN0000001',
+      fiscalPower: 7,
+      nationalType: 'MTT2',
+      overnightParking: 'closedGarage',
+    });
+  });
+
+  it('records a Policy with its Drivers, Terms and one Cover per Vehicle', async () => {
+    const car = await createVehicle('Car');
+    const bike = await createVehicle('Bike');
+    const driver = (await (await call('POST', '/api/drivers', { name: 'Test Driver', carLicenceDate: '2010-05-01' })).json()) as Driver;
+    const policy = await createPolicy({ driverIds: [driver.id] });
+    expect(policy).toMatchObject({ insurer: 'Assurance Exemple', driverIds: [driver.id], terms: [] });
+
+    const termBody = {
+      startDate: '2026-04-01',
+      endDate: '2027-04-01',
+      covers: [
+        { vehicleId: car.id, level: 'comprehensive', excess: 300, premium: 620.5, crm: 0.5 },
+        { vehicleId: bike.id, level: 'thirdParty', premium: 280, crm: 0.68, guarantees: 'Rider gear' },
+      ],
+    };
+    const res = await call('POST', `/api/policies/${policy.id}/terms`, termBody);
+    expect(res.status).toBe(201);
+    const term = (await res.json()) as PolicyTerm;
+    expect(term.covers.map((c) => [c.vehicleId, c.level, c.premium, c.crm])).toEqual([
+      [car.id, 'comprehensive', 620.5, 0.5],
+      [bike.id, 'thirdParty', 280, 0.68],
+    ]);
+
+    // Editing keeps each Vehicle's Cover id, so its Documents stay attached; dropping a Vehicle drops its Cover.
+    const carCover = term.covers[0]!.id;
+    const edited = (await (
+      await call('PUT', `/api/terms/${term.id}`, { ...termBody, covers: [{ ...termBody.covers[0], premium: 600 }] })
+    ).json()) as PolicyTerm;
+    expect(edited.covers).toEqual([expect.objectContaining({ id: carCover, premium: 600 })]);
+    expect((await snapshot()).policies[0]!.terms).toHaveLength(1);
+  });
+
+  it('refuses a Term that ends before it starts or covers a Vehicle twice', async () => {
+    const car = await createVehicle('Car');
+    const policy = await createPolicy();
+    const covers = [{ vehicleId: car.id, level: 'thirdParty' }];
+    expect(
+      (await call('POST', `/api/policies/${policy.id}/terms`, { startDate: '2026-04-01', endDate: '2026-04-01', covers })).status,
+    ).toBe(422);
+    expect(
+      (
+        await call('POST', `/api/policies/${policy.id}/terms`, {
+          startDate: '2026-04-01',
+          endDate: '2027-04-01',
+          covers: [...covers, ...covers],
+        })
+      ).status,
+    ).toBe(422);
+  });
+
+  it('records Claims and Quotes, and deletes a Policy with its Terms and Claims', async () => {
+    const car = await createVehicle('Car');
+    const policy = await createPolicy();
+    const claim = (await (
+      await call('POST', `/api/policies/${policy.id}/claims`, {
+        vehicleId: car.id,
+        date: '2025-11-02',
+        responsibility: 'notAtFault',
+        amount: 850,
+        description: 'Rear-ended at a junction',
+      })
+    ).json()) as Claim;
+    expect(claim).toMatchObject({ policyId: policy.id, vehicleId: car.id, driverId: null, amount: 850 });
+    await call('PUT', `/api/claims/${claim.id}`, { ...claim, responsibility: 'partlyAtFault' });
+    expect((await snapshot()).claims[0]!.responsibility).toBe('partlyAtFault');
+
+    const quote = (await (
+      await call('POST', `/api/vehicles/${car.id}/quotes`, {
+        insurer: 'Assurance Exemple',
+        date: '2026-10-20',
+        level: 'thirdParty',
+        premium: 310,
+      })
+    ).json()) as Quote;
+    expect(quote).toMatchObject({ vehicleId: car.id, premium: 310, validUntil: null });
+
+    expect((await call('DELETE', `/api/policies/${policy.id}`)).status).toBe(204);
+    const after = await snapshot();
+    expect(after.policies).toEqual([]);
+    expect(after.claims).toEqual([]);
+    expect(after.quotes).toHaveLength(1);
+  });
+
+  it('keeps another Garage’s Policies and Drivers out of reach', async () => {
+    db.prepare(`INSERT INTO garages (id, name) VALUES ('friend', 'Friend')`).run();
+    const policy = await createPolicy();
+    const friendApp = createApp(db, 'friend');
+    expect((await (await friendApp.request('/api/snapshot')).json()).policies).toEqual([]);
+    expect((await friendApp.request(`/api/policies/${policy.id}`, { method: 'DELETE' })).status).toBe(404);
   });
 });
 
@@ -520,27 +654,10 @@ describe('migrations', () => {
 
   it('backs up an existing database before migrating it, and keeps its data', () => {
     const path = join(dir, 'garage.sqlite');
-    // Recreate a database as the first release left it: schema version 1, without the Official Interval or workshop data.
-    const old = openDatabase(path);
+    // A database as the first release left it: schema version 1, without the Official Interval or workshop data.
+    const old = openDatabase(path, undefined, 1);
     old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v1', 'default', 'car', 'Old car')`);
     old.exec(`INSERT INTO maintenance_tasks (id, vehicle_id, name, interval_km) VALUES ('t1', 'v1', 'Oil', 10000)`);
-    old.exec('ALTER TABLE maintenance_tasks DROP COLUMN official_interval_km');
-    old.exec('ALTER TABLE maintenance_tasks DROP COLUMN official_interval_months');
-    old.exec('ALTER TABLE maintenance_tasks DROP COLUMN workshop_notes');
-    old.exec('ALTER TABLE vehicles DROP COLUMN first_registration');
-    for (const table of ['documents', 'modifications', 'inspection_defects', 'technical_inspections']) old.exec(`DROP TABLE ${table}`);
-    for (const table of [
-      'parts_used',
-      'task_specs',
-      'required_tools',
-      'required_parts',
-      'fitment_positions',
-      'part_specs',
-      'vehicle_specs',
-    ]) {
-      old.exec(`DROP TABLE ${table}`);
-    }
-    old.exec('PRAGMA user_version = 1');
     old.close();
 
     const migrated = openDatabase(path, join(dir, 'backups'));
@@ -549,6 +666,20 @@ describe('migrations', () => {
     expect(backups[0]).toMatch(/^garage-v1-.*\.sqlite$/);
     const task = migrated.prepare('SELECT * FROM maintenance_tasks').get() as Record<string, unknown>;
     expect(task).toMatchObject({ id: 't1', interval_km: 10000, official_interval_km: null });
+    migrated.close();
+  });
+
+  it('moves Documents to their Garage when insurance arrives', () => {
+    const path = join(dir, 'garage.sqlite');
+    const old = openDatabase(path, undefined, 5);
+    old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v1', 'default', 'car', 'Old car')`);
+    old.exec(`INSERT INTO documents (id, vehicle_id, owner_kind, owner_id, type, file_name, content_type, size)
+              VALUES ('d1', 'v1', 'vehicle', 'v1', 'registration', 'a.pdf', 'application/pdf', 3)`);
+    old.close();
+    const migrated = openDatabase(path);
+    expect(migrated.prepare('SELECT garage_id, vehicle_id, owner_kind FROM documents').all()).toEqual([
+      { garage_id: 'default', vehicle_id: 'v1', owner_kind: 'vehicle' },
+    ]);
     migrated.close();
   });
 });

@@ -12,7 +12,18 @@ import { Submit, useSubmit } from './SetupForms.tsx';
 
 // Papers are desk work and need a connection; their details stay readable offline from the phone's copy.
 
-const DOCUMENT_TYPES: DocumentType[] = ['registration', 'invoice', 'inspectionReport', 'manual', 'photo', 'other'];
+const DOCUMENT_TYPES: DocumentType[] = [
+  'registration',
+  'invoice',
+  'inspectionReport',
+  'manual',
+  'photo',
+  'policySchedule',
+  'insuranceCertificate',
+  'claimsStatement',
+  'claimReport',
+  'other',
+];
 
 function wholeKm(text: string, t: Messages): number | null {
   const n = parseNumber(text);
@@ -166,6 +177,14 @@ export function DocumentsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapsho
     if (d.ownerKind === 'inspection') {
       const i = snapshot.inspections.find((x) => x.id === d.ownerId);
       return i ? t.papers.owner.inspection(formatDate(i.date, t)) : '';
+    }
+    if (d.ownerKind === 'cover') {
+      const policy = snapshot.policies.find((p) => p.terms.some((term) => term.covers.some((c) => c.id === d.ownerId)));
+      return policy ? t.papers.owner.cover(policy.insurer) : '';
+    }
+    if (d.ownerKind === 'claim') {
+      const claim = snapshot.claims.find((x) => x.id === d.ownerId);
+      return claim ? t.papers.owner.claim(formatDate(claim.date, t)) : '';
     }
     return snapshot.modifications.find((x) => x.id === d.ownerId)?.name ?? '';
   }

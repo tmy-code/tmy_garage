@@ -145,10 +145,23 @@ export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
     vehicleSpecs: snapshot.vehicleSpecs ?? [],
     partSpecs: (snapshot.partSpecs ?? []).map((p) => ({ ...p, standardPart: p.standardPart ?? null, notFitted: p.notFitted ?? false })),
     positions: snapshot.positions ?? [],
-    vehicles: snapshot.vehicles.map((v) => ({ ...v, firstRegistration: v.firstRegistration ?? null })),
+    vehicles: snapshot.vehicles.map((v) => ({
+      ...v,
+      firstRegistration: v.firstRegistration ?? null,
+      vin: v.vin ?? null,
+      version: v.version ?? null,
+      fiscalPower: v.fiscalPower ?? null,
+      nationalType: v.nationalType ?? null,
+      purchaseDate: v.purchaseDate ?? null,
+      overnightParking: v.overnightParking ?? null,
+    })),
     inspections: snapshot.inspections ?? [],
     modifications: snapshot.modifications ?? [],
     documents: snapshot.documents ?? [],
+    drivers: snapshot.drivers ?? [],
+    policies: snapshot.policies ?? [],
+    claims: snapshot.claims ?? [],
+    quotes: snapshot.quotes ?? [],
   };
 }
 

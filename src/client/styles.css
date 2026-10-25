@@ -583,6 +583,45 @@ body > .banner {
   margin: 6px 0 0;
 }
 
+.facts {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 6px 12px;
+  margin: 0 0 12px;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.saving {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+@media print {
+  .topbar,
+  .no-print,
+  .language {
+    display: none !important;
+  }
+
+  .card {
+    break-inside: avoid;
+    border: 1px solid #999;
+  }
+
+  .nudge {
+    color: #000;
+    font-style: italic;
+  }
+}
+
 @media (max-width: 999px) {
   .wide-only {
     display: none !important;

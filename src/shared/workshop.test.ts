@@ -50,6 +50,12 @@ const base: Snapshot = {
       year: null,
       registration: null,
       firstRegistration: null,
+      vin: null,
+      version: null,
+      fiscalPower: null,
+      nationalType: null,
+      purchaseDate: null,
+      overnightParking: null,
       status: 'owned',
       soldDate: null,
       soldOdometer: null,
@@ -86,6 +92,10 @@ const base: Snapshot = {
   inspections: [],
   modifications: [],
   documents: [],
+  drivers: [],
+  policies: [],
+  claims: [],
+  quotes: [],
 };
 
 describe('fitments', () => {
