@@ -13,6 +13,10 @@ const optionalText = (max: number) =>
 
 export const vehicleKind = z.enum(['car', 'motorcycle']);
 export const vehicleSpecKind = z.enum(['torque', 'other']);
+export const inspectionResult = z.enum(['passed', 'majorDefects', 'criticalDefects']);
+export const defectSeverity = z.enum(['minor', 'major', 'critical']);
+export const documentOwnerKind = z.enum(['vehicle', 'service', 'modification', 'inspection']);
+export const documentType = z.enum(['registration', 'invoice', 'inspectionReport', 'manual', 'photo', 'other']);
 export const partUnit = z.enum(['piece', 'litre']);
 const quantity = z.number().positive().max(10_000);
 
@@ -23,6 +27,7 @@ export const vehicleInput = z.object({
   model: optionalText(60),
   year: z.number().int().min(1900).max(2100).nullish().transform((v) => v ?? null),
   registration: optionalText(20),
+  firstRegistration: isoDate.nullish().transform((v) => v ?? null),
 });
 
 export const sellInput = z.object({
@@ -101,7 +106,49 @@ export const odometerReadingInput = z.object({
   odometer,
 });
 
+export const inspectionInput = z.object({
+  date: isoDate,
+  odometer,
+  centre: optionalText(120),
+  result: inspectionResult,
+  nextDueDate: isoDate.nullish().transform((v) => v ?? null),
+  notes: optionalText(2000),
+  defects: z
+    .array(
+      z.object({
+        description: z.string().trim().min(1).max(300),
+        severity: defectSeverity,
+        fixedServiceId: z.string().min(1).nullish().transform((v) => v ?? null),
+      }),
+    )
+    .max(100),
+});
+
+export const modificationInput = z.object({
+  name: z.string().trim().min(1).max(120),
+  fittedDate: isoDate,
+  fittedOdometer: odometer.nullish().transform((v) => v ?? null),
+  removedDate: isoDate.nullish().transform((v) => v ?? null),
+  positionId: z.string().min(1).nullish().transform((v) => v ?? null),
+  declaredToInsurer: z.boolean(),
+  notes: optionalText(2000),
+});
+
+/** Document details; the file itself is sent alongside as multipart form data. */
+export const documentInput = z.object({
+  type: documentType,
+  title: optionalText(120),
+  issueDate: isoDate.nullish().transform((v) => v ?? null),
+  expiryDate: isoDate.nullish().transform((v) => v ?? null),
+});
+
+export const documentOwner = z.object({ ownerKind: documentOwnerKind, ownerId: z.string().min(1) });
+
 export type VehicleKind = z.infer<typeof vehicleKind>;
+export type InspectionResult = z.infer<typeof inspectionResult>;
+export type DefectSeverity = z.infer<typeof defectSeverity>;
+export type DocumentOwnerKind = z.infer<typeof documentOwnerKind>;
+export type DocumentType = z.infer<typeof documentType>;
 export type VehicleSpecKind = z.infer<typeof vehicleSpecKind>;
 export type PartUnit = z.infer<typeof partUnit>;
 export type VehicleInput = z.infer<typeof vehicleInput>;

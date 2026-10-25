@@ -49,6 +49,7 @@ const base: Snapshot = {
       model: null,
       year: null,
       registration: null,
+      firstRegistration: null,
       status: 'owned',
       soldDate: null,
       soldOdometer: null,
@@ -82,6 +83,9 @@ const base: Snapshot = {
     },
   ],
   positions: [{ id: 'rear', vehicleId: 'bike', name: 'Rear tyre' }],
+  inspections: [],
+  modifications: [],
+  documents: [],
 };
 
 describe('fitments', () => {
@@ -100,8 +104,32 @@ describe('fitments', () => {
       ],
     };
     const [rear] = fitments(snapshot, 'bike');
-    expect(rear!.current).toMatchObject({ date: '2026-05-02', odometer: 21_340, part: { description: 'Road 6' } });
-    expect(rear!.previous.map((p) => p.part.description)).toEqual(['Pilot Road 4']);
+    expect(rear!.current).toMatchObject({ date: '2026-05-02', odometer: 21_340, label: 'Road 6' });
+    expect(rear!.previous.map((p) => p.label)).toEqual(['Pilot Road 4']);
+  });
+
+  it('counts a Modification at a position as fitted until it is removed', () => {
+    const exhaust = {
+      id: 'm',
+      vehicleId: 'bike',
+      name: 'Slip-on exhaust',
+      fittedDate: '2025-06-01',
+      fittedOdometer: 15_000,
+      removedDate: null,
+      positionId: 'rear',
+      declaredToInsurer: true,
+      notes: null,
+    };
+    const snapshot: Snapshot = {
+      ...base,
+      services: [service('s1', '2024-04-01', 10_000, ['tyre'], [part({ positionId: 'rear', description: 'Stock' })])],
+      modifications: [exhaust],
+    };
+    expect(fitments(snapshot, 'bike')[0]!.current).toMatchObject({ label: 'Slip-on exhaust', modification: { id: 'm' } });
+    const removed = { ...snapshot, modifications: [{ ...exhaust, removedDate: '2026-01-01' }] };
+    const [rear] = fitments(removed, 'bike');
+    expect(rear!.current?.label).toBe('Stock');
+    expect(rear!.previous.map((p) => p.label)).toEqual(['Slip-on exhaust']);
   });
 
   it('shows an empty position when nothing was fitted yet', () => {

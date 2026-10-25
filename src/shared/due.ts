@@ -68,6 +68,8 @@ export function usageOf(snapshot: Snapshot, vehicleId: string, today: IsoDate): 
   const points: OdometerPoint[] = [
     ...snapshot.readings.filter((r) => r.vehicleId === vehicleId),
     ...snapshot.services.filter((s) => s.vehicleId === vehicleId),
+    // A Technical Inspection records the odometer too.
+    ...snapshot.inspections.filter((i) => i.vehicleId === vehicleId),
   ].map(({ date, odometer }) => ({ date, odometer }));
   return estimateUsage(points, today);
 }

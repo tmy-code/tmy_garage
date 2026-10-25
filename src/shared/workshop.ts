@@ -1,7 +1,7 @@
 import { catalogueOrder } from './catalogue.ts';
 import { addDays, type IsoDate } from './dates.ts';
 import { vehicleDue, type DueInfo } from './due.ts';
-import type { FitmentPosition, MaintenanceTask, PartSpec, PartUsed, Service, Snapshot, Vehicle } from './types.ts';
+import type { FitmentPosition, MaintenanceTask, Modification, PartSpec, PartUsed, Service, Snapshot, Vehicle } from './types.ts';
 
 /** A Part Used together with the Service it went in with. */
 export interface PartUsage {
@@ -37,20 +37,41 @@ export function lastUsed(snapshot: Snapshot, partSpec: PartSpec): PartUsage | nu
   return usages(snapshot, partSpec.vehicleId, (p) => p.partSpecId === partSpec.id)[0] ?? null;
 }
 
+/** Something fitted at a Fitment Position: a Part Used in a Service, or a Modification. */
+export interface FittedItem {
+  label: string;
+  date: IsoDate;
+  odometer: number | null;
+  modification: Modification | null;
+}
+
 export interface Fitment {
   position: FitmentPosition;
-  /** What is fitted there now: the most recent Part Used at this position. */
-  current: PartUsage | null;
-  /** Earlier Parts at this position, most recent first. */
-  previous: PartUsage[];
+  /** What is fitted there now: the most recent Part Used or Modification at this position. */
+  current: FittedItem | null;
+  /** Earlier Parts and Modifications at this position, most recent first. */
+  previous: FittedItem[];
 }
 
 export function fitments(snapshot: Snapshot, vehicleId: string): Fitment[] {
   return snapshot.positions
     .filter((p) => p.vehicleId === vehicleId)
     .map((position) => {
-      const [current = null, ...previous] = usages(snapshot, vehicleId, (p) => p.positionId === position.id);
-      return { position, current, previous };
+      const items: FittedItem[] = [
+        ...usages(snapshot, vehicleId, (p) => p.positionId === position.id).map((u) => ({
+          label: [u.part.description, u.part.partNumber].filter(Boolean).join(' · '),
+          date: u.date,
+          odometer: u.odometer,
+          modification: null,
+        })),
+        ...snapshot.modifications
+          .filter((m) => m.vehicleId === vehicleId && m.positionId === position.id)
+          .map((m) => ({ label: m.name, date: m.fittedDate, odometer: m.fittedOdometer, modification: m })),
+      ].sort((a, b) => (a.date === b.date ? (b.odometer ?? 0) - (a.odometer ?? 0) : a.date < b.date ? 1 : -1));
+      // A Modification that was taken off is history, not what is fitted now.
+      const currentIndex = items.findIndex((i) => !i.modification?.removedDate);
+      const current = items[currentIndex] ?? null;
+      return { position, current, previous: items.filter((_, i) => i !== currentIndex) };
     });
 }
 
@@ -124,6 +145,10 @@ export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
     vehicleSpecs: snapshot.vehicleSpecs ?? [],
     partSpecs: (snapshot.partSpecs ?? []).map((p) => ({ ...p, standardPart: p.standardPart ?? null, notFitted: p.notFitted ?? false })),
     positions: snapshot.positions ?? [],
+    vehicles: snapshot.vehicles.map((v) => ({ ...v, firstRegistration: v.firstRegistration ?? null })),
+    inspections: snapshot.inspections ?? [],
+    modifications: snapshot.modifications ?? [],
+    documents: snapshot.documents ?? [],
   };
 }
 

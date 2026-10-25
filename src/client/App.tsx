@@ -1,6 +1,7 @@
 import { LanguageSwitch, Layout, NotFound } from './components.tsx';
 import { useT } from './i18n.ts';
 import { Dashboard } from './pages/Dashboard.tsx';
+import { DocumentsPage, InspectionForm, InspectionsPage, ModificationForm, ModificationsPage } from './pages/Papers.tsx';
 import { ReadingForm, ServiceForm } from './pages/ServiceForm.tsx';
 import { CopyTasks, SellForm, TaskForm, VehicleForm } from './pages/SetupForms.tsx';
 import { VehiclePage } from './pages/VehiclePage.tsx';
@@ -62,6 +63,14 @@ export function App() {
         return <PartSpecsPage vehicle={vehicle} snapshot={snapshot} />;
       case 'fitted':
         return <FittedPage vehicle={vehicle} snapshot={snapshot} />;
+      case 'documents':
+        return <DocumentsPage vehicle={vehicle} snapshot={snapshot} />;
+      case 'inspections':
+        if (subId === 'new') return <InspectionForm vehicle={vehicle} snapshot={snapshot} />;
+        return <InspectionsPage vehicle={vehicle} snapshot={snapshot} />;
+      case 'modifications':
+        if (subId === 'new') return <ModificationForm vehicle={vehicle} snapshot={snapshot} />;
+        return <ModificationsPage vehicle={vehicle} snapshot={snapshot} />;
       case 'tasks':
         if (subId === 'new') return <TaskForm vehicle={vehicle} />;
     }
@@ -79,6 +88,17 @@ export function App() {
     const owner = service && snapshot.vehicles.find((v) => v.id === service.vehicleId);
     if (service && owner) return <ServiceForm key={service.id} vehicle={owner} snapshot={snapshot} existing={service} />;
     return <NotFound what="service" />;
+  }
+  if (section === 'inspections') {
+    const inspection = snapshot.inspections.find((i) => i.id === id);
+    const owner = inspection && snapshot.vehicles.find((v) => v.id === inspection.vehicleId);
+    if (inspection && owner) return <InspectionForm key={inspection.id} vehicle={owner} snapshot={snapshot} existing={inspection} />;
+  }
+  if (section === 'modifications') {
+    const modification = snapshot.modifications.find((m) => m.id === id);
+    const owner = modification && snapshot.vehicles.find((v) => v.id === modification.vehicleId);
+    if (modification && owner)
+      return <ModificationForm key={modification.id} vehicle={owner} snapshot={snapshot} existing={modification} />;
   }
   return <NotFound what="page" />;
 }

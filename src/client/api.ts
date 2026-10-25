@@ -12,15 +12,19 @@ export class NetworkError extends Error {}
 
 // Short, so a phone with one bar in the basement falls back to the offline copy quickly.
 const TIMEOUT_MS = 8000;
+/** A 25 MB photo or PDF needs longer than a normal request. */
+const UPLOAD_TIMEOUT_MS = 120_000;
 
 export async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   let res: Response;
+  // A file upload goes as multipart form data; the browser sets its content type.
+  const upload = body instanceof FormData;
   try {
     res = await fetch(path, {
       method,
-      headers: body === undefined ? undefined : { 'content-type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      headers: body === undefined || upload ? undefined : { 'content-type': 'application/json' },
+      body: body === undefined ? undefined : upload ? body : JSON.stringify(body),
+      signal: AbortSignal.timeout(upload ? UPLOAD_TIMEOUT_MS : TIMEOUT_MS),
     });
   } catch {
     throw new NetworkError('Cannot reach the garage server');

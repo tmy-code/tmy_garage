@@ -1,6 +1,14 @@
 import type { IsoDate } from './dates.ts';
 import type { StandardPartKey } from './catalogue.ts';
-import type { PartUnit, VehicleKind, VehicleSpecKind } from './schemas.ts';
+import type {
+  DefectSeverity,
+  DocumentOwnerKind,
+  DocumentType,
+  InspectionResult,
+  PartUnit,
+  VehicleKind,
+  VehicleSpecKind,
+} from './schemas.ts';
 
 export interface Vehicle {
   id: string;
@@ -10,6 +18,8 @@ export interface Vehicle {
   model: string | null;
   year: number | null;
   registration: string | null;
+  /** Date of first registration (carte grise, field B): sets when the first Technical Inspection is due. */
+  firstRegistration: IsoDate | null;
   status: 'owned' | 'sold';
   soldDate: IsoDate | null;
   soldOdometer: number | null;
@@ -104,6 +114,55 @@ export interface OdometerReading {
   odometer: number;
 }
 
+/** The regulatory roadworthiness check of a Vehicle by an approved centre (contrôle technique). */
+export interface TechnicalInspection {
+  id: string;
+  vehicleId: string;
+  date: IsoDate;
+  odometer: number;
+  centre: string | null;
+  result: InspectionResult;
+  /** The deadline for the next inspection as printed on the report; estimated from the regulatory rhythm when null. */
+  nextDueDate: IsoDate | null;
+  notes: string | null;
+  defects: InspectionDefect[];
+}
+
+export interface InspectionDefect {
+  description: string;
+  severity: DefectSeverity;
+  /** The Service in which the user fixed it. */
+  fixedServiceId: string | null;
+}
+
+/** A change that takes a Vehicle away from its factory configuration. */
+export interface Modification {
+  id: string;
+  vehicleId: string;
+  name: string;
+  fittedDate: IsoDate;
+  fittedOdometer: number | null;
+  removedDate: IsoDate | null;
+  positionId: string | null;
+  declaredToInsurer: boolean;
+  notes: string | null;
+}
+
+/** A stored file (PDF or photo), attached to exactly one Vehicle, Service, Modification or Technical Inspection. */
+export interface GarageDocument {
+  id: string;
+  vehicleId: string;
+  ownerKind: DocumentOwnerKind;
+  ownerId: string;
+  type: DocumentType;
+  title: string | null;
+  issueDate: IsoDate | null;
+  expiryDate: IsoDate | null;
+  fileName: string;
+  contentType: string;
+  size: number;
+}
+
 /** Everything the phone needs to work offline in the garage. */
 export interface Snapshot {
   vehicles: Vehicle[];
@@ -113,4 +172,8 @@ export interface Snapshot {
   vehicleSpecs: VehicleSpec[];
   partSpecs: PartSpec[];
   positions: FitmentPosition[];
+  inspections: TechnicalInspection[];
+  modifications: Modification[];
+  /** Document details only; the files are fetched on demand. */
+  documents: GarageDocument[];
 }

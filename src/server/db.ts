@@ -138,6 +138,59 @@ const MIGRATIONS: string[] = [
   ALTER TABLE part_specs ADD COLUMN not_fitted INTEGER NOT NULL DEFAULT 0;
   CREATE UNIQUE INDEX part_specs_standard ON part_specs (vehicle_id, standard_part) WHERE standard_part IS NOT NULL;
   `,
+  `
+  ALTER TABLE vehicles ADD COLUMN first_registration TEXT;
+
+  CREATE TABLE technical_inspections (
+    id TEXT PRIMARY KEY,
+    vehicle_id TEXT NOT NULL REFERENCES vehicles(id),
+    date TEXT NOT NULL,
+    odometer INTEGER NOT NULL,
+    centre TEXT,
+    result TEXT NOT NULL CHECK (result IN ('passed', 'majorDefects', 'criticalDefects')),
+    next_due_date TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE inspection_defects (
+    inspection_id TEXT NOT NULL REFERENCES technical_inspections(id) ON DELETE CASCADE,
+    sort INTEGER NOT NULL,
+    description TEXT NOT NULL,
+    severity TEXT NOT NULL CHECK (severity IN ('minor', 'major', 'critical')),
+    fixed_service_id TEXT REFERENCES services(id) ON DELETE SET NULL,
+    PRIMARY KEY (inspection_id, sort)
+  );
+
+  CREATE TABLE modifications (
+    id TEXT PRIMARY KEY,
+    vehicle_id TEXT NOT NULL REFERENCES vehicles(id),
+    name TEXT NOT NULL,
+    fitted_date TEXT NOT NULL,
+    fitted_odometer INTEGER,
+    removed_date TEXT,
+    position_id TEXT REFERENCES fitment_positions(id),
+    declared_to_insurer INTEGER NOT NULL DEFAULT 0,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE documents (
+    id TEXT PRIMARY KEY,
+    vehicle_id TEXT NOT NULL REFERENCES vehicles(id),
+    owner_kind TEXT NOT NULL CHECK (owner_kind IN ('vehicle', 'service', 'modification', 'inspection')),
+    owner_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    title TEXT,
+    issue_date TEXT,
+    expiry_date TEXT,
+    file_name TEXT NOT NULL,
+    content_type TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX documents_owner ON documents (owner_kind, owner_id);
+  `,
 ];
 
 function schemaVersion(db: DatabaseSync): number {

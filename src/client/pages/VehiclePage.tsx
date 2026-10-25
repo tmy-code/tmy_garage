@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { todayIso } from '../../shared/dates.ts';
 import { vehicleDue } from '../../shared/due.ts';
+import { nextInspection, openDefects } from '../../shared/inspections.ts';
 import type { PartUsed, Snapshot, Vehicle } from '../../shared/types.ts';
 import { Layout, StatusChip } from '../components.tsx';
 import { describeDue, describeInterval, describeOfficialInterval, formatDate, formatKm, formatMoney } from '../format.ts';
@@ -20,6 +21,10 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
   const tasks = new Map(snapshot.tasks.filter((task) => task.vehicleId === vehicle.id).map((task) => [task.id, task]));
   const pending = new Set(outbox.map((op) => op.data.id));
   const owned = vehicle.status === 'owned';
+  const inspection = nextInspection(snapshot, vehicle, today);
+  const defects = openDefects(snapshot, vehicle).length;
+  const documentCount = snapshot.documents.filter((d) => d.vehicleId === vehicle.id).length;
+  const modificationCount = snapshot.modifications.filter((m) => m.vehicleId === vehicle.id).length;
   const positionCount = snapshot.positions.filter((p) => p.vehicleId === vehicle.id).length;
   const partSpecCount = snapshot.partSpecs.filter((p) => p.vehicleId === vehicle.id).length;
   const specCount = snapshot.vehicleSpecs.filter((s) => s.vehicleId === vehicle.id).length;
@@ -53,6 +58,14 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
           <section className="card">
             {subtitle ? <p className="muted">{subtitle}</p> : null}
             {vehicle.status === 'sold' ? <p className="banner banner-warn">{t.vehicle.sold(saleDetails)}</p> : null}
+            {owned && (inspection.status === 'overdue' || inspection.status === 'dueSoon') && inspection.dueDate ? (
+              <p className="task-title">
+                <span className={`chip chip-${inspection.status}`}>{t.status[inspection.status]}</span>
+                <a href={`#/vehicles/${vehicle.id}/inspections`}>
+                  {t.papers.nextInspection} · {t.papers.dueBy(formatDate(inspection.dueDate, t))}
+                </a>
+              </p>
+            ) : null}
             <p className="odometer">
               {usage.estimatedOdometer === null ? (
                 t.vehicle.noReading
@@ -131,6 +144,31 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
         </div>
 
         <div className="split-side">
+          <section>
+            <h2>{t.papers.section}</h2>
+            <ul className="list">
+              <li>
+                <a href={`#/vehicles/${vehicle.id}/documents`}>
+                  {t.papers.documents} <span className="muted">{t.workshop.count(documentCount)}</span>
+                </a>
+              </li>
+              <li>
+                <a href={`#/vehicles/${vehicle.id}/inspections`} className="history-row">
+                  <span>{t.papers.inspections}</span>
+                  <span className="muted">
+                    {inspection.dueDate ? t.papers.dueBy(formatDate(inspection.dueDate, t)) : t.papers.basis.unknown}
+                    {defects > 0 ? ` · ${t.papers.openDefects(defects)}` : ''}
+                  </span>
+                </a>
+              </li>
+              <li>
+                <a href={`#/vehicles/${vehicle.id}/modifications`}>
+                  {t.papers.modifications} <span className="muted">{t.workshop.count(modificationCount)}</span>
+                </a>
+              </li>
+            </ul>
+          </section>
+
           <section>
             <h2>{t.workshop.section}</h2>
             <ul className="list">

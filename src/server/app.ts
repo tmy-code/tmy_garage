@@ -1,9 +1,17 @@
 import { randomUUID } from 'node:crypto';
+import { mkdirSync, rmSync } from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { Hono, type Context } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import type { ZodType } from 'zod';
 import {
   copyTasksInput,
+  documentInput,
+  documentOwner,
+  inspectionInput,
+  modificationInput,
   odometerReadingInput,
   partSpecInput,
   positionInput,
@@ -16,7 +24,10 @@ import {
 } from '../shared/schemas.ts';
 import type {
   FitmentPosition,
+  GarageDocument,
   MaintenanceTask,
+  Modification,
+  TechnicalInspection,
   OdometerReading,
   PartSpec,
   PartUsed,
@@ -29,9 +40,11 @@ import { STANDARD_PARTS } from '../shared/catalogue.ts';
 import type { VehicleKind } from '../shared/schemas.ts';
 import { DEFAULT_GARAGE_ID } from './db.ts';
 
+type ErrorStatus = 400 | 404 | 409 | 413 | 415 | 422 | 503;
+
 class HttpError extends Error {
-  readonly status: 400 | 404 | 409 | 422;
-  constructor(status: 400 | 404 | 409 | 422, message: string) {
+  readonly status: ErrorStatus;
+  constructor(status: ErrorStatus, message: string) {
     super(message);
     this.status = status;
   }
@@ -59,6 +72,7 @@ const toVehicle = (r: Row): Vehicle => ({
   model: r.model,
   year: r.year,
   registration: r.registration,
+  firstRegistration: r.first_registration,
   status: r.status,
   soldDate: r.sold_date,
   soldOdometer: r.sold_odometer,
@@ -106,6 +120,41 @@ const toPartSpec = (r: Row): PartSpec => ({
 
 const toPosition = (r: Row): FitmentPosition => ({ id: r.id, vehicleId: r.vehicle_id, name: r.name });
 
+const toModification = (r: Row): Modification => ({
+  id: r.id,
+  vehicleId: r.vehicle_id,
+  name: r.name,
+  fittedDate: r.fitted_date,
+  fittedOdometer: r.fitted_odometer,
+  removedDate: r.removed_date,
+  positionId: r.position_id,
+  declaredToInsurer: r.declared_to_insurer === 1,
+  notes: r.notes,
+});
+
+const toDocument = (r: Row): GarageDocument => ({
+  id: r.id,
+  vehicleId: r.vehicle_id,
+  ownerKind: r.owner_kind,
+  ownerId: r.owner_id,
+  type: r.type,
+  title: r.title,
+  issueDate: r.issue_date,
+  expiryDate: r.expiry_date,
+  fileName: r.file_name,
+  contentType: r.content_type,
+  size: r.size,
+});
+
+/** Files a Document may be: what a phone camera or a scanner produces. */
+const DOCUMENT_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']);
+export const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
+
+export interface AppOptions {
+  /** Where Document files are kept; uploads are refused when not set. */
+  uploadsDir?: string;
+}
+
 const toPartUsed = (r: Row): PartUsed => ({
   partSpecId: r.part_spec_id,
   positionId: r.position_id,
@@ -133,8 +182,9 @@ function groupBy<T>(rows: Row[], key: string, map: (r: Row) => T): Map<string, T
  * Services and Odometer Readings are written with PUT and a client-generated id, so the phone's
  * offline send queue can safely replay them.
  */
-export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID): Hono {
+export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID, { uploadsDir }: AppOptions = {}): Hono {
   const app = new Hono();
+  if (uploadsDir) mkdirSync(uploadsDir, { recursive: true });
 
   function vehicleOrThrow(id: string): Row {
     const row = db.prepare('SELECT * FROM vehicles WHERE id = ? AND garage_id = ?').get(id, garageId) as Row | undefined;
@@ -267,7 +317,32 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       vehicleSpecs: ownedRows('vehicle_specs').map(toVehicleSpec),
       partSpecs: ownedRows('part_specs').map(toPartSpec),
       positions: ownedRows('fitment_positions').map(toPosition),
+      inspections: ownedRows('technical_inspections').map((r) => toInspection(r)),
+      modifications: ownedRows('modifications').map(toModification),
+      documents: ownedRows('documents').map(toDocument),
     };
+  }
+
+  function toInspection(r: Row): TechnicalInspection {
+    const defects = db.prepare('SELECT * FROM inspection_defects WHERE inspection_id = ? ORDER BY sort').all(r.id) as Row[];
+    return {
+      id: r.id,
+      vehicleId: r.vehicle_id,
+      date: r.date,
+      odometer: r.odometer,
+      centre: r.centre,
+      result: r.result,
+      nextDueDate: r.next_due_date,
+      notes: r.notes,
+      defects: defects.map((d) => ({ description: d.description, severity: d.severity, fixedServiceId: d.fixed_service_id })),
+    };
+  }
+
+  /** Removes the Documents attached to something being deleted, files included. */
+  function deleteDocumentsOf(ownerKind: string, ownerId: string) {
+    const docs = db.prepare('SELECT id FROM documents WHERE owner_kind = ? AND owner_id = ?').all(ownerKind, ownerId) as Row[];
+    db.prepare('DELETE FROM documents WHERE owner_kind = ? AND owner_id = ?').run(ownerKind, ownerId);
+    if (uploadsDir) for (const d of docs) rmSync(join(uploadsDir, d.id), { force: true });
   }
 
   /** Gives a Vehicle the Standard Parts of its kind it does not list yet, so each only needs its Part Spec filled in. */
@@ -305,9 +380,9 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     const v = await parse(c, vehicleInput);
     const id = randomUUID();
     db.prepare(
-      `INSERT INTO vehicles (id, garage_id, kind, name, make, model, year, registration)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, garageId, v.kind, v.name, v.make, v.model, v.year, v.registration);
+      `INSERT INTO vehicles (id, garage_id, kind, name, make, model, year, registration, first_registration)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, garageId, v.kind, v.name, v.make, v.model, v.year, v.registration, v.firstRegistration);
     ensureStandardParts(id, v.kind);
     return c.json(toVehicle(vehicleOrThrow(id)), 201);
   });
@@ -316,15 +391,9 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     const id = c.req.param('id');
     vehicleOrThrow(id);
     const v = await parse(c, vehicleInput);
-    db.prepare('UPDATE vehicles SET kind = ?, name = ?, make = ?, model = ?, year = ?, registration = ? WHERE id = ?').run(
-      v.kind,
-      v.name,
-      v.make,
-      v.model,
-      v.year,
-      v.registration,
-      id,
-    );
+    db.prepare(
+      'UPDATE vehicles SET kind = ?, name = ?, make = ?, model = ?, year = ?, registration = ?, first_registration = ? WHERE id = ?',
+    ).run(v.kind, v.name, v.make, v.model, v.year, v.registration, v.firstRegistration, id);
     ensureStandardParts(id, v.kind);
     return c.json(toVehicle(vehicleOrThrow(id)));
   });
@@ -549,9 +618,226 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
   app.delete('/api/positions/:id', (c) => {
     const id = c.req.param('id');
     ownedRowOrThrow('fitment_positions', id, 'Fitment Position');
-    const used = db.prepare('SELECT COUNT(*) AS n FROM parts_used WHERE position_id = ?').get(id) as { n: number };
+    const used = db
+      .prepare(
+        'SELECT (SELECT COUNT(*) FROM parts_used WHERE position_id = ?) + (SELECT COUNT(*) FROM modifications WHERE position_id = ?) AS n',
+      )
+      .get(id, id) as { n: number };
     if (used.n > 0) throw new HttpError(409, 'Parts have been fitted at this position; rename it instead of deleting it');
     db.prepare('DELETE FROM fitment_positions WHERE id = ?').run(id);
+    return c.body(null, 204);
+  });
+
+  // --- Technical Inspections (desk work, online only) ---
+
+  function saveInspection(id: string, vehicleId: string, body: Awaited<ReturnType<typeof inspectionInput.parse>>, isNew: boolean) {
+    // A defect can only be closed by a Service of the same Vehicle.
+    const serviceOf = (serviceId: string | null) =>
+      serviceId !== null && db.prepare('SELECT 1 FROM services WHERE id = ? AND vehicle_id = ?').get(serviceId, vehicleId) !== undefined
+        ? serviceId
+        : null;
+    transaction(() => {
+      if (isNew) {
+        db.prepare(
+          `INSERT INTO technical_inspections (id, vehicle_id, date, odometer, centre, result, next_due_date, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).run(id, vehicleId, body.date, body.odometer, body.centre, body.result, body.nextDueDate, body.notes);
+      } else {
+        db.prepare(
+          'UPDATE technical_inspections SET date = ?, odometer = ?, centre = ?, result = ?, next_due_date = ?, notes = ? WHERE id = ?',
+        ).run(body.date, body.odometer, body.centre, body.result, body.nextDueDate, body.notes, id);
+      }
+      db.prepare('DELETE FROM inspection_defects WHERE inspection_id = ?').run(id);
+      const defect = db.prepare(
+        'INSERT INTO inspection_defects (inspection_id, sort, description, severity, fixed_service_id) VALUES (?, ?, ?, ?, ?)',
+      );
+      body.defects.forEach((d, i) => defect.run(id, i, d.description, d.severity, serviceOf(d.fixedServiceId)));
+    });
+  }
+
+  app.post('/api/vehicles/:id/inspections', async (c) => {
+    const vehicleId = c.req.param('id');
+    vehicleOrThrow(vehicleId);
+    const body = await parse(c, inspectionInput);
+    const id = randomUUID();
+    saveInspection(id, vehicleId, body, true);
+    return c.json(toInspection(ownedRowOrThrow('technical_inspections', id, 'Technical Inspection')), 201);
+  });
+
+  app.put('/api/inspections/:id', async (c) => {
+    const id = c.req.param('id');
+    const row = ownedRowOrThrow('technical_inspections', id, 'Technical Inspection');
+    const body = await parse(c, inspectionInput);
+    saveInspection(id, row.vehicle_id, body, false);
+    return c.json(toInspection(ownedRowOrThrow('technical_inspections', id, 'Technical Inspection')));
+  });
+
+  app.delete('/api/inspections/:id', (c) => {
+    const id = c.req.param('id');
+    ownedRowOrThrow('technical_inspections', id, 'Technical Inspection');
+    transaction(() => {
+      deleteDocumentsOf('inspection', id);
+      db.prepare('DELETE FROM technical_inspections WHERE id = ?').run(id);
+    });
+    return c.body(null, 204);
+  });
+
+  // --- Modifications (desk work, online only) ---
+
+  function checkedPosition(positionId: string | null, vehicleId: string): string | null {
+    if (positionId === null) return null;
+    if (!ownedRows('fitment_positions', 'x.id = ? AND x.vehicle_id = ?', positionId, vehicleId)[0]) {
+      throw new HttpError(422, 'The Fitment Position belongs to another vehicle');
+    }
+    return positionId;
+  }
+
+  app.post('/api/vehicles/:id/modifications', async (c) => {
+    const vehicleId = c.req.param('id');
+    vehicleOrThrow(vehicleId);
+    const m = await parse(c, modificationInput);
+    const id = randomUUID();
+    db.prepare(
+      `INSERT INTO modifications (id, vehicle_id, name, fitted_date, fitted_odometer, removed_date, position_id, declared_to_insurer, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      id,
+      vehicleId,
+      m.name,
+      m.fittedDate,
+      m.fittedOdometer,
+      m.removedDate,
+      checkedPosition(m.positionId, vehicleId),
+      m.declaredToInsurer ? 1 : 0,
+      m.notes,
+    );
+    return c.json(toModification(ownedRowOrThrow('modifications', id, 'Modification')), 201);
+  });
+
+  app.put('/api/modifications/:id', async (c) => {
+    const id = c.req.param('id');
+    const row = ownedRowOrThrow('modifications', id, 'Modification');
+    const m = await parse(c, modificationInput);
+    db.prepare(
+      `UPDATE modifications SET name = ?, fitted_date = ?, fitted_odometer = ?, removed_date = ?, position_id = ?,
+         declared_to_insurer = ?, notes = ? WHERE id = ?`,
+    ).run(
+      m.name,
+      m.fittedDate,
+      m.fittedOdometer,
+      m.removedDate,
+      checkedPosition(m.positionId, row.vehicle_id),
+      m.declaredToInsurer ? 1 : 0,
+      m.notes,
+      id,
+    );
+    return c.json(toModification(ownedRowOrThrow('modifications', id, 'Modification')));
+  });
+
+  app.delete('/api/modifications/:id', (c) => {
+    const id = c.req.param('id');
+    ownedRowOrThrow('modifications', id, 'Modification');
+    transaction(() => {
+      deleteDocumentsOf('modification', id);
+      db.prepare('DELETE FROM modifications WHERE id = ?').run(id);
+    });
+    return c.body(null, 204);
+  });
+
+  // --- Documents: details in the database, files in uploadsDir under their id ---
+
+  /** The Vehicle a Document's owner belongs to, checking the owner is in this Garage. */
+  function ownerVehicle(ownerKind: string, ownerId: string): string {
+    const table = { vehicle: 'vehicles', service: 'services', modification: 'modifications', inspection: 'technical_inspections' }[
+      ownerKind
+    ];
+    if (ownerKind === 'vehicle') return vehicleOrThrow(ownerId).id;
+    const row = table ? ownedRows(table, 'x.id = ?', ownerId)[0] : undefined;
+    if (!row) throw new HttpError(404, 'What this Document is attached to was not found');
+    return row.vehicle_id;
+  }
+
+  function validated<T>(schema: ZodType<T, any, any>, value: unknown): T {
+    const result = schema.safeParse(value);
+    if (!result.success) {
+      const issue = result.error.issues[0]!;
+      throw new HttpError(422, `${issue.path.join('.') || 'body'}: ${issue.message}`);
+    }
+    return result.data;
+  }
+
+  app.post(
+    '/api/documents',
+    bodyLimit({
+      maxSize: MAX_DOCUMENT_BYTES + 64 * 1024,
+      onError: () => {
+        throw new HttpError(413, 'The file is larger than 25 MB');
+      },
+    }),
+    async (c) => {
+      if (!uploadsDir) throw new HttpError(503, 'Document storage is not configured');
+      const form = await c.req.parseBody();
+      const file = form.file;
+      if (!(file instanceof File)) throw new HttpError(400, 'No file was sent');
+      if (!DOCUMENT_TYPES.has(file.type)) throw new HttpError(415, 'Only PDF files and photos can be stored');
+      if (file.size > MAX_DOCUMENT_BYTES) throw new HttpError(413, 'The file is larger than 25 MB');
+      const owner = validated(documentOwner, form);
+      const details = validated(documentInput, { ...form, file: undefined });
+      const vehicleId = ownerVehicle(owner.ownerKind, owner.ownerId);
+      const id = randomUUID();
+      await writeFile(join(uploadsDir, id), Buffer.from(await file.arrayBuffer()));
+      db.prepare(
+        `INSERT INTO documents (id, vehicle_id, owner_kind, owner_id, type, title, issue_date, expiry_date, file_name, content_type, size)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        id,
+        vehicleId,
+        owner.ownerKind,
+        owner.ownerId,
+        details.type,
+        details.title,
+        details.issueDate,
+        details.expiryDate,
+        file.name.slice(0, 200) || 'document',
+        file.type,
+        file.size,
+      );
+      return c.json(toDocument(ownedRowOrThrow('documents', id, 'Document')), 201);
+    },
+  );
+
+  app.put('/api/documents/:id', async (c) => {
+    const id = c.req.param('id');
+    ownedRowOrThrow('documents', id, 'Document');
+    const d = await parse(c, documentInput);
+    db.prepare('UPDATE documents SET type = ?, title = ?, issue_date = ?, expiry_date = ? WHERE id = ?').run(
+      d.type,
+      d.title,
+      d.issueDate,
+      d.expiryDate,
+      id,
+    );
+    return c.json(toDocument(ownedRowOrThrow('documents', id, 'Document')));
+  });
+
+  app.get('/api/documents/:id/file', async (c) => {
+    const row = ownedRowOrThrow('documents', c.req.param('id'), 'Document');
+    if (!uploadsDir) throw new HttpError(503, 'Document storage is not configured');
+    const data = await readFile(join(uploadsDir, row.id)).catch(() => {
+      throw new HttpError(404, 'The file of this Document is missing');
+    });
+    return c.body(new Uint8Array(data), 200, {
+      'content-type': row.content_type,
+      'content-disposition': `inline; filename*=UTF-8''${encodeURIComponent(row.file_name)}`,
+      'x-content-type-options': 'nosniff',
+      'cache-control': 'private, max-age=3600',
+    });
+  });
+
+  app.delete('/api/documents/:id', (c) => {
+    const row = ownedRowOrThrow('documents', c.req.param('id'), 'Document');
+    db.prepare('DELETE FROM documents WHERE id = ?').run(row.id);
+    if (uploadsDir) rmSync(join(uploadsDir, row.id), { force: true });
     return c.body(null, 204);
   });
 
@@ -602,7 +888,10 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       .prepare('SELECT s.id FROM services s JOIN vehicles v ON v.id = s.vehicle_id WHERE s.id = ? AND v.garage_id = ?')
       .get(id, garageId);
     if (!row) throw new HttpError(404, 'Service not found');
-    db.prepare('DELETE FROM services WHERE id = ?').run(id);
+    transaction(() => {
+      deleteDocumentsOf('service', id);
+      db.prepare('DELETE FROM services WHERE id = ?').run(id);
+    });
     return c.body(null, 204);
   });
 

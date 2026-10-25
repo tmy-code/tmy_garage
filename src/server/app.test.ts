@@ -4,7 +4,17 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Hono } from 'hono';
 import type { DatabaseSync } from 'node:sqlite';
-import type { FitmentPosition, MaintenanceTask, PartSpec, Snapshot, Vehicle, VehicleSpec } from '../shared/types.ts';
+import type {
+  FitmentPosition,
+  GarageDocument,
+  MaintenanceTask,
+  Modification,
+  PartSpec,
+  Snapshot,
+  TechnicalInspection,
+  Vehicle,
+  VehicleSpec,
+} from '../shared/types.ts';
 import { STANDARD_PARTS } from '../shared/catalogue.ts';
 import { createApp } from './app.ts';
 import { openDatabase } from './db.ts';
@@ -342,6 +352,148 @@ describe('workshop data', () => {
   });
 });
 
+describe('technical inspections and modifications', () => {
+  it('stores a vehicle’s first registration date', async () => {
+    const res = await call('POST', '/api/vehicles', { kind: 'car', name: 'Car', firstRegistration: '2011-03-04' });
+    expect(await res.json()).toMatchObject({ firstRegistration: '2011-03-04' });
+  });
+
+  it('stores an inspection with its defects, closing one by a Service of the same vehicle only', async () => {
+    const car = await createVehicle('Car');
+    const other = await createVehicle('Other');
+    const task = await createTask(car.id);
+    const otherTask = await createTask(other.id);
+    await call('PUT', '/api/services/svc-00001', {
+      id: 'svc-00001',
+      vehicleId: car.id,
+      date: '2026-10-10',
+      odometer: 1000,
+      taskIds: [task.id],
+    });
+    await call('PUT', '/api/services/svc-00002', {
+      id: 'svc-00002',
+      vehicleId: other.id,
+      date: '2026-10-10',
+      odometer: 1,
+      taskIds: [otherTask.id],
+    });
+    const body = {
+      date: '2026-10-01',
+      odometer: 990,
+      centre: 'Centre Exemple',
+      result: 'majorDefects',
+      nextDueDate: null,
+      defects: [
+        { description: 'Worn front pads', severity: 'major', fixedServiceId: 'svc-00001' },
+        { description: 'Number plate light', severity: 'minor', fixedServiceId: 'svc-00002' },
+      ],
+    };
+    const res = await call('POST', `/api/vehicles/${car.id}/inspections`, body);
+    expect(res.status).toBe(201);
+    const saved = (await res.json()) as TechnicalInspection;
+    expect(saved.defects.map((d) => d.fixedServiceId)).toEqual(['svc-00001', null]);
+
+    await call('PUT', `/api/inspections/${saved.id}`, { ...body, result: 'passed', nextDueDate: '2028-10-01', defects: [] });
+    expect((await snapshot()).inspections).toEqual([{ ...saved, result: 'passed', nextDueDate: '2028-10-01', notes: null, defects: [] }]);
+  });
+
+  it('stores Modifications, and keeps a position in use from being deleted', async () => {
+    const bike = await createVehicle();
+    const position = (await (await call('POST', `/api/vehicles/${bike.id}/positions`, { name: 'Exhaust' })).json()) as FitmentPosition;
+    const body = {
+      name: 'Slip-on exhaust',
+      fittedDate: '2026-05-01',
+      fittedOdometer: 12_000,
+      positionId: position.id,
+      declaredToInsurer: true,
+    };
+    const mod = (await (await call('POST', `/api/vehicles/${bike.id}/modifications`, body)).json()) as Modification;
+    expect(mod).toMatchObject({ ...body, removedDate: null, notes: null });
+    expect((await call('DELETE', `/api/positions/${position.id}`)).status).toBe(409);
+    await call('PUT', `/api/modifications/${mod.id}`, { ...body, removedDate: '2026-09-01', declaredToInsurer: false });
+    expect((await snapshot()).modifications[0]).toMatchObject({ removedDate: '2026-09-01', declaredToInsurer: false });
+  });
+});
+
+describe('documents', () => {
+  let uploads: string;
+  beforeEach(() => {
+    uploads = mkdtempSync(join(tmpdir(), 'garage-uploads-'));
+    app = createApp(db, undefined, { uploadsDir: uploads });
+  });
+  afterEach(() => rmSync(uploads, { recursive: true, force: true }));
+
+  function upload(fields: Record<string, string>, file = new File(['%PDF-1.4 test'], 'carte grise.pdf', { type: 'application/pdf' })) {
+    const form = new FormData();
+    form.set('file', file);
+    for (const [k, v] of Object.entries(fields)) form.set(k, v);
+    return app.request('/api/documents', { method: 'POST', body: form });
+  }
+
+  it('stores a file with its details, serves it back, and deletes both', async () => {
+    const car = await createVehicle('Car');
+    const res = await upload({ ownerKind: 'vehicle', ownerId: car.id, type: 'registration', expiryDate: '2027-01-31' });
+    expect(res.status).toBe(201);
+    const doc = (await res.json()) as GarageDocument;
+    expect(doc).toMatchObject({
+      vehicleId: car.id,
+      type: 'registration',
+      fileName: 'carte grise.pdf',
+      contentType: 'application/pdf',
+      expiryDate: '2027-01-31',
+    });
+    expect((await snapshot()).documents).toEqual([doc]);
+
+    const file = await app.request(`/api/documents/${doc.id}/file`);
+    expect(file.headers.get('content-type')).toBe('application/pdf');
+    expect(await file.text()).toBe('%PDF-1.4 test');
+
+    await call('PUT', `/api/documents/${doc.id}`, { type: 'registration', title: 'Carte grise', expiryDate: null });
+    expect((await snapshot()).documents[0]).toMatchObject({ title: 'Carte grise', expiryDate: null });
+
+    expect((await call('DELETE', `/api/documents/${doc.id}`)).status).toBe(204);
+    expect(readdirSync(uploads)).toEqual([]);
+  });
+
+  it('refuses files that are not PDFs or photos', async () => {
+    const car = await createVehicle('Car');
+    const res = await upload(
+      { ownerKind: 'vehicle', ownerId: car.id, type: 'other' },
+      new File(['x'], 'run.exe', { type: 'application/x-msdownload' }),
+    );
+    expect(res.status).toBe(415);
+  });
+
+  it('attaches to a Service and is deleted with it', async () => {
+    const bike = await createVehicle();
+    const task = await createTask(bike.id);
+    await call('PUT', '/api/services/svc-00001', {
+      id: 'svc-00001',
+      vehicleId: bike.id,
+      date: '2026-10-01',
+      odometer: 1,
+      taskIds: [task.id],
+    });
+    const doc = (await (await upload({ ownerKind: 'service', ownerId: 'svc-00001', type: 'invoice' })).json()) as GarageDocument;
+    expect(doc.vehicleId).toBe(bike.id);
+    await call('DELETE', '/api/services/svc-00001');
+    expect((await snapshot()).documents).toEqual([]);
+    expect(readdirSync(uploads)).toEqual([]);
+  });
+
+  it('refuses to attach to something of another Garage', async () => {
+    db.prepare(`INSERT INTO garages (id, name) VALUES ('friend', 'Friend')`).run();
+    const car = await createVehicle('Mine');
+    const friendApp = createApp(db, 'friend', { uploadsDir: uploads });
+    const form = new FormData();
+    form.set('file', new File(['x'], 'a.pdf', { type: 'application/pdf' }));
+    form.set('ownerKind', 'vehicle');
+    form.set('ownerId', car.id);
+    form.set('type', 'other');
+    expect((await friendApp.request('/api/documents', { method: 'POST', body: form })).status).toBe(404);
+  });
+});
+
 describe('garage isolation', () => {
   it('never shows another Garage’s vehicles', async () => {
     db.prepare(`INSERT INTO garages (id, name) VALUES ('friend', 'Friend')`).run();
@@ -375,6 +527,8 @@ describe('migrations', () => {
     old.exec('ALTER TABLE maintenance_tasks DROP COLUMN official_interval_km');
     old.exec('ALTER TABLE maintenance_tasks DROP COLUMN official_interval_months');
     old.exec('ALTER TABLE maintenance_tasks DROP COLUMN workshop_notes');
+    old.exec('ALTER TABLE vehicles DROP COLUMN first_registration');
+    for (const table of ['documents', 'modifications', 'inspection_defects', 'technical_inspections']) old.exec(`DROP TABLE ${table}`);
     for (const table of [
       'parts_used',
       'task_specs',

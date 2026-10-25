@@ -12,7 +12,7 @@ const clientDir = resolve(process.env.CLIENT_DIR ?? './dist/client');
 
 mkdirSync(dataDir, { recursive: true });
 const db = openDatabase(join(dataDir, 'garage.sqlite'), join(dataDir, 'backups'));
-const app = createApp(db);
+const app = createApp(db, undefined, { uploadsDir: join(dataDir, 'uploads') });
 
 if (existsSync(clientDir)) {
   const indexHtml = readFileSync(join(clientDir, 'index.html'), 'utf8');

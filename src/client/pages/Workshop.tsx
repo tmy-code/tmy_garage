@@ -3,7 +3,7 @@ import { todayIso } from '../../shared/dates.ts';
 import { vehicleDue } from '../../shared/due.ts';
 import type { PartUnit, VehicleSpecKind } from '../../shared/schemas.ts';
 import type { FitmentPosition, MaintenanceTask, PartSpec, PartUsed, Snapshot, Vehicle, VehicleSpec } from '../../shared/types.ts';
-import { fitments, lastUsed, partSpecsOf, SHOPPING_HORIZON_DAYS, shoppingList, type PartUsage } from '../../shared/workshop.ts';
+import { fitments, lastUsed, partSpecsOf, SHOPPING_HORIZON_DAYS, shoppingList, type FittedItem } from '../../shared/workshop.ts';
 import { Field, Layout, NeedsConnection, StatusChip } from '../components.tsx';
 import {
   describeDue,
@@ -392,15 +392,22 @@ function PositionEditor({
   );
 }
 
-function FittedLine({ usage, estimatedOdometer, t }: { usage: PartUsage; estimatedOdometer: number | null; t: Messages }) {
+function FittedLine({ item, estimatedOdometer, t }: { item: FittedItem; estimatedOdometer: number | null; t: Messages }) {
   const since =
-    estimatedOdometer !== null && estimatedOdometer > usage.odometer ? t.workshop.since(formatKm(estimatedOdometer - usage.odometer)) : '';
+    estimatedOdometer !== null && item.odometer !== null && estimatedOdometer > item.odometer
+      ? t.workshop.since(formatKm(estimatedOdometer - item.odometer))
+      : '';
   return (
     <>
-      <span>{describePart(usage.part)}</span>
+      <span>
+        {item.modification ? '🛠️ ' : ''}
+        {item.label}
+      </span>
       <span className="muted">
-        {t.workshop.fittedOn(formatDate(usage.date, t), formatKm(usage.odometer))}
-        {since}
+        {item.odometer !== null
+          ? t.workshop.fittedOn(formatDate(item.date, t), formatKm(item.odometer))
+          : t.workshop.fittedOnDate(formatDate(item.date, t))}
+        {item.modification?.removedDate ? t.workshop.removedOn(formatDate(item.modification.removedDate, t)) : since}
       </span>
     </>
   );
@@ -449,7 +456,7 @@ export function FittedPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: 
                   </button>
                 </div>
                 {current ? (
-                  <FittedLine usage={current} estimatedOdometer={usage.estimatedOdometer} t={t} />
+                  <FittedLine item={current} estimatedOdometer={usage.estimatedOdometer} t={t} />
                 ) : (
                   <span className="muted">{t.workshop.nothingFitted}</span>
                 )}
@@ -460,7 +467,7 @@ export function FittedPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: 
                     </summary>
                     {previous.map((p, i) => (
                       <p key={i} className="history-row">
-                        <FittedLine usage={p} estimatedOdometer={null} t={t} />
+                        <FittedLine item={p} estimatedOdometer={null} t={t} />
                       </p>
                     ))}
                   </details>

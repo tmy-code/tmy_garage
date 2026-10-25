@@ -10,6 +10,7 @@ import { formatKm, parseNumber, partName } from '../format.ts';
 import { useT, type Messages } from '../i18n.ts';
 import { navigate } from '../router.ts';
 import { enqueue, online, useStore } from '../store.ts';
+import { DocumentsPanel } from './Papers.tsx';
 
 /** A Part Used as typed in the form: numbers stay text until saved. */
 interface PartDraft {
@@ -319,6 +320,9 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
           </button>
         ) : null}
       </form>
+      {existing && !pending ? (
+        <DocumentsPanel snapshot={snapshot} ownerKind="service" ownerId={existing.id} defaultType="invoice" title={t.papers.invoices} />
+      ) : null}
     </Layout>
   );
 }

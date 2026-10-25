@@ -14,7 +14,7 @@ _Avoid_: Car (when meaning any vehicle), bike, asset, archived
 
 ### In the French interface
 
-The app speaks English and French. French screens use: Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Due Date → échéance, Interval → intervalle, Vehicle Spec → caractéristique, Torque Spec → couple de serrage, Required Tool → outil, Workshop Notes → notes d’atelier, Standard Part → pièce standard, Part Spec → spécification de pièce, Required Part → pièce nécessaire, Part Used → pièce utilisée, Fitment Position → emplacement, Shopping List → liste de courses.
+The app speaks English and French. French screens use: Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Due Date → échéance, Interval → intervalle, Vehicle Spec → caractéristique, Torque Spec → couple de serrage, Required Tool → outil, Workshop Notes → notes d’atelier, Standard Part → pièce standard, Part Spec → spécification de pièce, Required Part → pièce nécessaire, Part Used → pièce utilisée, Fitment Position → emplacement, Shopping List → liste de courses, Technical Inspection → contrôle technique, Inspection Defect → défaillance, Modification → modification, Document → document.
 
 ## Maintenance
 
@@ -67,7 +67,7 @@ _Avoid_: Procedure, instructions, how-to
 ## Inspections
 
 **Technical Inspection**:
-The regulatory roadworthiness check of a Vehicle by an approved centre (contrôle technique), with date, Odometer Reading, result and Inspection Defects. Not a Service: the user does not perform it, and its rhythm is set by regulation from first registration, not by an Interval.
+The regulatory roadworthiness check of a Vehicle by an approved centre (contrôle technique), with date, Odometer Reading, result and Inspection Defects. Not a Service: the user does not perform it, and its rhythm is set by regulation from first registration, not by an Interval. The next one is due by the date printed on the last report; without one it is estimated from the regulatory rhythm.
 _Avoid_: CT, MOT, contrôle
 
 **Inspection Defect**:
@@ -111,7 +111,7 @@ _Avoid_: Stock, inventory, order
 ## Documents
 
 **Document**:
-A stored file (PDF or photo) of a given type, with optional issue and expiry dates, attached to exactly one Vehicle, Insurance Policy, Cover, Claim, Service or Modification (e.g. carte grise, mémo véhicule assuré, invoice, owner's manual).
+A stored file (PDF or photo) of a given type, with optional issue and expiry dates, attached to exactly one Vehicle, Insurance Policy, Cover, Claim, Service, Modification or Technical Inspection (e.g. carte grise, mémo véhicule assuré, invoice, owner's manual).
 _Avoid_: File, attachment, paper
 
 ## Insurance

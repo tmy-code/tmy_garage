@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { daysBetween, todayIso } from '../../shared/dates.ts';
 import { vehicleDue } from '../../shared/due.ts';
+import { expiringDocuments, nextInspection, openDefects } from '../../shared/inspections.ts';
 import type { Snapshot, Vehicle } from '../../shared/types.ts';
 import { LanguageSwitch, Layout, StatusChip } from '../components.tsx';
 import { describeDue, formatDate, formatKm } from '../format.ts';
@@ -73,6 +74,9 @@ function VehicleCard({ vehicle, snapshot, today }: { vehicle: Vehicle; snapshot:
   const next = due.slice(0, Math.max(onPhone, WIDE_PREVIEW));
   const taskName = (id: string) => snapshot.tasks.find((task) => task.id === id)?.name ?? '';
   const staleDays = usage.latest ? daysBetween(usage.latest.date, today) : null;
+  const inspection = nextInspection(snapshot, vehicle, today);
+  const defects = openDefects(snapshot, vehicle).length;
+  const expiring = expiringDocuments(snapshot, vehicle.id, today);
 
   return (
     <a className="card vehicle-card" href={`#/vehicles/${vehicle.id}`}>
@@ -89,6 +93,30 @@ function VehicleCard({ vehicle, snapshot, today }: { vehicle: Vehicle; snapshot:
       </div>
       {due.length === 0 ? <p className="muted">{t.dashboard.noTasks}</p> : null}
       <ul className="due-list">
+        {inspection.dueDate && (inspection.status === 'overdue' || inspection.status === 'dueSoon') ? (
+          <li>
+            <span className={`chip chip-${inspection.status}`}>{t.status[inspection.status]}</span>
+            <span className="due-name">{t.papers.nextInspection}</span>
+            <span className="due-text">{t.papers.dueBy(formatDate(inspection.dueDate, t))}</span>
+          </li>
+        ) : null}
+        {defects > 0 ? (
+          <li>
+            <span className="chip chip-dueSoon">{t.status.dueSoon}</span>
+            <span className="due-name">{t.papers.openDefects(defects)}</span>
+          </li>
+        ) : null}
+        {expiring.map((d) => (
+          <li key={d.id}>
+            <span className={`chip chip-${d.expiryDate! < today ? 'overdue' : 'dueSoon'}`}>
+              {t.status[d.expiryDate! < today ? 'overdue' : 'dueSoon']}
+            </span>
+            <span className="due-name">{d.title ?? t.papers.types[d.type]}</span>
+            <span className="due-text">
+              {d.expiryDate! < today ? t.papers.expired(formatDate(d.expiryDate!, t)) : t.papers.expires(formatDate(d.expiryDate!, t))}
+            </span>
+          </li>
+        ))}
         {next.map((d, i) => (
           <li key={d.taskId} className={i >= onPhone ? 'wide-only' : undefined}>
             <StatusChip status={d.status} />

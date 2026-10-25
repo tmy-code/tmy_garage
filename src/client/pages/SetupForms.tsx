@@ -49,13 +49,22 @@ export function VehicleForm({ existing }: { existing?: Vehicle }) {
   const [model, setModel] = useState(existing?.model ?? '');
   const [year, setYear] = useState(existing?.year ? String(existing.year) : '');
   const [registration, setRegistration] = useState(existing?.registration ?? '');
+  const [firstRegistration, setFirstRegistration] = useState(existing?.firstRegistration ?? '');
   const { error, disabled, run } = useSubmit();
   const back = existing ? `/vehicles/${existing.id}` : '/';
 
   function submit(event: FormEvent) {
     event.preventDefault();
     void run(async () => {
-      const body = { kind, name, make, model, year: optionalNumber(year, t.setup.year, t), registration };
+      const body = {
+        kind,
+        name,
+        make,
+        model,
+        year: optionalNumber(year, t.setup.year, t),
+        registration,
+        firstRegistration: firstRegistration || null,
+      };
       const saved = existing
         ? await online<Vehicle>('PUT', `/api/vehicles/${existing.id}`, body)
         : await online<Vehicle>('POST', '/api/vehicles', body);
@@ -69,7 +78,14 @@ export function VehicleForm({ existing }: { existing?: Vehicle }) {
       <form onSubmit={submit} className="form">
         <div className="segmented" role="radiogroup" aria-label={t.setup.kind}>
           {(['motorcycle', 'car'] as const).map((k) => (
-            <button type="button" key={k} role="radio" aria-checked={kind === k} className={kind === k ? 'on' : ''} onClick={() => setKind(k)}>
+            <button
+              type="button"
+              key={k}
+              role="radio"
+              aria-checked={kind === k}
+              className={kind === k ? 'on' : ''}
+              onClick={() => setKind(k)}
+            >
               {k === 'car' ? t.setup.car : t.setup.motorcycle}
             </button>
           ))}
@@ -88,6 +104,9 @@ export function VehicleForm({ existing }: { existing?: Vehicle }) {
         </Field>
         <Field label={t.setup.registration}>
           <input value={registration} onChange={(e) => setRegistration(e.target.value.toUpperCase())} maxLength={20} />
+        </Field>
+        <Field label={t.setup.firstRegistration} hint={t.setup.firstRegistrationHint}>
+          <input type="date" value={firstRegistration} onChange={(e) => setFirstRegistration(e.target.value)} />
         </Field>
         {error ? <p className="banner banner-error">{error}</p> : null}
         <Submit disabled={disabled}>{existing ? t.setup.save : t.setup.addVehicle}</Submit>
@@ -109,7 +128,11 @@ export function SellForm({ vehicle }: { vehicle: Vehicle }) {
     void run(async () => {
       const p = parseNumber(price);
       if (p !== null && (Number.isNaN(p) || p < 0)) throw new Error(t.setup.priceError);
-      await online('POST', `/api/vehicles/${vehicle.id}/sell`, { date, odometer: optionalNumber(odometer, t.setup.odometerLabel, t), price: p });
+      await online('POST', `/api/vehicles/${vehicle.id}/sell`, {
+        date,
+        odometer: optionalNumber(odometer, t.setup.odometerLabel, t),
+        price: p,
+      });
       navigate(back, { replace: true });
     });
   }
