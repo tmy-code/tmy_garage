@@ -13,6 +13,7 @@ import {
   VehicleInsurancePage,
 } from './pages/Insurance.tsx';
 import { DocumentsPage, InspectionForm, InspectionsPage, ModificationForm, ModificationsPage } from './pages/Papers.tsx';
+import { RemindersPage } from './pages/Reminders.tsx';
 import { ReadingForm, ServiceForm } from './pages/ServiceForm.tsx';
 import { CopyTasks, SellForm, TaskForm, VehicleForm } from './pages/SetupForms.tsx';
 import { VehiclePage } from './pages/VehiclePage.tsx';
@@ -53,6 +54,7 @@ export function App() {
   if (section === undefined) return <Dashboard snapshot={snapshot} />;
   if (section === 'shopping') return <ShoppingPage snapshot={snapshot} />;
   if (section === 'insurance') return <InsurancePage snapshot={snapshot} />;
+  if (section === 'reminders') return <RemindersPage />;
   if (section === 'vehicles' && id === 'new') return <VehicleForm />;
   if (section === 'vehicles') {
     if (!vehicle) return <NotFound what="vehicle" />;

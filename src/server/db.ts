@@ -302,6 +302,31 @@ const MIGRATIONS: string[] = [
   ALTER TABLE documents_new RENAME TO documents;
   CREATE INDEX documents_owner ON documents (owner_kind, owner_id);
   `,
+  `
+  -- A device (phone, browser) that asked to receive Reminders, as handed over by its browser's push service.
+  CREATE TABLE push_subscriptions (
+    endpoint TEXT PRIMARY KEY,
+    garage_id TEXT NOT NULL REFERENCES garages(id),
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    lang TEXT NOT NULL CHECK (lang IN ('en', 'fr')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Which Reminders were already sent, so each one goes out once per status (and overdue ones weekly).
+  CREATE TABLE reminders_sent (
+    garage_id TEXT NOT NULL REFERENCES garages(id),
+    key TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('dueSoon', 'overdue')),
+    sent_on TEXT NOT NULL,
+    PRIMARY KEY (garage_id, key, status)
+  );
+
+  CREATE TABLE reminder_runs (
+    garage_id TEXT PRIMARY KEY REFERENCES garages(id),
+    last_date TEXT NOT NULL
+  );
+  `,
 ];
 
 function schemaVersion(db: DatabaseSync): number {

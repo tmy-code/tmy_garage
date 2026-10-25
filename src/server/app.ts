@@ -18,6 +18,8 @@ import {
   partSpecInput,
   policyInput,
   positionInput,
+  pushEndpointInput,
+  pushSubscriptionInput,
   quoteInput,
   sellInput,
   serviceInput,
@@ -49,7 +51,10 @@ import type {
 } from '../shared/types.ts';
 import { STANDARD_PARTS } from '../shared/catalogue.ts';
 import type { ClaimInput, TermInput, VehicleInput, VehicleKind } from '../shared/schemas.ts';
+import { todayIso } from '../shared/dates.ts';
 import { DEFAULT_GARAGE_ID } from './db.ts';
+import type { PushSender } from './push.ts';
+import { sendReminders, testMessage } from './reminders.ts';
 
 type ErrorStatus = 400 | 404 | 409 | 413 | 415 | 422 | 503;
 
@@ -216,6 +221,8 @@ export const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
 export interface AppOptions {
   /** Where Document files are kept; uploads are refused when not set. */
   uploadsDir?: string;
+  /** Sends Reminders to subscribed devices; the Reminders API answers 503 when not set. */
+  push?: PushSender;
 }
 
 const toPartUsed = (r: Row): PartUsed => ({
@@ -240,32 +247,8 @@ function groupBy<T>(rows: Row[], key: string, map: (r: Row) => T): Map<string, T
   return groups;
 }
 
-/**
- * The HTTP API. Every query is scoped to one Garage; until users exist, that is the default Garage.
- * Services and Odometer Readings are written with PUT and a client-generated id, so the phone's
- * offline send queue can safely replay them.
- */
-export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID, { uploadsDir }: AppOptions = {}): Hono {
-  const app = new Hono();
-  if (uploadsDir) mkdirSync(uploadsDir, { recursive: true });
-
-  function vehicleOrThrow(id: string): Row {
-    const row = db.prepare('SELECT * FROM vehicles WHERE id = ? AND garage_id = ?').get(id, garageId) as Row | undefined;
-    if (!row) throw new HttpError(404, 'Vehicle not found');
-    return row;
-  }
-
-  function taskOrThrow(id: string): Row {
-    const row = db
-      .prepare(
-        `SELECT t.* FROM maintenance_tasks t JOIN vehicles v ON v.id = t.vehicle_id
-         WHERE t.id = ? AND v.garage_id = ?`,
-      )
-      .get(id, garageId) as Row | undefined;
-    if (!row) throw new HttpError(404, 'Maintenance Task not found');
-    return row;
-  }
-
+/** Reads one Garage's data. Every query is scoped to that Garage. */
+function garageReader(db: DatabaseSync, garageId: string) {
   /** Rows of a table whose vehicle_id belongs to this Garage, optionally narrowed by an extra condition. */
   function ownedRows(table: string, where = '1', ...params: (string | number)[]): Row[] {
     return db
@@ -274,12 +257,6 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
          WHERE v.garage_id = ? AND ${where} ORDER BY x.created_at`,
       )
       .all(garageId, ...params) as Row[];
-  }
-
-  function ownedRowOrThrow(table: string, id: string, what: string): Row {
-    const row = ownedRows(table, 'x.id = ?', id)[0];
-    if (!row) throw new HttpError(404, `${what} not found`);
-    return row;
   }
 
   /** Workshop data of one Task, or of all this Garage's Tasks when omitted. */
@@ -301,22 +278,6 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       result.set(id, { requiredParts: parts.get(id) ?? [], tools: tools.get(id) ?? [], specIds: specs.get(id) ?? [] });
     }
     return result;
-  }
-
-  function loadTask(id: string): MaintenanceTask {
-    return toTask(taskOrThrow(id), workshops(id).get(id));
-  }
-
-  function transaction<T>(fn: () => T): T {
-    db.exec('BEGIN');
-    try {
-      const result = fn();
-      db.exec('COMMIT');
-      return result;
-    } catch (error) {
-      db.exec('ROLLBACK');
-      throw error;
-    }
   }
 
   function snapshot(): Snapshot {
@@ -443,6 +404,78 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     }));
   }
 
+  function toInspection(r: Row): TechnicalInspection {
+    const defects = db.prepare('SELECT * FROM inspection_defects WHERE inspection_id = ? ORDER BY sort').all(r.id) as Row[];
+    return {
+      id: r.id,
+      vehicleId: r.vehicle_id,
+      date: r.date,
+      odometer: r.odometer,
+      centre: r.centre,
+      result: r.result,
+      nextDueDate: r.next_due_date,
+      notes: r.notes,
+      defects: defects.map((d) => ({ description: d.description, severity: d.severity, fixedServiceId: d.fixed_service_id })),
+    };
+  }
+
+  return { ownedRows, workshops, snapshot, policies, toInspection };
+}
+
+/** Everything in one Garage, as the app downloads it. */
+export function readSnapshot(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID): Snapshot {
+  return garageReader(db, garageId).snapshot();
+}
+
+/**
+ * The HTTP API. Every query is scoped to one Garage; until users exist, that is the default Garage.
+ * Services and Odometer Readings are written with PUT and a client-generated id, so the phone's
+ * offline send queue can safely replay them.
+ */
+export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID, { uploadsDir, push }: AppOptions = {}): Hono {
+  const app = new Hono();
+  const { ownedRows, workshops, snapshot, policies, toInspection } = garageReader(db, garageId);
+  if (uploadsDir) mkdirSync(uploadsDir, { recursive: true });
+
+  function vehicleOrThrow(id: string): Row {
+    const row = db.prepare('SELECT * FROM vehicles WHERE id = ? AND garage_id = ?').get(id, garageId) as Row | undefined;
+    if (!row) throw new HttpError(404, 'Vehicle not found');
+    return row;
+  }
+
+  function taskOrThrow(id: string): Row {
+    const row = db
+      .prepare(
+        `SELECT t.* FROM maintenance_tasks t JOIN vehicles v ON v.id = t.vehicle_id
+         WHERE t.id = ? AND v.garage_id = ?`,
+      )
+      .get(id, garageId) as Row | undefined;
+    if (!row) throw new HttpError(404, 'Maintenance Task not found');
+    return row;
+  }
+
+  function ownedRowOrThrow(table: string, id: string, what: string): Row {
+    const row = ownedRows(table, 'x.id = ?', id)[0];
+    if (!row) throw new HttpError(404, `${what} not found`);
+    return row;
+  }
+
+  function loadTask(id: string): MaintenanceTask {
+    return toTask(taskOrThrow(id), workshops(id).get(id));
+  }
+
+  function transaction<T>(fn: () => T): T {
+    db.exec('BEGIN');
+    try {
+      const result = fn();
+      db.exec('COMMIT');
+      return result;
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
   function policyOrThrow(id: string): InsurancePolicy {
     const policy = policies(id)[0];
     if (!policy) throw new HttpError(404, 'Insurance Policy not found');
@@ -468,21 +501,6 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     const row = db.prepare('SELECT * FROM documents WHERE id = ? AND garage_id = ?').get(id, garageId) as Row | undefined;
     if (!row) throw new HttpError(404, 'Document not found');
     return row;
-  }
-
-  function toInspection(r: Row): TechnicalInspection {
-    const defects = db.prepare('SELECT * FROM inspection_defects WHERE inspection_id = ? ORDER BY sort').all(r.id) as Row[];
-    return {
-      id: r.id,
-      vehicleId: r.vehicle_id,
-      date: r.date,
-      odometer: r.odometer,
-      centre: r.centre,
-      result: r.result,
-      nextDueDate: r.next_due_date,
-      notes: r.notes,
-      defects: defects.map((d) => ({ description: d.description, severity: d.severity, fixedServiceId: d.fixed_service_id })),
-    };
   }
 
   /** Removes the Documents attached to something being deleted, files included. */
@@ -1331,6 +1349,55 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       .get(id, garageId);
     if (!row) throw new HttpError(404, 'Odometer Reading not found');
     db.prepare('DELETE FROM odometer_readings WHERE id = ?').run(id);
+    return c.body(null, 204);
+  });
+
+  // --- Reminders (push notifications) ---
+
+  function pushOrThrow(): PushSender {
+    if (!push) throw new HttpError(503, 'Reminders are not set up on this server');
+    return push;
+  }
+
+  app.get('/api/push', (c) => c.json({ publicKey: pushOrThrow().publicKey }));
+
+  app.put('/api/push/subscription', async (c) => {
+    const sender = pushOrThrow();
+    const s = await parse(c, pushSubscriptionInput);
+    const known = db.prepare('SELECT 1 FROM push_subscriptions WHERE endpoint = ? AND garage_id = ?').get(s.endpoint, garageId);
+    db.prepare(
+      `INSERT INTO push_subscriptions (endpoint, garage_id, p256dh, auth, lang) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (endpoint) DO UPDATE SET garage_id = excluded.garage_id, p256dh = excluded.p256dh, auth = excluded.auth, lang = excluded.lang`,
+    ).run(s.endpoint, garageId, s.keys.p256dh, s.keys.auth, s.lang);
+    if (!known) {
+      // A new device hears straight away about what is already due, or gets a confirmation when nothing is.
+      const device = { endpoint: s.endpoint, p256dh: s.keys.p256dh, auth: s.keys.auth };
+      void sendReminders(db, sender, garageId, snapshot(), todayIso())
+        .then((delivered) => (delivered === 0 ? sender.send(device, testMessage(s.lang)) : undefined))
+        .catch((error) => console.error('Push notification failed', error));
+    }
+    return c.body(null, 204);
+  });
+
+  app.post('/api/push/unsubscribe', async (c) => {
+    const { endpoint } = await parse(c, pushEndpointInput);
+    db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ? AND garage_id = ?').run(endpoint, garageId);
+    return c.body(null, 204);
+  });
+
+  app.post('/api/push/test', async (c) => {
+    const sender = pushOrThrow();
+    const { endpoint } = await parse(c, pushEndpointInput);
+    const device = db.prepare('SELECT * FROM push_subscriptions WHERE endpoint = ? AND garage_id = ?').get(endpoint, garageId) as
+      Row | undefined;
+    if (!device) throw new HttpError(404, 'This device is not subscribed');
+    const result = await sender.send({ endpoint, p256dh: device.p256dh, auth: device.auth }, testMessage(device.lang)).catch(() => {
+      throw new HttpError(503, 'The push service could not be reached');
+    });
+    if (result === 'gone') {
+      db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(endpoint);
+      throw new HttpError(404, 'This device is not subscribed');
+    }
     return c.body(null, 204);
   });
 

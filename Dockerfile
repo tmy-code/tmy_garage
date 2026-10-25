@@ -10,7 +10,9 @@ RUN npm run build
 # --- Runtime: the Node server runs the TypeScript sources directly (Node 24 strips types) ---
 FROM node:24-slim
 WORKDIR /app
+# TZ sets when "today" starts and the hour Reminders go out (REMINDER_HOUR, default 9).
 ENV NODE_ENV=production \
+    TZ=Europe/Paris \
     PORT=3000 \
     DATA_DIR=/data \
     CLIENT_DIR=/app/dist/client

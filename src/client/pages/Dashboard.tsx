@@ -51,6 +51,9 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
           <a className="button" href="#/insurance">
             🛡️ {t.insurance.title}
           </a>
+          <a className="button" href="#/reminders">
+            🔔 {t.reminders.title}
+          </a>
         </div>
       ) : null}
       {sold.length > 0 ? (

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { DueInfo } from '../shared/due.ts';
 import { formatDate } from './format.ts';
 import { LANGS, setLang, useT } from './i18n.ts';
+import { refreshPushSubscription } from './push.ts';
 import { dismissRejected, sync, useStore } from './store.ts';
 
 export function Layout({ title, back, actions, children }: { title: string; back?: string; actions?: ReactNode; children: ReactNode }) {
@@ -115,7 +116,11 @@ export function LanguageSwitch() {
           role="radio"
           aria-checked={t.lang === code}
           className={t.lang === code ? 'on' : ''}
-          onClick={() => setLang(code)}
+          onClick={() => {
+            setLang(code);
+            // Reminders are written in the language the device last chose.
+            void refreshPushSubscription();
+          }}
         >
           {label}
         </button>

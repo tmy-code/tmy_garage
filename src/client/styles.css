@@ -450,6 +450,11 @@ textarea {
   color: var(--overdue);
 }
 
+.banner-ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
 .banner-warn {
   background: var(--soon-bg);
   color: var(--soon);

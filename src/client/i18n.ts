@@ -357,6 +357,24 @@ const en = {
     confirmDeleteModification: 'Delete this modification and its documents?',
     invoices: 'Invoices and photos',
   },
+  reminders: {
+    title: 'Reminders',
+    intro:
+      'Get a notification on this device when a Maintenance Task, a technical inspection, a document or an insurance renewal becomes due soon or overdue. The garage checks every morning, and repeats overdue reminders once a week.',
+    eachDevice: 'Turn them on on each phone or computer you want notified.',
+    insecure: 'Notifications only work on the app’s secure address (starting with https://).',
+    needsInstall:
+      'On an iPhone or iPad, add the app to your Home Screen first: tap Share, then “Add to Home Screen”, and open the app from the new icon.',
+    unsupported: 'This browser can’t receive notifications.',
+    blocked: 'Notifications are blocked for this app. Allow them in the browser or phone settings, then come back here.',
+    refused: 'Notifications weren’t allowed. Tap the button again and choose Allow.',
+    on: 'Reminders are on for this device.',
+    turnOn: 'Turn on reminders on this device',
+    turnOff: 'Turn off on this device',
+    test: 'Send a test notification',
+    testSent: 'Test sent: it should arrive in a few seconds.',
+    working: 'Just a moment…',
+  },
   insurance: {
     title: 'Insurance',
     policies: 'Policies',
@@ -923,6 +941,25 @@ const fr: Messages = {
     deleteModification: 'Supprimer la modification',
     confirmDeleteModification: 'Supprimer cette modification et ses documents ?',
     invoices: 'Factures et photos',
+  },
+  reminders: {
+    title: 'Rappels',
+    intro:
+      'Recevez une notification sur cet appareil quand une tâche d’entretien, un contrôle technique, un document ou une échéance d’assurance approche ou est dépassé. Le garage vérifie chaque matin et répète les rappels en retard une fois par semaine.',
+    eachDevice: 'Activez-les sur chaque téléphone ou ordinateur à prévenir.',
+    insecure: 'Les notifications ne fonctionnent qu’avec l’adresse sécurisée de l’app (commençant par https://).',
+    needsInstall:
+      'Sur iPhone ou iPad, ajoutez d’abord l’app à l’écran d’accueil : touchez Partager, puis « Sur l’écran d’accueil », et ouvrez l’app depuis la nouvelle icône.',
+    unsupported: 'Ce navigateur ne peut pas recevoir de notifications.',
+    blocked:
+      'Les notifications sont bloquées pour cette app. Autorisez-les dans les réglages du navigateur ou du téléphone, puis revenez ici.',
+    refused: 'Les notifications n’ont pas été autorisées. Touchez à nouveau le bouton et choisissez Autoriser.',
+    on: 'Les rappels sont activés sur cet appareil.',
+    turnOn: 'Activer les rappels sur cet appareil',
+    turnOff: 'Désactiver sur cet appareil',
+    test: 'Envoyer une notification de test',
+    testSent: 'Test envoyé : il devrait arriver dans quelques secondes.',
+    working: 'Un instant…',
   },
   insurance: {
     title: 'Assurance',

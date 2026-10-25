@@ -307,6 +307,15 @@ export const quoteInput = z.object({
   notes: optionalText(2000),
 });
 
+/** What a browser hands over when it agrees to receive notifications (PushSubscription.toJSON()), plus its language. */
+export const pushSubscriptionInput = z.object({
+  endpoint: z.string().url().max(2000).startsWith('https://'),
+  keys: z.object({ p256dh: z.string().min(1).max(200), auth: z.string().min(1).max(100) }),
+  lang: z.enum(['en', 'fr']),
+});
+
+export const pushEndpointInput = z.object({ endpoint: z.string().max(2000) });
+
 export type VehicleKind = z.infer<typeof vehicleKind>;
 export type OvernightParking = z.infer<typeof overnightParking>;
 export type CoverLevel = z.infer<typeof coverLevel>;
