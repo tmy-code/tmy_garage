@@ -6,7 +6,7 @@ import type { PartUsed, Service, Snapshot, Vehicle } from '../../shared/types.ts
 import { lastUsed, partSpecsOf } from '../../shared/workshop.ts';
 import { newId } from '../api.ts';
 import { Field, Layout, StatusChip } from '../components.tsx';
-import { formatKm, parseNumber, partName } from '../format.ts';
+import { formatKm, parseNumber, partName, taskName } from '../format.ts';
 import { useT, type Messages } from '../i18n.ts';
 import { navigate } from '../router.ts';
 import { enqueue, online, useStore } from '../store.ts';
@@ -211,7 +211,7 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
                 {due.map((d) => (
                   <label key={d.taskId} className={`check ${selected.has(d.taskId) ? 'check-on' : ''}`}>
                     <input type="checkbox" checked={selected.has(d.taskId)} onChange={() => toggle(d.taskId)} />
-                    <span className="due-name">{tasks.get(d.taskId)?.name}</span>
+                    <span className="due-name">{tasks.get(d.taskId) ? taskName(tasks.get(d.taskId)!, t) : null}</span>
                     <StatusChip status={d.status} />
                   </label>
                 ))}

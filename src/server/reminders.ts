@@ -15,7 +15,7 @@ const MAX_LINES = 5;
 export type ReminderStatus = 'dueSoon' | 'overdue';
 
 export type ReminderSubject =
-  | { kind: 'task'; name: string }
+  | { kind: 'task'; name: string; nameFr: string | null }
   | { kind: 'inspection' }
   | { kind: 'document'; title: string | null; type: DocumentType }
   | { kind: 'renewal'; insurer: string; policyId: string };
@@ -35,12 +35,12 @@ export function currentReminders(snapshot: Snapshot, today: IsoDate): Reminder[]
   for (const vehicle of snapshot.vehicles.filter((v) => v.status === 'owned')) {
     for (const d of vehicleDue(snapshot, vehicle.id, today).due) {
       if (d.status !== 'overdue' && d.status !== 'dueSoon') continue;
-      const name = snapshot.tasks.find((t) => t.id === d.taskId)?.name ?? '';
+      const task = snapshot.tasks.find((t) => t.id === d.taskId);
       reminders.push({
         key: `task:${d.taskId}:${d.lastDone?.date ?? ''}`,
         status: d.status,
         vehicleId: vehicle.id,
-        subject: { kind: 'task', name },
+        subject: { kind: 'task', name: task?.name ?? '', nameFr: task?.nameFr ?? null },
         dueDate: d.dueDate,
       });
     }
@@ -165,10 +165,11 @@ function formatDay(date: IsoDate, locale: string, today: IsoDate): string {
   }).format(Date.UTC(y, m - 1, d));
 }
 
-function subjectLabel(subject: ReminderSubject, text: (typeof TEXT)[ReminderLang]): string {
+function subjectLabel(subject: ReminderSubject, lang: ReminderLang): string {
+  const text = TEXT[lang];
   switch (subject.kind) {
     case 'task':
-      return subject.name;
+      return lang === 'fr' && subject.nameFr ? subject.nameFr : subject.name;
     case 'inspection':
       return text.inspection;
     case 'document':
@@ -199,12 +200,12 @@ export function reminderMessage(reminders: Reminder[], snapshot: Snapshot, lang:
 
   if (only) {
     const vehicle = vehicleName(only.vehicleId);
-    const label = subjectLabel(only.subject, text);
+    const label = subjectLabel(only.subject, lang);
     return { title: vehicle ? `${vehicle} · ${label}` : label, body: whenLabel(only, text, today), url };
   }
   const lines = sorted.slice(0, MAX_LINES).map((r) => {
     const vehicle = vehicleName(r.vehicleId);
-    return `${vehicle ? `${vehicle} · ` : ''}${subjectLabel(r.subject, text)}${text.colon}${whenLabel(r, text, today)}`;
+    return `${vehicle ? `${vehicle} · ` : ''}${subjectLabel(r.subject, lang)}${text.colon}${whenLabel(r, text, today)}`;
   });
   if (sorted.length > MAX_LINES) lines.push(text.more(sorted.length - MAX_LINES));
   const single = vehicles.size === 1 ? vehicleName(sorted[0]!.vehicleId) : null;

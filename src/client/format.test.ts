@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type { DueInfo } from '../shared/due.ts';
-import type { MaintenanceTask } from '../shared/types.ts';
-import { describeDue, describeInterval, describeOfficialInterval, formatDate, formatQuantity } from './format.ts';
+import type { MaintenanceTask, PartSpec } from '../shared/types.ts';
+import {
+  describeDue,
+  describeInterval,
+  describeOfficialInterval,
+  formatDate,
+  formatQuantity,
+  partName,
+  partReferences,
+  taskName,
+} from './format.ts';
 import { messagesFor } from './i18n.ts';
 
 const en = messagesFor('en');
@@ -9,10 +18,24 @@ const fr = messagesFor('fr');
 // Intl separates groups with a narrow no-break space; compare with plain spaces.
 const plain = (s: string) => s.replace(/[  ]/g, ' ');
 
+const part: PartSpec = {
+  id: 'p',
+  vehicleId: 'v',
+  standardPart: null,
+  name: 'Fork seal',
+  nameFr: 'Joint spi',
+  characteristics: null,
+  oemReference: '51490-MKN-D01',
+  partNumbers: null,
+  unit: 'piece',
+  notFitted: false,
+};
+
 const task = (intervalKm: number | null, intervalMonths: number | null): MaintenanceTask => ({
   id: 't',
   vehicleId: 'v',
   name: 'Oil',
+  nameFr: null,
   intervalKm,
   intervalMonths,
   officialIntervalKm: null,
@@ -55,6 +78,22 @@ describe('format in both languages', () => {
     expect(plain(describeOfficialInterval(airFilter, en)!)).toBe('Official: every 30 000 km or 2 years');
     expect(plain(describeOfficialInterval(airFilter, fr)!)).toBe('Constructeur : tous les 30 000 km ou 2 ans');
     expect(describeOfficialInterval(task(6000, 12), en)).toBeNull();
+  });
+
+  it('names Tasks and Parts in the interface language, falling back to English', () => {
+    const oil = { ...task(6000, 12), name: 'Engine oil', nameFr: 'Huile moteur' };
+    expect(taskName(oil, fr)).toBe('Huile moteur');
+    expect(taskName(oil, en)).toBe('Engine oil');
+    expect(taskName({ ...oil, nameFr: null }, fr)).toBe('Engine oil');
+    expect(partName(part, fr)).toBe('Joint spi');
+    expect(partName({ ...part, standardPart: 'engineOil' }, fr)).toBe(fr.workshop.standardParts.engineOil);
+  });
+
+  it('lists the OEM reference before the acceptable part numbers', () => {
+    const filter = { ...part, oemReference: '15410-MFJ-D01', partNumbers: 'HF204, KN-204' };
+    expect(partReferences(filter, en)).toBe('OEM 15410-MFJ-D01 · HF204, KN-204');
+    expect(partReferences({ ...filter, partNumbers: null }, fr)).toBe('Réf. constructeur 15410-MFJ-D01');
+    expect(partReferences({ ...filter, oemReference: null, partNumbers: null }, en)).toBeNull();
   });
 
   it('formats Part quantities in their unit', () => {

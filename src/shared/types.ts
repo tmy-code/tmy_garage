@@ -40,7 +40,9 @@ export interface Vehicle {
 export interface MaintenanceTask {
   id: string;
   vehicleId: string;
+  /** The name in English; nameFr is shown instead in French when given. */
   name: string;
+  nameFr: string | null;
   intervalKm: number | null;
   intervalMonths: number | null;
   /** The Official Interval from the Vehicle's Service Schedule; the stricter of the two applies. */
@@ -82,7 +84,10 @@ export interface PartSpec {
   standardPart: StandardPartKey | null;
   /** Only meaningful for another Part: a Standard Part is named by the interface language. */
   name: string;
+  nameFr: string | null;
   characteristics: string | null;
+  /** The vehicle manufacturer's own part number; partNumbers lists the equivalents that also fit. */
+  oemReference: string | null;
   partNumbers: string | null;
   unit: PartUnit;
   /** A Standard Part this Vehicle does not have (e.g. a timing chain on a belt engine). */

@@ -327,6 +327,11 @@ const MIGRATIONS: string[] = [
     last_date TEXT NOT NULL
   );
   `,
+  `
+  ALTER TABLE maintenance_tasks ADD COLUMN name_fr TEXT;
+  ALTER TABLE part_specs ADD COLUMN name_fr TEXT;
+  ALTER TABLE part_specs ADD COLUMN oem_reference TEXT;
+  `,
 ];
 
 function schemaVersion(db: DatabaseSync): number {

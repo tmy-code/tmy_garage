@@ -78,6 +78,7 @@ export const sellInput = z.object({
 export const taskInput = z
   .object({
     name: z.string().trim().min(1).max(120),
+    nameFr: optionalText(120),
     intervalKm: z
       .number()
       .int()
@@ -132,7 +133,9 @@ export const vehicleSpecInput = z.object({
 
 export const partSpecInput = z.object({
   name: z.string().trim().min(1).max(120),
+  nameFr: optionalText(120),
   characteristics: optionalText(500),
+  oemReference: optionalText(80),
   partNumbers: optionalText(500),
   unit: partUnit,
   notFitted: z.boolean().default(false),

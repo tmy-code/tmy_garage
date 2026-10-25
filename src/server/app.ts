@@ -108,6 +108,7 @@ const toTask = (r: Row, w: Workshop = noWorkshop()): MaintenanceTask => ({
   id: r.id,
   vehicleId: r.vehicle_id,
   name: r.name,
+  nameFr: r.name_fr,
   intervalKm: r.interval_km,
   intervalMonths: r.interval_months,
   officialIntervalKm: r.official_interval_km,
@@ -134,7 +135,9 @@ const toPartSpec = (r: Row): PartSpec => ({
   vehicleId: r.vehicle_id,
   standardPart: r.standard_part,
   name: r.name,
+  nameFr: r.name_fr,
   characteristics: r.characteristics,
+  oemReference: r.oem_reference,
   partNumbers: r.part_numbers,
   unit: r.unit,
   notFitted: r.not_fitted === 1,
@@ -612,12 +615,13 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     const id = randomUUID();
     db.prepare(
       `INSERT INTO maintenance_tasks
-         (id, vehicle_id, name, interval_km, interval_months, official_interval_km, official_interval_months, baseline_date, baseline_odometer)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, vehicle_id, name, name_fr, interval_km, interval_months, official_interval_km, official_interval_months, baseline_date, baseline_odometer)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       id,
       vehicleId,
       t.name,
+      t.nameFr,
       t.intervalKm,
       t.intervalMonths,
       t.officialIntervalKm,
@@ -636,13 +640,22 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     if (fromVehicleId === vehicleId) throw new HttpError(422, 'Cannot copy a Vehicle onto itself');
     const source = db.prepare('SELECT * FROM maintenance_tasks WHERE vehicle_id = ? ORDER BY created_at').all(fromVehicleId) as Row[];
     const insert = db.prepare(
-      `INSERT INTO maintenance_tasks (id, vehicle_id, name, interval_km, interval_months, official_interval_km, official_interval_months)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO maintenance_tasks (id, vehicle_id, name, name_fr, interval_km, interval_months, official_interval_km, official_interval_months)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     // History is not copied: the copies start with no baseline, since they were never done on this Vehicle.
     transaction(() => {
       for (const t of source) {
-        insert.run(randomUUID(), vehicleId, t.name, t.interval_km, t.interval_months, t.official_interval_km, t.official_interval_months);
+        insert.run(
+          randomUUID(),
+          vehicleId,
+          t.name,
+          t.name_fr,
+          t.interval_km,
+          t.interval_months,
+          t.official_interval_km,
+          t.official_interval_months,
+        );
       }
     });
     return c.json({ copied: source.length }, 201);
@@ -653,10 +666,20 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     taskOrThrow(id);
     const t = await parse(c, taskInput);
     db.prepare(
-      `UPDATE maintenance_tasks SET name = ?, interval_km = ?, interval_months = ?, official_interval_km = ?,
+      `UPDATE maintenance_tasks SET name = ?, name_fr = ?, interval_km = ?, interval_months = ?, official_interval_km = ?,
          official_interval_months = ?, baseline_date = ?, baseline_odometer = ?
        WHERE id = ?`,
-    ).run(t.name, t.intervalKm, t.intervalMonths, t.officialIntervalKm, t.officialIntervalMonths, t.baselineDate, t.baselineOdometer, id);
+    ).run(
+      t.name,
+      t.nameFr,
+      t.intervalKm,
+      t.intervalMonths,
+      t.officialIntervalKm,
+      t.officialIntervalMonths,
+      t.baselineDate,
+      t.baselineOdometer,
+      id,
+    );
     return c.json(loadTask(id));
   });
 
@@ -739,14 +762,10 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     vehicleOrThrow(vehicleId);
     const p = await parse(c, partSpecInput);
     const id = randomUUID();
-    db.prepare('INSERT INTO part_specs (id, vehicle_id, name, characteristics, part_numbers, unit) VALUES (?, ?, ?, ?, ?, ?)').run(
-      id,
-      vehicleId,
-      p.name,
-      p.characteristics,
-      p.partNumbers,
-      p.unit,
-    );
+    db.prepare(
+      `INSERT INTO part_specs (id, vehicle_id, name, name_fr, characteristics, oem_reference, part_numbers, unit)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, vehicleId, p.name, p.nameFr, p.characteristics, p.oemReference, p.partNumbers, p.unit);
     return c.json(toPartSpec(ownedRowOrThrow('part_specs', id, 'Part Spec')), 201);
   });
 
@@ -756,20 +775,17 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     const p = await parse(c, partSpecInput);
     if (row.standard_part) {
       // A Standard Part's name and unit come from the catalogue: only its Part Spec is edited.
-      db.prepare('UPDATE part_specs SET characteristics = ?, part_numbers = ?, not_fitted = ? WHERE id = ?').run(
+      db.prepare('UPDATE part_specs SET characteristics = ?, oem_reference = ?, part_numbers = ?, not_fitted = ? WHERE id = ?').run(
         p.characteristics,
+        p.oemReference,
         p.partNumbers,
         p.notFitted ? 1 : 0,
         id,
       );
     } else {
-      db.prepare('UPDATE part_specs SET name = ?, characteristics = ?, part_numbers = ?, unit = ? WHERE id = ?').run(
-        p.name,
-        p.characteristics,
-        p.partNumbers,
-        p.unit,
-        id,
-      );
+      db.prepare(
+        'UPDATE part_specs SET name = ?, name_fr = ?, characteristics = ?, oem_reference = ?, part_numbers = ?, unit = ? WHERE id = ?',
+      ).run(p.name, p.nameFr, p.characteristics, p.oemReference, p.partNumbers, p.unit, id);
     }
     return c.json(toPartSpec(ownedRowOrThrow('part_specs', id, 'Part Spec')));
   });

@@ -5,7 +5,7 @@ import { expiringDocuments, nextInspection, openDefects } from '../../shared/ins
 import { currentCover, renewal } from '../../shared/insurance.ts';
 import type { Snapshot, Vehicle } from '../../shared/types.ts';
 import { LanguageSwitch, Layout, StatusChip } from '../components.tsx';
-import { describeDue, formatDate, formatKm } from '../format.ts';
+import { describeDue, formatDate, formatKm, taskName } from '../format.ts';
 import { useT } from '../i18n.ts';
 
 const ICON: Record<Vehicle['kind'], string> = { car: '🚗', motorcycle: '🏍️' };
@@ -81,7 +81,10 @@ function VehicleCard({ vehicle, snapshot, today }: { vehicle: Vehicle; snapshot:
   const urgent = due.filter((d) => d.status === 'overdue' || d.status === 'dueSoon');
   const onPhone = urgent.length > 0 ? urgent.length : 1;
   const next = due.slice(0, Math.max(onPhone, WIDE_PREVIEW));
-  const taskName = (id: string) => snapshot.tasks.find((task) => task.id === id)?.name ?? '';
+  const nameOf = (id: string) => {
+    const task = snapshot.tasks.find((x) => x.id === id);
+    return task ? taskName(task, t) : '';
+  };
   const staleDays = usage.latest ? daysBetween(usage.latest.date, today) : null;
   const inspection = nextInspection(snapshot, vehicle, today);
   const defects = openDefects(snapshot, vehicle).length;
@@ -142,7 +145,7 @@ function VehicleCard({ vehicle, snapshot, today }: { vehicle: Vehicle; snapshot:
         {next.map((d, i) => (
           <li key={d.taskId} className={i >= onPhone ? 'wide-only' : undefined}>
             <StatusChip status={d.status} />
-            <span className="due-name">{taskName(d.taskId)}</span>
+            <span className="due-name">{nameOf(d.taskId)}</span>
             <span className="due-text">{describeDue(d, t)}</span>
           </li>
         ))}

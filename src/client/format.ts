@@ -25,9 +25,24 @@ export function formatCrm(crm: number, m: Messages = messages()): string {
   return new Intl.NumberFormat(m.locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(crm);
 }
 
+/** A name the user gave in English, with an optional French one shown instead in French. */
+function localName(item: { name: string; nameFr: string | null }, m: Messages): string {
+  return m.lang === 'fr' && item.nameFr ? item.nameFr : item.name;
+}
+
+export function taskName(task: MaintenanceTask, m: Messages = messages()): string {
+  return localName(task, m);
+}
+
 /** A Standard Part is named in the interface language; another Part by the name the user gave it. */
 export function partName(spec: PartSpec, m: Messages = messages()): string {
-  return spec.standardPart ? m.workshop.standardParts[spec.standardPart] : spec.name;
+  return spec.standardPart ? m.workshop.standardParts[spec.standardPart] : localName(spec, m);
+}
+
+/** The OEM reference then the acceptable equivalents, e.g. "OEM 15410-MFJ-D01 · HF204, KN-204"; null when neither is set. */
+export function partReferences(spec: PartSpec, m: Messages = messages()): string | null {
+  const refs = [spec.oemReference ? m.workshop.oem(spec.oemReference) : null, spec.partNumbers].filter(Boolean);
+  return refs.length > 0 ? refs.join(' · ') : null;
 }
 
 /** A Part quantity in its unit, e.g. "3.2 L" or "2 pcs" ("3,2 L", "2 pièces" in French). */

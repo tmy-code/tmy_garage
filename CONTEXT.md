@@ -14,7 +14,7 @@ _Avoid_: Car (when meaning any vehicle), bike, asset, archived
 
 ### In the French interface
 
-The app speaks English and French. French screens use: Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Due Date → échéance, Interval → intervalle, Vehicle Spec → caractéristique, Torque Spec → couple de serrage, Required Tool → outil, Workshop Notes → notes d’atelier, Standard Part → pièce standard, Part Spec → spécification de pièce, Required Part → pièce nécessaire, Part Used → pièce utilisée, Fitment Position → emplacement, Shopping List → liste de courses, Technical Inspection → contrôle technique, Inspection Defect → défaillance, Modification → modification, Document → document, Insurer → assureur, Insurance Policy → contrat, Policy Term → période, Cover → garantie, Driver → conducteur, Claim → sinistre, Quote → devis, Quote Pack → dossier devis, Reminder → rappel.
+The app speaks English and French. French screens use: Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Due Date → échéance, Interval → intervalle, Vehicle Spec → caractéristique, Torque Spec → couple de serrage, Required Tool → outil, Workshop Notes → notes d’atelier, Standard Part → pièce standard, Part Spec → spécification de pièce, OEM Reference → référence constructeur, Required Part → pièce nécessaire, Part Used → pièce utilisée, Fitment Position → emplacement, Shopping List → liste de courses, Technical Inspection → contrôle technique, Inspection Defect → défaillance, Modification → modification, Document → document, Insurer → assureur, Insurance Policy → contrat, Policy Term → période, Cover → garantie, Driver → conducteur, Claim → sinistre, Quote → devis, Quote Pack → dossier devis, Reminder → rappel.
 
 ## Maintenance
 
@@ -85,8 +85,12 @@ A Part every Vehicle of one kind has (e.g. engine oil, oil filter, front tyre fo
 _Avoid_: Part type, category, catalogue entry
 
 **Part Spec**:
-The technical description of what a Vehicle takes for one Part, without quantity: characteristics such as viscosity, API/JASO grade or dimensions, and/or acceptable part numbers (e.g. "engine oil 10W-40, JASO MA2").
+The technical description of what a Vehicle takes for one Part, without quantity: characteristics such as viscosity, API/JASO grade or dimensions, the OEM Reference, and/or acceptable part numbers of equivalents (e.g. "engine oil 10W-40, JASO MA2").
 _Avoid_: Requirement, recommended part
+
+**OEM Reference**:
+The vehicle manufacturer's own part number for a Part on one Vehicle (e.g. a Honda or Renault reference), kept apart from the equivalent part numbers that also fit.
+_Avoid_: Genuine part number, original reference
 
 **Required Part**:
 A Part Spec and the quantity of it a Maintenance Task needs (e.g. "engine oil 10W-40 JASO MA2, 3.2 L").

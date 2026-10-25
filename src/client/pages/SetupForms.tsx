@@ -3,7 +3,7 @@ import { todayIso } from '../../shared/dates.ts';
 import type { OvernightParking } from '../../shared/schemas.ts';
 import type { MaintenanceTask, Snapshot, Vehicle } from '../../shared/types.ts';
 import { Field, Layout, NeedsConnection } from '../components.tsx';
-import { parseNumber } from '../format.ts';
+import { parseNumber, taskName } from '../format.ts';
 import { useT, type Messages } from '../i18n.ts';
 import { navigate } from '../router.ts';
 import { online, useStore } from '../store.ts';
@@ -219,6 +219,7 @@ export function SellForm({ vehicle }: { vehicle: Vehicle }) {
 export function TaskForm({ vehicle, existing }: { vehicle: Vehicle; existing?: MaintenanceTask }) {
   const t = useT();
   const [name, setName] = useState(existing?.name ?? '');
+  const [nameFr, setNameFr] = useState(existing?.nameFr ?? '');
   const [intervalKm, setIntervalKm] = useState(String(existing?.intervalKm ?? ''));
   const [intervalMonths, setIntervalMonths] = useState(String(existing?.intervalMonths ?? ''));
   const [officialKm, setOfficialKm] = useState(String(existing?.officialIntervalKm ?? ''));
@@ -233,6 +234,7 @@ export function TaskForm({ vehicle, existing }: { vehicle: Vehicle; existing?: M
     void run(async () => {
       const body = {
         name,
+        nameFr,
         intervalKm: optionalNumber(intervalKm, t.setup.distanceLabel, t),
         intervalMonths: optionalNumber(intervalMonths, t.setup.monthsLabel, t),
         officialIntervalKm: optionalNumber(officialKm, t.setup.distanceLabel, t),
@@ -249,7 +251,7 @@ export function TaskForm({ vehicle, existing }: { vehicle: Vehicle; existing?: M
   }
 
   function remove() {
-    if (!existing || !window.confirm(t.setup.confirmDeleteTask(existing.name))) return;
+    if (!existing || !window.confirm(t.setup.confirmDeleteTask(taskName(existing, t)))) return;
     void run(async () => {
       await online('DELETE', `/api/tasks/${existing.id}`);
       navigate(back, { replace: true });
@@ -261,7 +263,10 @@ export function TaskForm({ vehicle, existing }: { vehicle: Vehicle; existing?: M
       <NeedsConnection />
       <form onSubmit={submit} className="form">
         <Field label={t.setup.task} hint={t.setup.taskHint}>
-          <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} />
+          <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} lang="en" />
+        </Field>
+        <Field label={t.setup.taskFr} hint={t.setup.taskFrHint}>
+          <input value={nameFr} onChange={(e) => setNameFr(e.target.value)} maxLength={120} lang="fr" />
         </Field>
         <p className="field-label">{t.setup.interval}</p>
         <div className="row">

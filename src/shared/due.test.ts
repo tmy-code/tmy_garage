@@ -8,6 +8,7 @@ function task(overrides: Partial<MaintenanceTask> = {}): MaintenanceTask {
     id: 'oil',
     vehicleId: 'bike',
     name: 'Engine oil and filter change',
+    nameFr: null,
     intervalKm: 6000,
     intervalMonths: 12,
     officialIntervalKm: null,

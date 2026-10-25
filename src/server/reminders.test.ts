@@ -40,6 +40,7 @@ function task(overrides: Partial<MaintenanceTask> = {}): MaintenanceTask {
     id: 't',
     vehicleId: 'v',
     name: 'Oil change',
+    nameFr: null,
     intervalKm: null,
     intervalMonths: 12,
     officialIntervalKm: null,
@@ -184,6 +185,13 @@ describe('reminderMessage', () => {
     ]);
     expect(message.url).toBe('/#/');
     expect(reminderMessage(all, data, 'fr', TODAY).body).toMatch(/^Test bike · Oil change : en retard depuis le 1 janv\./);
+  });
+
+  it('uses a Task’s French name in French', () => {
+    const named = { ...data, tasks: data.tasks.map((t) => ({ ...t, nameFr: 'Vidange' })) };
+    const reminders = currentReminders(named, TODAY);
+    expect(reminderMessage([reminders[0]!], named, 'fr', TODAY).title).toBe('Test bike · Vidange');
+    expect(reminderMessage([reminders[0]!], named, 'en', TODAY).title).toBe('Test bike · Oil change');
   });
 });
 

@@ -5,7 +5,7 @@ import { nextInspection, openDefects } from '../../shared/inspections.ts';
 import { currentCover, renewal } from '../../shared/insurance.ts';
 import type { PartUsed, Snapshot, Vehicle } from '../../shared/types.ts';
 import { Layout, StatusChip } from '../components.tsx';
-import { describeDue, describeInterval, describeOfficialInterval, formatDate, formatKm, formatMoney } from '../format.ts';
+import { describeDue, describeInterval, describeOfficialInterval, formatDate, formatKm, formatMoney, taskName } from '../format.ts';
 import { useT } from '../i18n.ts';
 import { useStore } from '../store.ts';
 import { describePart } from './Workshop.tsx';
@@ -42,7 +42,7 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
         odometer: s.odometer,
         notes: s.notes,
         partsUsed: s.partsUsed,
-        text: s.taskIds.map((id) => tasks.get(id)?.name ?? t.vehicle.deletedTask).join(', '),
+        text: s.taskIds.map((id) => (tasks.get(id) ? taskName(tasks.get(id)!, t) : t.vehicle.deletedTask)).join(', '),
       })),
     ...snapshot.readings.filter((r) => r.vehicleId === vehicle.id).map((r) => ({ kind: 'reading' as const, ...r })),
   ].sort((a, b) => (a.date === b.date ? b.odometer - a.odometer : a.date < b.date ? 1 : -1));
@@ -125,7 +125,7 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
                       <a href={`#/tasks/${task.id}`} className="task-row">
                         <div className="task-title">
                           {owned ? <StatusChip status={d.status} /> : null}
-                          <span className="due-name">{task.name}</span>
+                          <span className="due-name">{taskName(task, t)}</span>
                         </div>
                         <span className="muted">{describeInterval(task, t)}</span>
                         {official ? <span className="muted">{official}</span> : null}

@@ -105,6 +105,16 @@ describe('vehicles and tasks', () => {
     ]);
   });
 
+  it('stores, updates and copies a Task’s French name', async () => {
+    const a = await createVehicle('A');
+    const b = await createVehicle('B');
+    const task = await createTask(a.id);
+    expect(task.nameFr).toBeNull();
+    await call('PUT', `/api/tasks/${task.id}`, { name: 'Oil change', nameFr: ' Vidange ', intervalMonths: 12 });
+    await call('POST', `/api/vehicles/${b.id}/copy-tasks`, { fromVehicleId: a.id });
+    expect((await snapshot()).tasks.map((t) => t.nameFr)).toEqual(['Vidange', 'Vidange']);
+  });
+
   it('marks a vehicle as sold and keeps its history', async () => {
     const bike = await createVehicle();
     const res = await call('POST', `/api/vehicles/${bike.id}/sell`, { date: '2028-05-01', odometer: 40000, price: 4500 });
@@ -204,7 +214,17 @@ describe('workshop data', () => {
     const bike = await createVehicle();
     const torque = await created<VehicleSpec>(`/api/vehicles/${bike.id}/specs`, { kind: 'torque', name: 'Drain plug', value: '30 Nm' });
     await call('PUT', `/api/specs/${torque.id}`, { kind: 'torque', name: 'Drain plug', value: '30 Nm', notes: 'New washer' });
-    await created(`/api/vehicles/${bike.id}/part-specs`, { name: 'Engine oil', characteristics: '10W-40 JASO MA2', unit: 'litre' });
+    const part = await created<PartSpec>(`/api/vehicles/${bike.id}/part-specs`, {
+      name: 'Engine oil',
+      characteristics: '10W-40 JASO MA2',
+      unit: 'litre',
+    });
+    await call('PUT', `/api/part-specs/${part.id}`, {
+      name: 'Engine oil',
+      nameFr: 'Huile moteur',
+      characteristics: '10W-40 JASO MA2',
+      unit: 'litre',
+    });
     await created(`/api/vehicles/${bike.id}/positions`, { name: 'Rear tyre' });
     const s = await snapshot();
     expect(s.vehicleSpecs).toEqual([
@@ -212,6 +232,7 @@ describe('workshop data', () => {
     ]);
     expect(s.partSpecs.find((p) => p.standardPart === null)).toMatchObject({
       name: 'Engine oil',
+      nameFr: 'Huile moteur',
       characteristics: '10W-40 JASO MA2',
       partNumbers: null,
       unit: 'litre',
@@ -232,11 +253,21 @@ describe('workshop data', () => {
   it('edits only the Part Spec of a Standard Part, and never deletes it', async () => {
     const bike = await createVehicle();
     const filter = (await snapshot()).partSpecs.find((p) => p.standardPart === 'oilFilter')!;
-    await call('PUT', `/api/part-specs/${filter.id}`, { name: 'Renamed', partNumbers: 'HF204', unit: 'litre' });
+    await call('PUT', `/api/part-specs/${filter.id}`, {
+      name: 'Renamed',
+      oemReference: '15410-MFJ-D01',
+      partNumbers: 'HF204',
+      unit: 'litre',
+    });
     const chain = (await snapshot()).partSpecs.find((p) => p.vehicleId === bike.id && p.standardPart === 'chainKit')!;
     await call('PUT', `/api/part-specs/${chain.id}`, { name: chain.name, unit: chain.unit, notFitted: true });
     const parts = (await snapshot()).partSpecs;
-    expect(parts.find((p) => p.id === filter.id)).toMatchObject({ name: 'oilFilter', partNumbers: 'HF204', unit: 'piece' });
+    expect(parts.find((p) => p.id === filter.id)).toMatchObject({
+      name: 'oilFilter',
+      oemReference: '15410-MFJ-D01',
+      partNumbers: 'HF204',
+      unit: 'piece',
+    });
     expect(parts.find((p) => p.id === chain.id)!.notFitted).toBe(true);
     expect((await call('DELETE', `/api/part-specs/${filter.id}`)).status).toBe(409);
   });

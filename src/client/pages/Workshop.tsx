@@ -14,6 +14,8 @@ import {
   formatQuantity,
   parseNumber,
   partName,
+  partReferences,
+  taskName,
 } from '../format.ts';
 import { messages, useT, type Messages } from '../i18n.ts';
 import { navigate } from '../router.ts';
@@ -241,12 +243,14 @@ export function SpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: S
 function PartSpecEditor({ vehicle, existing, editor }: { vehicle: Vehicle; existing?: PartSpec; editor: ReturnType<typeof useEditor> }) {
   const t = useT();
   const [name, setName] = useState(existing?.name ?? '');
+  const [nameFr, setNameFr] = useState(existing?.nameFr ?? '');
   const [characteristics, setCharacteristics] = useState(existing?.characteristics ?? '');
+  const [oemReference, setOemReference] = useState(existing?.oemReference ?? '');
   const [partNumbers, setPartNumbers] = useState(existing?.partNumbers ?? '');
   const [unit, setUnit] = useState<PartUnit>(existing?.unit ?? 'piece');
   const [notFitted, setNotFitted] = useState(existing?.notFitted ?? false);
   const standard = existing?.standardPart ? existing : null;
-  const body = { name, characteristics, partNumbers, unit, notFitted };
+  const body = { name, nameFr, characteristics, oemReference, partNumbers, unit, notFitted };
   return (
     <InlineEditor
       onSubmit={() =>
@@ -256,7 +260,9 @@ function PartSpecEditor({ vehicle, existing, editor }: { vehicle: Vehicle; exist
       }
       onCancel={() => editor.setEditing(null)}
       onDelete={
-        existing && !standard ? () => editor.remove(existing.name, () => online('DELETE', `/api/part-specs/${existing.id}`)) : undefined
+        existing && !standard
+          ? () => editor.remove(partName(existing, t), () => online('DELETE', `/api/part-specs/${existing.id}`))
+          : undefined
       }
       disabled={editor.disabled}
       error={editor.error}
@@ -264,12 +270,20 @@ function PartSpecEditor({ vehicle, existing, editor }: { vehicle: Vehicle; exist
       {standard ? (
         <h2>{partName(standard, t)}</h2>
       ) : (
-        <Field label={t.workshop.partName} hint={t.workshop.partNameHint}>
-          <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} autoFocus />
-        </Field>
+        <>
+          <Field label={t.workshop.partNameEn} hint={t.workshop.partNameHint}>
+            <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} lang="en" autoFocus />
+          </Field>
+          <Field label={t.workshop.partNameFr} hint={t.workshop.partNameFrHint}>
+            <input value={nameFr} onChange={(e) => setNameFr(e.target.value)} maxLength={120} lang="fr" />
+          </Field>
+        </>
       )}
       <Field label={t.workshop.characteristics} hint={t.workshop.characteristicsHint}>
         <input value={characteristics} onChange={(e) => setCharacteristics(e.target.value)} maxLength={500} autoFocus={!!standard} />
+      </Field>
+      <Field label={t.workshop.oemReference} hint={t.workshop.oemReferenceHint}>
+        <input value={oemReference} onChange={(e) => setOemReference(e.target.value)} maxLength={80} />
       </Field>
       <Field label={t.workshop.partNumbers} hint={t.workshop.partNumbersHint}>
         <input value={partNumbers} onChange={(e) => setPartNumbers(e.target.value)} maxLength={500} />
@@ -302,12 +316,13 @@ function PartSpecEditor({ vehicle, existing, editor }: { vehicle: Vehicle; exist
 
 function PartSpecLine({ spec }: { spec: PartSpec }) {
   const t = useT();
-  const empty = !spec.characteristics && !spec.partNumbers;
+  const references = partReferences(spec, t);
+  const empty = !spec.characteristics && !references;
   return (
     <>
       <strong>{partName(spec, t)}</strong>
       {spec.characteristics ? <span>{spec.characteristics}</span> : null}
-      {spec.partNumbers ? <span className="muted">{spec.partNumbers}</span> : null}
+      {references ? <span className="muted">{references}</span> : null}
       {empty && !spec.notFitted ? <span className="muted">{t.workshop.notSet}</span> : null}
     </>
   );
@@ -322,7 +337,7 @@ function PartSpecList({ vehicle, specs, editor }: { vehicle: Vehicle; specs: Par
             <PartSpecEditor vehicle={vehicle} existing={spec} editor={editor} />
           </li>
         ) : (
-          <li key={spec.id} className={!spec.characteristics && !spec.partNumbers ? 'unset' : undefined}>
+          <li key={spec.id} className={!spec.characteristics && !partReferences(spec) ? 'unset' : undefined}>
             <button type="button" className="item-row" onClick={() => editor.setEditing(spec.id)}>
               <PartSpecLine spec={spec} />
             </button>
@@ -509,7 +524,7 @@ export function TaskPage({ task, vehicle, snapshot }: { task: MaintenanceTask; v
   }
 
   return (
-    <Layout title={task.name} back={`/vehicles/${vehicle.id}`}>
+    <Layout title={taskName(task, t)} back={`/vehicles/${vehicle.id}`}>
       <section className="card">
         <p className="muted">{vehicle.name}</p>
         <p>{describeInterval(task, t)}</p>
@@ -560,7 +575,7 @@ export function TaskPage({ task, vehicle, snapshot }: { task: MaintenanceTask; v
                         <strong>{partName(spec, t)}</strong> · {formatQuantity(quantity, spec.unit, t)}
                       </span>
                       {spec.characteristics ? <span>{spec.characteristics}</span> : null}
-                      {spec.partNumbers ? <span className="muted">{spec.partNumbers}</span> : null}
+                      {partReferences(spec, t) ? <span className="muted">{partReferences(spec, t)}</span> : null}
                       {last ? (
                         <span className="muted">{t.workshop.lastUsed(describePart(last.part), formatDate(last.date, t))}</span>
                       ) : null}
@@ -654,7 +669,7 @@ export function WorkshopForm({ task, vehicle, snapshot }: { task: MaintenanceTas
   }
 
   return (
-    <Layout title={t.workshop.workshopTitle(task.name)} back={back}>
+    <Layout title={t.workshop.workshopTitle(taskName(task, t))} back={back}>
       <NeedsConnection />
       <form onSubmit={submit} className="form">
         <fieldset className="field">
@@ -759,13 +774,13 @@ export function ShoppingPage({ snapshot }: { snapshot: Snapshot }) {
                       <strong>{partName(item.partSpec, t)}</strong> · {formatQuantity(item.quantity, item.partSpec.unit, t)}
                     </span>
                     {item.partSpec.characteristics ? <span>{item.partSpec.characteristics}</span> : null}
-                    {item.partSpec.partNumbers ? <span className="muted">{item.partSpec.partNumbers}</span> : null}
+                    {partReferences(item.partSpec, t) ? <span className="muted">{partReferences(item.partSpec, t)}</span> : null}
                     {item.lastUsed ? (
                       <span className="muted">
                         {t.workshop.lastUsed(describePart(item.lastUsed.part), formatDate(item.lastUsed.date, t))}
                       </span>
                     ) : null}
-                    <span className="muted">{t.workshop.forTasks(item.tasks.map(({ task }) => task.name).join(', '))}</span>
+                    <span className="muted">{t.workshop.forTasks(item.tasks.map(({ task }) => taskName(task, t)).join(', '))}</span>
                   </div>
                 </li>
               ))}
@@ -776,7 +791,7 @@ export function ShoppingPage({ snapshot }: { snapshot: Snapshot }) {
                 {tasksWithoutParts.map((task, i) => (
                   <Fragment key={task.id}>
                     {i > 0 ? ', ' : ''}
-                    <a href={`#/tasks/${task.id}/workshop`}>{task.name}</a>
+                    <a href={`#/tasks/${task.id}/workshop`}>{taskName(task, t)}</a>
                   </Fragment>
                 ))}
               </p>

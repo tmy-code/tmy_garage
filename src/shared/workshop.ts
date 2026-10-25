@@ -136,6 +136,7 @@ export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
     ...snapshot,
     tasks: snapshot.tasks.map((t) => ({
       ...t,
+      nameFr: t.nameFr ?? null,
       workshopNotes: t.workshopNotes ?? null,
       requiredParts: t.requiredParts ?? [],
       tools: t.tools ?? [],
@@ -143,7 +144,13 @@ export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
     })),
     services: snapshot.services.map(normalizeService),
     vehicleSpecs: snapshot.vehicleSpecs ?? [],
-    partSpecs: (snapshot.partSpecs ?? []).map((p) => ({ ...p, standardPart: p.standardPart ?? null, notFitted: p.notFitted ?? false })),
+    partSpecs: (snapshot.partSpecs ?? []).map((p) => ({
+      ...p,
+      nameFr: p.nameFr ?? null,
+      oemReference: p.oemReference ?? null,
+      standardPart: p.standardPart ?? null,
+      notFitted: p.notFitted ?? false,
+    })),
     positions: snapshot.positions ?? [],
     vehicles: snapshot.vehicles.map((v) => ({
       ...v,
