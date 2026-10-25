@@ -663,6 +663,18 @@ body > .banner {
     margin: 0;
   }
 
+  /* Vehicle cards in a row share one height, and the buttons below line up with their columns. */
+  .dashboard-grid {
+    align-items: stretch;
+  }
+
+  .dashboard-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+  }
+
   .list-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));

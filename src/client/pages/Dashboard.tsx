@@ -37,14 +37,14 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
           </a>
         </div>
       ) : (
-        <div className="card-grid">
+        <div className="card-grid dashboard-grid">
           {owned.map((v) => (
             <VehicleCard key={v.id} vehicle={v} snapshot={snapshot} today={today} />
           ))}
         </div>
       )}
       {owned.length > 0 ? (
-        <div className="actions">
+        <div className="actions dashboard-actions">
           <a className="button" href="#/shopping">
             🛒 {t.workshop.shopping}
           </a>
