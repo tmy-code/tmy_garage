@@ -39,7 +39,7 @@ import {
 import type { Vehicle } from '../shared/types.ts';
 import { Icon } from './icons.tsx';
 
-// Logos from Simple Icons (CC0). Makes it doesn't carry (Mercedes, Kawasaki…) keep the plain icon, and so do
+// Car logos from Simple Icons (CC0). Makes it doesn't carry (Mercedes…) keep the plain icon, and so do
 // detailed crests (Ferrari, Porsche, Lamborghini): unreadable at icon size and heavy to load.
 const LOGOS: Record<string, SimpleIcon> = {
   bmw: siBmw,
@@ -93,12 +93,25 @@ export function makeLogo(make: string | null): SimpleIcon | null {
   return LOGOS[words.join('')] ?? LOGOS[words[0] ?? ''] ?? null;
 }
 
-/** Makes with a logo, offered as suggestions when typing the make. */
-export const KNOWN_MAKES = [...new Set(Object.values(LOGOS).map((logo) => logo.title.replace(/ (Motor )?(Corporation|Group)$/, '')))].sort();
+// Motorbike makes without a car logo, still worth suggesting when typing the make.
+const BIKE_MAKES = ['Aprilia', 'Harley-Davidson', 'Kawasaki', 'Moto Guzzi', 'Royal Enfield', 'Triumph'];
 
-/** The vehicle's make logo, or the car / motorbike icon when the make has none. */
+/** Makes offered as suggestions when typing the make. */
+export const KNOWN_MAKES = [
+  ...new Set([...Object.values(LOGOS).map((logo) => logo.title.replace(/ (Motor )?(Corporation|Group)$/, '')), ...BIKE_MAKES]),
+].sort();
+
+/** Motorbikes show their make written in capitals, as on a tank, rather than a logo. */
+export function makeAsName(vehicle: Pick<Vehicle, 'kind' | 'make'>): string | null {
+  const make = vehicle.make?.trim();
+  return vehicle.kind === 'motorcycle' && make ? make.toUpperCase() : null;
+}
+
+/** A car's make logo, a motorbike's make in capitals, or the car / motorbike icon when there is no make to show. */
 export function VehicleIcon({ vehicle }: { vehicle: Pick<Vehicle, 'kind' | 'make'> }) {
-  const logo = makeLogo(vehicle.make);
+  const name = makeAsName(vehicle);
+  if (name) return <span className="brand-name">{name}</span>;
+  const logo = vehicle.kind === 'car' ? makeLogo(vehicle.make) : null;
   if (!logo) return <Icon name={vehicle.kind} />;
   return (
     <svg className="icon brand-logo" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">

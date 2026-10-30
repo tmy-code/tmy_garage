@@ -7,7 +7,7 @@ import type { PartUsed, Snapshot, Vehicle } from '../../shared/types.ts';
 import { Layout, StatusChip } from '../components.tsx';
 import { describeDue, describeInterval, describeOfficialInterval, formatDate, formatKm, formatMoney, taskName } from '../format.ts';
 import { useT } from '../i18n.ts';
-import { VehicleIcon } from '../brands.tsx';
+import { makeAsName, VehicleIcon } from '../brands.tsx';
 import { Icon } from '../icons.tsx';
 import { useStore } from '../store.ts';
 import { describePart } from './Workshop.tsx';
@@ -53,7 +53,8 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
     ...snapshot.readings.filter((r) => r.vehicleId === vehicle.id).map((r) => ({ kind: 'reading' as const, ...r })),
   ].sort((a, b) => (a.date === b.date ? b.odometer - a.odometer : a.date < b.date ? 1 : -1));
 
-  const subtitle = [vehicle.make, vehicle.model, vehicle.year, vehicle.registration].filter(Boolean).join(' · ');
+  // A motorbike's make is already shown in capitals in front.
+  const subtitle = [makeAsName(vehicle) ? null : vehicle.make, vehicle.model, vehicle.year, vehicle.registration].filter(Boolean).join(' · ');
   const saleDetails = [
     vehicle.soldDate ? t.vehicle.soldDate(formatDate(vehicle.soldDate, t)) : '',
     vehicle.soldOdometer !== null ? t.vehicle.soldAt(formatKm(vehicle.soldOdometer)) : '',

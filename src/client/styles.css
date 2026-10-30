@@ -86,7 +86,14 @@ h2 .icon,
   margin-right: 6px;
 }
 
-.vehicle-subtitle .icon {
+.brand-name {
+  font-weight: 700;
+  font-size: 0.85em;
+  letter-spacing: 0.06em;
+}
+
+.vehicle-subtitle .icon,
+.vehicle-subtitle .brand-name {
   margin-right: 4px;
 }
 
