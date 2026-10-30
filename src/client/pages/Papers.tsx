@@ -3,9 +3,10 @@ import { todayIso } from '../../shared/dates.ts';
 import { nextInspection, openDefects } from '../../shared/inspections.ts';
 import type { DefectSeverity, DocumentOwnerKind, DocumentType, InspectionResult } from '../../shared/schemas.ts';
 import type { GarageDocument, Modification, Snapshot, TechnicalInspection, Vehicle } from '../../shared/types.ts';
-import { Field, Layout, NeedsConnection } from '../components.tsx';
+import { confirmDelete, Field, FormError, Layout, NeedsConnection } from '../components.tsx';
 import { formatDate, formatKm, parseNumber } from '../format.ts';
 import { messages, useT, type Messages } from '../i18n.ts';
+import { Icon } from '../icons.tsx';
 import { navigate } from '../router.ts';
 import { online, useStore } from '../store.ts';
 import { Submit, useSubmit } from './SetupForms.tsx';
@@ -49,16 +50,18 @@ function DocumentRow({ doc, label }: { doc: GarageDocument; label?: string }) {
   const t = useT();
   const { reachable } = useStore();
   const { error, disabled, run } = useSubmit();
-  function remove() {
-    if (!window.confirm(messages().papers.confirmDeleteDocument(documentName(doc, t)))) return;
-    void run(() => online('DELETE', `/api/documents/${doc.id}`));
+  async function remove() {
+    if (!(await confirmDelete(t.papers.confirmDeleteDocument(documentName(doc, t))))) return;
+    void run(() => online('DELETE', `/api/documents/${doc.id}`), t.feedback.deleted);
   }
   return (
     <li>
       <div className="history-row">
         <div className="section-head">
           <a href={`/api/documents/${doc.id}/file`} target="_blank" rel="noreferrer">
-            📄 <strong>{documentName(doc, t)}</strong>
+            <strong className="with-icon">
+              <Icon name="document" /> {documentName(doc, t)}
+            </strong>
           </a>
           <button type="button" className="button button-small button-danger" onClick={remove} disabled={disabled}>
             {t.workshop.delete}
@@ -157,7 +160,7 @@ export function DocumentsPanel({
             <input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
           </Field>
         </div>
-        {error ? <p className="banner banner-error">{error}</p> : null}
+        <FormError error={error} />
         <Submit disabled={disabled || !file}>{busy ? t.papers.uploading : t.papers.upload}</Submit>
       </form>
     </section>
@@ -315,12 +318,12 @@ export function InspectionForm({ vehicle, snapshot, existing }: { vehicle: Vehic
     });
   }
 
-  function remove() {
-    if (!existing || !window.confirm(t.papers.confirmDeleteInspection)) return;
+  async function remove() {
+    if (!existing || !(await confirmDelete(t.papers.confirmDeleteInspection))) return;
     void run(async () => {
       await online('DELETE', `/api/inspections/${existing.id}`);
       navigate(back, { replace: true });
-    });
+    }, t.feedback.deleted);
   }
 
   return (
@@ -408,7 +411,7 @@ export function InspectionForm({ vehicle, snapshot, existing }: { vehicle: Vehic
           <Field label={t.papers.notes}>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} />
           </Field>
-          {error ? <p className="banner banner-error">{error}</p> : null}
+          <FormError error={error} />
           <Submit disabled={disabled}>{t.papers.saveInspection}</Submit>
           {existing ? (
             <button type="button" className="button button-danger button-block" onClick={remove} disabled={disabled}>
@@ -505,12 +508,12 @@ export function ModificationForm({ vehicle, snapshot, existing }: { vehicle: Veh
     });
   }
 
-  function remove() {
-    if (!existing || !window.confirm(t.papers.confirmDeleteModification)) return;
+  async function remove() {
+    if (!existing || !(await confirmDelete(t.papers.confirmDeleteModification))) return;
     void run(async () => {
       await online('DELETE', `/api/modifications/${existing.id}`);
       navigate(back, { replace: true });
-    });
+    }, t.feedback.deleted);
   }
 
   return (
@@ -551,7 +554,7 @@ export function ModificationForm({ vehicle, snapshot, existing }: { vehicle: Veh
           <Field label={t.papers.notes}>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} />
           </Field>
-          {error ? <p className="banner banner-error">{error}</p> : null}
+          <FormError error={error} />
           <Submit disabled={disabled}>{t.papers.saveModification}</Submit>
           {existing ? (
             <button type="button" className="button button-danger button-block" onClick={remove} disabled={disabled}>

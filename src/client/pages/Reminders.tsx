@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { NeedsConnection, Layout } from '../components.tsx';
+import { LanguageSwitch, NeedsConnection, Layout } from '../components.tsx';
 import { useT } from '../i18n.ts';
+import { Icon } from '../icons.tsx';
 import { pushState, PushRefused, sendTest, turnOff, turnOn, type PushState } from '../push.ts';
 
 export function RemindersPage() {
@@ -40,7 +41,9 @@ export function RemindersPage() {
       <p>{t.reminders.intro}</p>
       <p className="muted">{t.reminders.eachDevice}</p>
       {state && explanation[state] ? <p className="banner banner-warn">{explanation[state]}</p> : null}
-      {state === 'on' ? <p className="banner banner-ok">🔔 {t.reminders.on}</p> : null}
+      {state === 'on' ? <p className="banner banner-ok with-icon">
+          <Icon name="bell" /> {t.reminders.on}
+        </p> : null}
       {notice ? <p className={`banner ${notice.error ? 'banner-error' : 'banner-ok'}`}>{notice.text}</p> : null}
       <div className="actions">
         {state === 'off' ? (
@@ -59,6 +62,8 @@ export function RemindersPage() {
           </>
         ) : null}
       </div>
+      {/* Also on the home screen; here too, next to the other per-device setting. */}
+      <LanguageSwitch />
     </Layout>
   );
 }

@@ -1,15 +1,17 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { todayIso } from '../../shared/dates.ts';
 import { vehicleDue } from '../../shared/due.ts';
 import type { PartUnit } from '../../shared/schemas.ts';
-import type { PartUsed, Service, Snapshot, Vehicle } from '../../shared/types.ts';
+import type { OdometerReading, PartUsed, Service, Snapshot, Vehicle } from '../../shared/types.ts';
 import { lastUsed, partSpecsOf } from '../../shared/workshop.ts';
 import { newId } from '../api.ts';
-import { Field, Layout, StatusChip } from '../components.tsx';
+import { confirmDelete, Field, FormError, Layout, StatusChip } from '../components.tsx';
 import { formatKm, parseNumber, partName, taskName } from '../format.ts';
+import { showToast } from '../feedback.ts';
 import { useT, type Messages } from '../i18n.ts';
 import { navigate } from '../router.ts';
-import { enqueue, online, useStore } from '../store.ts';
+import { enqueue, online, undoCreate, useStore } from '../store.ts';
+import type { OutboxOp } from '../outbox.ts';
 import { DocumentsPanel } from './Papers.tsx';
 
 /** A Part Used as typed in the form: numbers stay text until saved. */
@@ -77,6 +79,10 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
     .flatMap((id) => tasks.get(id)?.requiredParts ?? [])
     .filter((r) => partSpecs.some((s) => s.id === r.partSpecId) && !parts.some((p) => p.partSpecId === r.partSpecId));
   const [error, setError] = useState<string | null>(null);
+  const [odometerError, setOdometerError] = useState<string | null>(null);
+  const [tasksError, setTasksError] = useState<string | null>(null);
+  const odometerInput = useRef<HTMLInputElement>(null);
+  const tasksField = useRef<HTMLFieldSetElement>(null);
 
   const odometer = parseNumber(odometerText);
   const lowerThanLatest =
@@ -89,6 +95,7 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
     if (next.has(id)) next.delete(id);
     else next.add(id);
     setSelected(next);
+    setTasksError(null);
   }
 
   function setPart(key: number, patch: Partial<PartDraft>) {
@@ -136,12 +143,18 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (odometer === null || Number.isNaN(odometer) || odometer < 0 || !Number.isInteger(odometer)) {
-      setError(t.service.errorOdometer);
+    setError(null);
+    // Each problem is shown next to its field, and the first one is brought into view.
+    const badOdometer = odometer === null || Number.isNaN(odometer) || odometer < 0 || !Number.isInteger(odometer);
+    setOdometerError(badOdometer ? t.service.errorOdometer : null);
+    setTasksError(selected.size === 0 ? t.service.errorTasks : null);
+    if (badOdometer) {
+      odometerInput.current?.focus();
+      odometerInput.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       return;
     }
     if (selected.size === 0) {
-      setError(t.service.errorTasks);
+      tasksField.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       return;
     }
     let partsUsed: PartUsed[];
@@ -151,7 +164,7 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
       setError((e as Error).message);
       return;
     }
-    await enqueue({
+    const op: OutboxOp = {
       kind: 'service',
       data: {
         id: existing?.id ?? newId(),
@@ -162,15 +175,18 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
         notes: notes.trim() || null,
         partsUsed,
       },
-    });
+    };
+    await enqueue(op);
     navigate(back, { replace: true });
+    toastCreated(op, existing ? t.feedback.saved : t.feedback.serviceSaved, t, !existing);
   }
 
   async function remove() {
-    if (!existing || !window.confirm(t.service.confirmDelete)) return;
+    if (!existing || !(await confirmDelete(t.service.confirmDelete))) return;
     try {
       await online('DELETE', `/api/services/${existing.id}`);
       navigate(back, { replace: true });
+      showToast(t.feedback.deleted);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -186,26 +202,33 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
             </Field>
             <Field
               label={t.service.odometer}
-              hint={
-                lowerThanLatest
-                  ? t.service.lowerThanLatest(formatKm(usage.latest!.odometer))
-                  : usage.estimatedOdometer !== null && !existing
-                    ? t.service.estimatedToday(formatKm(usage.estimatedOdometer))
-                    : undefined
-              }
+              error={odometerError}
+              hint={lowerThanLatest ? t.service.lowerThanLatest(formatKm(usage.latest!.odometer)) : undefined}
             >
               <input
+                ref={odometerInput}
                 inputMode="numeric"
                 autoComplete="off"
                 value={odometerText}
-                onChange={(e) => setOdometerText(e.target.value)}
-                placeholder={usage.estimatedOdometer !== null ? String(usage.estimatedOdometer) : t.service.example}
-                required
+                onChange={(e) => {
+                  setOdometerText(e.target.value);
+                  setOdometerError(null);
+                }}
+                placeholder={t.service.example}
+                aria-invalid={odometerError ? true : undefined}
               />
             </Field>
+            {usage.estimatedOdometer !== null && !existing && !odometerText ? (
+              <EstimateButton km={usage.estimatedOdometer} onUse={(km) => (setOdometerText(String(km)), setOdometerError(null))} />
+            ) : null}
 
-            <fieldset className="field">
+            <fieldset ref={tasksField} className={`field ${tasksError ? 'field-invalid' : ''}`}>
               <legend className="field-label">{t.service.tasksDone}</legend>
+              {tasksError ? (
+                <span className="field-error" role="alert">
+                  {tasksError}
+                </span>
+              ) : null}
               {due.length === 0 ? <p className="muted">{t.service.noTasks}</p> : null}
               <div className="check-grid">
                 {due.map((d) => (
@@ -309,7 +332,7 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
           </div>
         </div>
 
-        {error ? <p className="banner banner-error">{error}</p> : null}
+        <FormError error={error} />
         <button type="submit" className="button button-primary button-block">
           {existing ? t.service.saveChanges : t.service.save}
         </button>
@@ -327,59 +350,129 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
   );
 }
 
-export function ReadingForm({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: Snapshot }) {
+/** Says a Service or Odometer Reading was saved; a new one can be taken back for a few seconds. */
+function toastCreated(op: OutboxOp, text: string, t: Messages, created: boolean) {
+  showToast(
+    text,
+    created
+      ? {
+          label: t.feedback.undo,
+          run: async () => {
+            try {
+              await undoCreate(op);
+              showToast(t.feedback.undone);
+            } catch (e) {
+              showToast((e as Error).message);
+            }
+          },
+        }
+      : undefined,
+  );
+}
+
+/** Fills the odometer with today's estimate in one tap, instead of a look-alike placeholder. */
+function EstimateButton({ km, onUse }: { km: number; onUse: (km: number) => void }) {
   const t = useT();
+  return (
+    <button type="button" className="button button-small estimate" onClick={() => onUse(km)}>
+      {t.service.useEstimate(formatKm(km))}
+    </button>
+  );
+}
+
+/** Log an Odometer Reading, or correct or delete one. Logging works offline, like a Service. */
+export function ReadingForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; snapshot: Snapshot; existing?: OdometerReading }) {
+  const t = useT();
+  const { outbox, reachable } = useStore();
   const today = todayIso();
   const { usage } = useMemo(() => vehicleDue(snapshot, vehicle.id, today), [snapshot, vehicle.id, today]);
-  const [date, setDate] = useState(today);
-  const [odometerText, setOdometerText] = useState('');
+  const [date, setDate] = useState(existing?.date ?? today);
+  const [odometerText, setOdometerText] = useState(existing ? String(existing.odometer) : '');
+  const [odometerError, setOdometerError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const odometer = parseNumber(odometerText);
   const back = `/vehicles/${vehicle.id}`;
-  const lowerThanLatest =
-    odometer !== null && !Number.isNaN(odometer) && usage.latest && date >= usage.latest.date && odometer < usage.latest.odometer;
+  const pending = existing ? outbox.some((op) => op.data.id === existing.id) : false;
+  // Compared with the latest other reading, so correcting the latest one doesn't warn against itself.
+  const latest = existing ? latestOther(snapshot, vehicle.id, existing.id) : usage.latest;
+  const lowerThanLatest = odometer !== null && !Number.isNaN(odometer) && latest && date >= latest.date && odometer < latest.odometer;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (odometer === null || Number.isNaN(odometer) || odometer < 0 || !Number.isInteger(odometer)) {
-      setError(t.service.errorOdometer);
+      setOdometerError(t.service.errorOdometer);
       return;
     }
-    await enqueue({ kind: 'reading', data: { id: newId(), vehicleId: vehicle.id, date, odometer } });
+    const op: OutboxOp = { kind: 'reading', data: { id: existing?.id ?? newId(), vehicleId: vehicle.id, date, odometer } };
+    await enqueue(op);
     navigate(back, { replace: true });
+    toastCreated(op, existing ? t.feedback.saved : t.feedback.readingSaved, t, !existing);
+  }
+
+  async function remove() {
+    if (!existing || !(await confirmDelete(t.service.confirmDeleteReading))) return;
+    try {
+      await online('DELETE', `/api/odometer-readings/${existing.id}`);
+      navigate(back, { replace: true });
+      showToast(t.feedback.deleted);
+    } catch (e) {
+      setError((e as Error).message);
+    }
   }
 
   return (
-    <Layout title={t.service.readingTitle(vehicle.name)} back={back}>
-      <form onSubmit={submit} className="form">
+    <Layout title={existing ? t.service.readingEditTitle : t.service.readingTitle(vehicle.name)} back={back}>
+      <form onSubmit={submit} className="form" noValidate>
         <Field label={t.service.date}>
           <input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} required />
         </Field>
         <Field
           label={t.service.odometer}
+          error={odometerError}
           hint={
             lowerThanLatest
-              ? t.service.lowerThanLatest(formatKm(usage.latest!.odometer))
-              : usage.latest
-                ? t.service.lastReading(formatKm(usage.latest.odometer))
+              ? t.service.lowerThanLatest(formatKm(latest!.odometer))
+              : latest
+                ? t.service.lastReading(formatKm(latest.odometer))
                 : undefined
           }
         >
           <input
             inputMode="numeric"
             autoComplete="off"
-            autoFocus
+            autoFocus={!existing}
             value={odometerText}
-            onChange={(e) => setOdometerText(e.target.value)}
-            placeholder={usage.estimatedOdometer !== null ? String(usage.estimatedOdometer) : t.service.example}
-            required
+            onChange={(e) => {
+              setOdometerText(e.target.value);
+              setOdometerError(null);
+            }}
+            placeholder={t.service.example}
+            aria-invalid={odometerError ? true : undefined}
           />
         </Field>
-        {error ? <p className="banner banner-error">{error}</p> : null}
+        {usage.estimatedOdometer !== null && !existing && !odometerText ? (
+          <EstimateButton km={usage.estimatedOdometer} onUse={(km) => (setOdometerText(String(km)), setOdometerError(null))} />
+        ) : null}
+        <FormError error={error} />
         <button type="submit" className="button button-primary button-block">
-          {t.service.saveReading}
+          {existing ? t.service.saveChanges : t.service.saveReading}
         </button>
+        {!reachable ? <p className="muted center">{t.service.offlineHint}</p> : null}
+        {existing ? (
+          <button type="button" className="button button-danger button-block" onClick={remove} disabled={!reachable || pending}>
+            {pending ? t.service.deleteAfterSync : t.service.deleteReading}
+          </button>
+        ) : null}
       </form>
     </Layout>
   );
+}
+
+function latestOther(snapshot: Snapshot, vehicleId: string, exceptId: string): OdometerReading | null {
+  let latest: OdometerReading | null = null;
+  for (const r of snapshot.readings) {
+    if (r.vehicleId !== vehicleId || r.id === exceptId) continue;
+    if (!latest || r.date > latest.date || (r.date === latest.date && r.odometer > latest.odometer)) latest = r;
+  }
+  return latest;
 }

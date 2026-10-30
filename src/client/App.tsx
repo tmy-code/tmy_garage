@@ -1,3 +1,4 @@
+import { useLayoutEffect } from 'react';
 import { LanguageSwitch, Layout, NotFound } from './components.tsx';
 import { useT } from './i18n.ts';
 import { Dashboard } from './pages/Dashboard.tsx';
@@ -18,15 +19,27 @@ import { ReadingForm, ServiceForm } from './pages/ServiceForm.tsx';
 import { CopyTasks, SellForm, TaskForm, VehicleForm } from './pages/SetupForms.tsx';
 import { VehiclePage } from './pages/VehiclePage.tsx';
 import { FittedPage, PartSpecsPage, ShoppingPage, SpecsPage, TaskPage, WorkshopForm } from './pages/Workshop.tsx';
-import { useRoute } from './router.ts';
+import { scrollForNewRoute, useRoute } from './router.ts';
 import { sync, useStore } from './store.ts';
 
 export function App() {
   const t = useT();
   const { view: snapshot, loaded, reachable, syncing } = useStore();
   const route = useRoute();
+  const path = route.join('/');
 
-  if (!loaded) return null;
+  // A new screen opens at the top; going back returns to where the previous one was scrolled.
+  useLayoutEffect(() => {
+    window.scrollTo(0, scrollForNewRoute());
+  }, [path]);
+
+  if (!loaded) {
+    return (
+      <Layout title={t.garage}>
+        <p className="empty loading">{t.startup.loading}</p>
+      </Layout>
+    );
+  }
   if (!snapshot) {
     return (
       <Layout title={t.garage}>
@@ -103,6 +116,12 @@ export function App() {
     if (sub === undefined) return <TaskPage key={task.id} task={task} vehicle={owner} snapshot={snapshot} />;
     if (sub === 'edit') return <TaskForm key={task.id} vehicle={owner} existing={task} />;
     if (sub === 'workshop') return <WorkshopForm key={task.id} task={task} vehicle={owner} snapshot={snapshot} />;
+  }
+  if (section === 'readings' && sub === 'edit') {
+    const reading = snapshot.readings.find((r) => r.id === id);
+    const owner = reading && snapshot.vehicles.find((v) => v.id === reading.vehicleId);
+    if (reading && owner) return <ReadingForm key={reading.id} vehicle={owner} snapshot={snapshot} existing={reading} />;
+    return <NotFound what="page" />;
   }
   if (section === 'services' && sub === 'edit') {
     const service = snapshot.services.find((s) => s.id === id);

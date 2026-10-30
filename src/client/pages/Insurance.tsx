@@ -4,9 +4,10 @@ import { usageOf } from '../../shared/due.ts';
 import { annualKm, compareQuotes, currentCover, isActive, recentClaims, renewal, type Renewal } from '../../shared/insurance.ts';
 import type { CoverLevel, MotorcycleLicence, Responsibility } from '../../shared/schemas.ts';
 import type { Claim, Cover, Driver, InsurancePolicy, PolicyTerm, Quote, Snapshot, Vehicle } from '../../shared/types.ts';
-import { Field, Layout, NeedsConnection } from '../components.tsx';
+import { confirmDelete, Field, FormError, Layout, NeedsConnection } from '../components.tsx';
 import { formatCrm, formatDate, formatKm, formatMoney, parseNumber } from '../format.ts';
 import { useT, type Messages } from '../i18n.ts';
+import { Icon } from '../icons.tsx';
 import { navigate } from '../router.ts';
 import { online } from '../store.ts';
 import { DocumentsPanel } from './Papers.tsx';
@@ -121,7 +122,9 @@ export function InsurancePage({ snapshot }: { snapshot: Snapshot }) {
     return (
       <li key={p.id}>
         <a href={`#/policies/${p.id}`} className="history-row">
-          <strong>🛡️ {p.insurer}</strong>
+          <strong className="with-icon">
+            <Icon name="shield" /> {p.insurer}
+          </strong>
           <span className="muted">
             {latest ? latest.covers.map((c) => vehicleName(snapshot, c.vehicleId)).join(', ') : t.insurance.noTerms}
             {p.policyNumber ? ` · ${p.policyNumber}` : ''}
@@ -272,12 +275,12 @@ export function PolicyForm({ snapshot, existing }: { snapshot: Snapshot; existin
     });
   }
 
-  function remove() {
-    if (!existing || !window.confirm(t.insurance.confirmDeletePolicy)) return;
+  async function remove() {
+    if (!existing || !(await confirmDelete(t.insurance.confirmDeletePolicy))) return;
     void run(async () => {
       await online('DELETE', `/api/policies/${existing.id}`);
       navigate('/insurance', { replace: true });
-    });
+    }, t.feedback.deleted);
   }
 
   return (
@@ -316,7 +319,7 @@ export function PolicyForm({ snapshot, existing }: { snapshot: Snapshot; existin
         <Field label={t.papers.notes}>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} />
         </Field>
-        {error ? <p className="banner banner-error">{error}</p> : null}
+        <FormError error={error} />
         <Submit disabled={disabled}>{existing ? t.insurance.savePolicy : t.insurance.addPolicyAndTerm}</Submit>
         {existing ? (
           <button type="button" className="button button-danger button-block" onClick={remove} disabled={disabled}>
@@ -510,12 +513,12 @@ export function TermForm({ policy, snapshot, existing }: { policy: InsurancePoli
     });
   }
 
-  function remove() {
-    if (!existing || !window.confirm(t.insurance.confirmDeleteTerm)) return;
+  async function remove() {
+    if (!existing || !(await confirmDelete(t.insurance.confirmDeleteTerm))) return;
     void run(async () => {
       await online('DELETE', `/api/terms/${existing.id}`);
       navigate(back, { replace: true });
-    });
+    }, t.feedback.deleted);
   }
 
   return (
@@ -563,7 +566,7 @@ export function TermForm({ policy, snapshot, existing }: { policy: InsurancePoli
           <Field label={t.papers.notes}>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} maxLength={2000} />
           </Field>
-          {error ? <p className="banner banner-error">{error}</p> : null}
+          <FormError error={error} />
           <Submit disabled={disabled}>{t.insurance.saveTerm}</Submit>
           {existing ? (
             <button type="button" className="button button-danger button-block" onClick={remove} disabled={disabled}>
@@ -627,12 +630,12 @@ export function ClaimForm({ policy, snapshot, existing }: { policy: InsurancePol
     });
   }
 
-  function remove() {
-    if (!existing || !window.confirm(t.insurance.confirmDeleteClaim)) return;
+  async function remove() {
+    if (!existing || !(await confirmDelete(t.insurance.confirmDeleteClaim))) return;
     void run(async () => {
       await online('DELETE', `/api/claims/${existing.id}`);
       navigate(back, { replace: true });
-    });
+    }, t.feedback.deleted);
   }
 
   return (
@@ -684,7 +687,7 @@ export function ClaimForm({ policy, snapshot, existing }: { policy: InsurancePol
           <Field label={t.papers.notes}>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} />
           </Field>
-          {error ? <p className="banner banner-error">{error}</p> : null}
+          <FormError error={error} />
           <Submit disabled={disabled}>{t.insurance.saveClaim}</Submit>
           {existing ? (
             <button type="button" className="button button-danger button-block" onClick={remove} disabled={disabled}>
@@ -739,12 +742,12 @@ export function DriverForm({ existing }: { existing?: Driver }) {
     });
   }
 
-  function remove() {
-    if (!existing || !window.confirm(t.insurance.confirmDeleteDriver(existing.name))) return;
+  async function remove() {
+    if (!existing || !(await confirmDelete(t.insurance.confirmDeleteDriver(existing.name)))) return;
     void run(async () => {
       await online('DELETE', `/api/drivers/${existing.id}`);
       navigate('/insurance', { replace: true });
-    });
+    }, t.feedback.deleted);
   }
 
   return (
@@ -778,7 +781,7 @@ export function DriverForm({ existing }: { existing?: Driver }) {
         <Field label={t.papers.notes} hint={t.insurance.driverNotesHint}>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} />
         </Field>
-        {error ? <p className="banner banner-error">{error}</p> : null}
+        <FormError error={error} />
         <Submit disabled={disabled}>{t.insurance.saveDriver}</Submit>
         {existing ? (
           <button type="button" className="button button-danger button-block" onClick={remove} disabled={disabled}>
@@ -926,12 +929,12 @@ export function QuoteForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; s
     });
   }
 
-  function remove() {
-    if (!existing || !window.confirm(t.insurance.confirmDeleteQuote)) return;
+  async function remove() {
+    if (!existing || !(await confirmDelete(t.insurance.confirmDeleteQuote))) return;
     void run(async () => {
       await online('DELETE', `/api/quotes/${existing.id}`);
       navigate(back, { replace: true });
-    });
+    }, t.feedback.deleted);
   }
 
   return (
@@ -961,7 +964,7 @@ export function QuoteForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; s
         <Field label={t.papers.notes}>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} />
         </Field>
-        {error ? <p className="banner banner-error">{error}</p> : null}
+        <FormError error={error} />
         <Submit disabled={disabled}>{t.insurance.saveQuote}</Submit>
         {existing ? (
           <button type="button" className="button button-danger button-block" onClick={remove} disabled={disabled}>
@@ -1118,7 +1121,9 @@ export function QuotePackPage({ vehicle, snapshot }: { vehicle: Vehicle; snapsho
             {[...statements, ...registrationDocs].map((d) => (
               <li key={d.id}>
                 <a href={`/api/documents/${d.id}/file`} target="_blank" rel="noreferrer" className="history-row">
-                  <strong>📄 {d.title ?? t.papers.types[d.type]}</strong>
+                  <strong className="with-icon">
+                    <Icon name="document" /> {d.title ?? t.papers.types[d.type]}
+                  </strong>
                   <span className="muted">
                     {t.papers.types[d.type]}
                     {d.issueDate ? ` · ${t.insurance.issuedOn(formatDate(d.issueDate, t))}` : ''}

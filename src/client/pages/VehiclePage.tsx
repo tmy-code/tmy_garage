@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { todayIso } from '../../shared/dates.ts';
 import { vehicleDue } from '../../shared/due.ts';
 import { nextInspection, openDefects } from '../../shared/inspections.ts';
@@ -7,8 +7,12 @@ import type { PartUsed, Snapshot, Vehicle } from '../../shared/types.ts';
 import { Layout, StatusChip } from '../components.tsx';
 import { describeDue, describeInterval, describeOfficialInterval, formatDate, formatKm, formatMoney, taskName } from '../format.ts';
 import { useT } from '../i18n.ts';
+import { Icon } from '../icons.tsx';
 import { useStore } from '../store.ts';
 import { describePart } from './Workshop.tsx';
+
+/** Phones show the latest few History entries; the rest are one tap away. */
+const HISTORY_PREVIEW = 5;
 
 type HistoryEntry =
   | { kind: 'service'; id: string; date: string; odometer: number; text: string; notes: string | null; partsUsed: PartUsed[] }
@@ -31,6 +35,7 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
   const specCount = snapshot.vehicleSpecs.filter((s) => s.vehicleId === vehicle.id).length;
   const cover = currentCover(snapshot, vehicle.id, today);
   const insuranceDue = cover ? renewal(cover.policy, today) : null;
+  const [allHistory, setAllHistory] = useState(false);
 
   const history: HistoryEntry[] = [
     ...snapshot.services
@@ -55,11 +60,23 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
   ].join('');
 
   return (
-    <Layout title={vehicle.name} back="/">
+    <Layout
+      title={vehicle.name}
+      back="/"
+      actions={
+        <a className="button button-small" href={`#/vehicles/${vehicle.id}/edit`} aria-label={t.vehicle.edit}>
+          <Icon name="pencil" /> {t.vehicle.editShort}
+        </a>
+      }
+    >
       <div className="split">
         <div className="split-main">
           <section className="card">
-            {subtitle ? <p className="muted">{subtitle}</p> : null}
+            {subtitle ? (
+              <p className="muted vehicle-subtitle">
+                <Icon name={vehicle.kind} /> {subtitle}
+              </p>
+            ) : null}
             {vehicle.status === 'sold' ? <p className="banner banner-warn">{t.vehicle.sold(saleDetails)}</p> : null}
             {owned && (inspection.status === 'overdue' || inspection.status === 'dueSoon') && inspection.dueDate ? (
               <p className="task-title">
@@ -206,7 +223,7 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
             <h2>{t.vehicle.history}</h2>
             {history.length === 0 ? <p className="empty">{t.vehicle.nothingLogged}</p> : null}
             <ul className="list">
-              {history.map((h) => (
+              {(allHistory ? history : history.slice(0, HISTORY_PREVIEW)).map((h) => (
                 <li key={`${h.kind}-${h.id}`}>
                   {h.kind === 'service' ? (
                     <a href={`#/services/${h.id}/edit`} className="history-row">
@@ -214,34 +231,42 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
                         <strong>{formatDate(h.date, t)}</strong> · {formatKm(h.odometer)}
                         {pending.has(h.id) ? <span className="chip chip-pending">{t.vehicle.waitingToSync}</span> : null}
                       </span>
-                      <span>🔧 {h.text}</span>
-                      {h.partsUsed.length > 0 ? <span className="muted">🔩 {h.partsUsed.map(describePart).join(', ')}</span> : null}
+                      <span className="with-icon">
+                        <Icon name="wrench" /> {h.text}
+                      </span>
+                      {h.partsUsed.length > 0 ? (
+                        <span className="muted with-icon">
+                          <Icon name="part" /> {h.partsUsed.map(describePart).join(', ')}
+                        </span>
+                      ) : null}
                       {h.notes ? <span className="muted">{h.notes}</span> : null}
                     </a>
                   ) : (
-                    <div className="history-row">
+                    <a href={`#/readings/${h.id}/edit`} className="history-row">
                       <span>
                         <strong>{formatDate(h.date, t)}</strong> · {formatKm(h.odometer)}
                         {pending.has(h.id) ? <span className="chip chip-pending">{t.vehicle.waitingToSync}</span> : null}
                       </span>
                       <span className="muted">{t.vehicle.readingEntry}</span>
-                    </div>
+                    </a>
                   )}
                 </li>
               ))}
             </ul>
+            {!allHistory && history.length > HISTORY_PREVIEW ? (
+              <button type="button" className="button button-block" onClick={() => setAllHistory(true)}>
+                {t.vehicle.showAllHistory(history.length)}
+              </button>
+            ) : null}
           </section>
 
           <section className="actions actions-footer">
-            <a className="button" href={`#/vehicles/${vehicle.id}/edit`}>
-              {t.vehicle.edit}
-            </a>
             {owned && due.length > 0 ? (
               <a className="button" href={`#/vehicles/${vehicle.id}/copy-tasks`}>
                 {t.vehicle.copyTasksShort}
               </a>
             ) : null}
-            <a className="button" href={`#/vehicles/${vehicle.id}/sell`}>
+            <a className={`button ${owned ? 'button-danger' : ''}`} href={`#/vehicles/${vehicle.id}/sell`}>
               {owned ? t.vehicle.markSold : t.vehicle.saleDetails}
             </a>
           </section>

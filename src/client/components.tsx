@@ -1,7 +1,9 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import type { DueInfo } from '../shared/due.ts';
+import { confirmAction, dismissToast, useFeedback } from './feedback.ts';
 import { formatDate } from './format.ts';
-import { LANGS, setLang, useT } from './i18n.ts';
+import { LANGS, messages, setLang, useT } from './i18n.ts';
+import { Icon } from './icons.tsx';
 import { refreshPushSubscription } from './push.ts';
 import { dismissRejected, sync, useStore } from './store.ts';
 
@@ -21,6 +23,8 @@ export function Layout({ title, back, actions, children }: { title: string; back
       </header>
       <RejectedBanner />
       <main>{children}</main>
+      <ToastHost />
+      <ConfirmHost />
     </>
   );
 }
@@ -30,7 +34,7 @@ function SyncBadge() {
   const { outbox, reachable, contacted, syncing } = useStore();
   const waiting = outbox.length;
   let label: string;
-  let tone: string;
+  let tone: 'syncing' | 'offline' | 'synced';
   if (reachable && !contacted) {
     label = t.sync.connecting;
     tone = 'syncing';
@@ -44,9 +48,17 @@ function SyncBadge() {
     label = t.sync.synced;
     tone = 'synced';
   }
+  // When all is well only a small tick shows, so the page title keeps the room; problems are spelled out.
   return (
-    <button type="button" className={`sync sync-${tone}`} onClick={() => void sync()} title={t.sync.tapToSync}>
-      {label}
+    <button
+      type="button"
+      className={`sync sync-${tone}`}
+      onClick={() => void sync()}
+      title={`${label} · ${t.sync.tapToSync}`}
+      aria-label={`${label} · ${t.sync.tapToSync}`}
+    >
+      <Icon name={tone === 'synced' ? 'check' : tone === 'offline' ? 'cloudOff' : 'sync'} />
+      <span className="sync-label">{label}</span>
     </button>
   );
 }
@@ -73,17 +85,102 @@ function RejectedBanner() {
   );
 }
 
+function ToastHost() {
+  const t = useT();
+  const { toast } = useFeedback();
+  return (
+    <div className="toast-host" role="status" aria-live="polite">
+      {toast ? (
+        <div className="toast" key={toast.id}>
+          <span>{toast.text}</span>
+          {toast.undo ? (
+            <button
+              type="button"
+              onClick={() => {
+                const undo = toast.undo!;
+                dismissToast();
+                void undo.run();
+              }}
+            >
+              {toast.undo.label}
+            </button>
+          ) : null}
+          <button type="button" className="toast-close" onClick={dismissToast} aria-label={t.feedback.close}>
+            ×
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ConfirmHost() {
+  const { confirm } = useFeedback();
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const el = dialog.current;
+    if (!el) return;
+    if (confirm && !el.open) el.showModal();
+    if (!confirm && el.open) el.close();
+  }, [confirm]);
+  return (
+    <dialog
+      ref={dialog}
+      className="confirm"
+      onCancel={(e) => {
+        e.preventDefault();
+        confirm?.resolve(false);
+      }}
+    >
+      {confirm ? (
+        <>
+          <p>{confirm.message}</p>
+          <div className="actions">
+            {/* Cancel first and focused: the safe choice is the default one. */}
+            <button type="button" className="button" autoFocus onClick={() => confirm.resolve(false)}>
+              {confirm.cancelLabel}
+            </button>
+            <button type="button" className="button button-danger-solid" onClick={() => confirm.resolve(true)}>
+              {confirm.confirmLabel}
+            </button>
+          </div>
+        </>
+      ) : null}
+    </dialog>
+  );
+}
+
+/** Asks before deleting something, in the app's own dialog. */
+export function confirmDelete(message: string): Promise<boolean> {
+  const t = messages();
+  return confirmAction(message, { confirm: t.feedback.delete, cancel: t.feedback.cancel });
+}
+
+/** A form's error, brought into view when it appears so it isn't missed below the fold. */
+export function FormError({ error }: { error: string | null }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (error) ref.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [error]);
+  if (!error) return null;
+  return (
+    <p ref={ref} className="banner banner-error" role="alert">
+      {error}
+    </p>
+  );
+}
+
 export function StatusChip({ status }: { status: DueInfo['status'] }) {
   const t = useT();
   return <span className={`chip chip-${status}`}>{t.status[status]}</span>;
 }
 
-export function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
+export function Field({ label, hint, error, children }: { label: string; hint?: ReactNode; error?: string | null; children: ReactNode }) {
   return (
-    <label className="field">
+    <label className={`field ${error ? 'field-invalid' : ''}`}>
       <span className="field-label">{label}</span>
       {children}
-      {hint ? <span className="field-hint">{hint}</span> : null}
+      {error ? <span className="field-error">{error}</span> : hint ? <span className="field-hint">{hint}</span> : null}
     </label>
   );
 }

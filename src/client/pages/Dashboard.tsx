@@ -7,8 +7,8 @@ import type { Snapshot, Vehicle } from '../../shared/types.ts';
 import { LanguageSwitch, Layout, StatusChip } from '../components.tsx';
 import { describeDue, formatDate, formatKm, taskName } from '../format.ts';
 import { useT } from '../i18n.ts';
+import { Icon } from '../icons.tsx';
 
-const ICON: Record<Vehicle['kind'], string> = { car: '🚗', motorcycle: '🏍️' };
 /** Nudge for a fresh odometer reading so the projection stays honest. */
 const STALE_READING_DAYS = 30;
 /** Wide screens have room to show what comes up next, not only what is urgent. */
@@ -46,13 +46,13 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
       {owned.length > 0 ? (
         <div className="actions dashboard-actions">
           <a className="button" href="#/shopping">
-            🛒 {t.workshop.shopping}
+            <Icon name="cart" /> {t.workshop.shopping}
           </a>
           <a className="button" href="#/insurance">
-            🛡️ {t.insurance.title}
+            <Icon name="shield" /> {t.insurance.title}
           </a>
           <a className="button" href="#/reminders">
-            🔔 {t.reminders.title}
+            <Icon name="bell" /> {t.reminders.title}
           </a>
         </div>
       ) : null}
@@ -63,7 +63,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
             {sold.map((v) => (
               <li key={v.id}>
                 <a href={`#/vehicles/${v.id}`}>
-                  {ICON[v.kind]} {v.name} <span className="muted">{v.soldDate ? t.dashboard.soldOn(formatDate(v.soldDate, t)) : ''}</span>
+                  <Icon name={v.kind} /> {v.name} <span className="muted">{v.soldDate ? t.dashboard.soldOn(formatDate(v.soldDate, t)) : ''}</span>
                 </a>
               </li>
             ))}
@@ -96,7 +96,7 @@ function VehicleCard({ vehicle, snapshot, today }: { vehicle: Vehicle; snapshot:
     <a className="card vehicle-card" href={`#/vehicles/${vehicle.id}`}>
       <div className="card-head">
         <h2>
-          {ICON[vehicle.kind]} {vehicle.name}
+          <Icon name={vehicle.kind} /> {vehicle.name}
         </h2>
         {usage.estimatedOdometer !== null ? (
           <span className="muted">
@@ -117,7 +117,9 @@ function VehicleCard({ vehicle, snapshot, today }: { vehicle: Vehicle; snapshot:
         {insuranceDue && insuranceDue.status !== 'ok' ? (
           <li>
             <span className={`chip chip-${insuranceDue.status}`}>{t.status[insuranceDue.status]}</span>
-            <span className="due-name">🛡️ {cover!.policy.insurer}</span>
+            <span className="due-name with-icon">
+              <Icon name="shield" /> {cover!.policy.insurer}
+            </span>
             <span className="due-text">
               {insuranceDue.status === 'overdue'
                 ? t.insurance.renewalPassed(formatDate(insuranceDue.date, t))

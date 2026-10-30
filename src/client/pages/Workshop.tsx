@@ -4,7 +4,7 @@ import { vehicleDue } from '../../shared/due.ts';
 import type { PartUnit, VehicleSpecKind } from '../../shared/schemas.ts';
 import type { FitmentPosition, MaintenanceTask, PartSpec, PartUsed, Snapshot, Vehicle, VehicleSpec } from '../../shared/types.ts';
 import { fitments, lastUsed, partSpecsOf, SHOPPING_HORIZON_DAYS, shoppingList, type FittedItem } from '../../shared/workshop.ts';
-import { Field, Layout, NeedsConnection, StatusChip } from '../components.tsx';
+import { confirmDelete, Field, FormError, Layout, NeedsConnection, StatusChip } from '../components.tsx';
 import {
   describeDue,
   describeInterval,
@@ -100,7 +100,7 @@ function InlineEditor({
   return (
     <form onSubmit={submit} className="form card inline-editor">
       {children}
-      {error ? <p className="banner banner-error">{error}</p> : null}
+      <FormError error={error} />
       <div className="actions">
         <button type="button" className="button" onClick={onCancel}>
           {t.workshop.cancel}
@@ -133,14 +133,15 @@ function AddButton({ editor, label }: { editor: ReturnType<typeof useEditor>; la
 function useEditor() {
   const [editing, setEditing] = useState<Editing>(null);
   const submit = useSubmit();
-  function save(fn: () => Promise<unknown>) {
+  function save(fn: () => Promise<unknown>, done?: string) {
     void submit.run(async () => {
       await fn();
       setEditing(null);
-    });
+    }, done);
   }
   function remove(name: string, fn: () => Promise<unknown>) {
-    if (window.confirm(messages().workshop.confirmDelete(name))) save(fn);
+    const t = messages();
+    void confirmDelete(t.workshop.confirmDelete(name)).then((ok) => ok && save(fn, t.feedback.deleted));
   }
   return { editing, setEditing: (e: Editing) => (submit.setError(null), setEditing(e)), save, remove, ...submit };
 }
@@ -452,7 +453,7 @@ export function FittedPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: 
           <button type="button" className="button" onClick={addCommon} disabled={editor.disabled}>
             {t.workshop.addCommon}
           </button>
-          {editor.error ? <p className="banner banner-error">{editor.error}</p> : null}
+          <FormError error={editor.error} />
         </div>
       ) : null}
       <ul className="list list-grid">
@@ -746,7 +747,7 @@ export function WorkshopForm({ task, vehicle, snapshot }: { task: MaintenanceTas
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={8} maxLength={20_000} />
         </Field>
 
-        {error ? <p className="banner banner-error">{error}</p> : null}
+        <FormError error={error} />
         <Submit disabled={disabled}>{t.workshop.save}</Submit>
       </form>
     </Layout>

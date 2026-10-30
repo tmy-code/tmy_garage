@@ -2,9 +2,11 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { todayIso } from '../../shared/dates.ts';
 import type { OvernightParking } from '../../shared/schemas.ts';
 import type { MaintenanceTask, Snapshot, Vehicle } from '../../shared/types.ts';
-import { Field, Layout, NeedsConnection } from '../components.tsx';
+import { confirmDelete, Field, FormError, Layout, NeedsConnection } from '../components.tsx';
+import { showToast } from '../feedback.ts';
 import { parseNumber, taskName } from '../format.ts';
-import { useT, type Messages } from '../i18n.ts';
+import { messages, useT, type Messages } from '../i18n.ts';
+import { Icon } from '../icons.tsx';
 import { navigate } from '../router.ts';
 import { online, useStore } from '../store.ts';
 
@@ -14,11 +16,13 @@ export function useSubmit() {
   const { reachable } = useStore();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  async function run(fn: () => Promise<void>) {
+  /** Runs a change; once it succeeds, says so briefly (`done`, "Saved" by default). */
+  async function run(fn: () => Promise<unknown>, done: string = messages().feedback.saved) {
     setError(null);
     setBusy(true);
     try {
       await fn();
+      showToast(done);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -99,7 +103,7 @@ export function VehicleForm({ existing }: { existing?: Vehicle }) {
               className={kind === k ? 'on' : ''}
               onClick={() => setKind(k)}
             >
-              {k === 'car' ? t.setup.car : t.setup.motorcycle}
+              <Icon name={k} /> {k === 'car' ? t.setup.car : t.setup.motorcycle}
             </button>
           ))}
         </div>
@@ -154,7 +158,7 @@ export function VehicleForm({ existing }: { existing?: Vehicle }) {
             </Field>
           </div>
         </details>
-        {error ? <p className="banner banner-error">{error}</p> : null}
+        <FormError error={error} />
         <Submit disabled={disabled}>{existing ? t.setup.save : t.setup.addVehicle}</Submit>
       </form>
     </Layout>
@@ -204,7 +208,7 @@ export function SellForm({ vehicle }: { vehicle: Vehicle }) {
         <Field label={t.setup.price}>
           <input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} />
         </Field>
-        {error ? <p className="banner banner-error">{error}</p> : null}
+        <FormError error={error} />
         <Submit disabled={disabled}>{vehicle.status === 'sold' ? t.setup.saveSale : t.setup.markSold}</Submit>
         {vehicle.status === 'sold' ? (
           <button type="button" className="button button-block" onClick={unsell} disabled={disabled}>
@@ -250,12 +254,12 @@ export function TaskForm({ vehicle, existing }: { vehicle: Vehicle; existing?: M
     });
   }
 
-  function remove() {
-    if (!existing || !window.confirm(t.setup.confirmDeleteTask(taskName(existing, t)))) return;
+  async function remove() {
+    if (!existing || !(await confirmDelete(t.setup.confirmDeleteTask(taskName(existing, t))))) return;
     void run(async () => {
       await online('DELETE', `/api/tasks/${existing.id}`);
       navigate(back, { replace: true });
-    });
+    }, t.feedback.deleted);
   }
 
   return (
@@ -297,7 +301,7 @@ export function TaskForm({ vehicle, existing }: { vehicle: Vehicle; existing?: M
           </Field>
         </div>
         <p className="muted">{t.setup.baselineHint}</p>
-        {error ? <p className="banner banner-error">{error}</p> : null}
+        <FormError error={error} />
         <Submit disabled={disabled}>{existing ? t.setup.save : t.setup.addTask}</Submit>
         {existing ? (
           <button type="button" className="button button-danger button-block" onClick={remove} disabled={disabled}>
@@ -341,7 +345,7 @@ export function CopyTasks({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: S
               ))}
             </select>
           </Field>
-          {error ? <p className="banner banner-error">{error}</p> : null}
+          <FormError error={error} />
           <Submit disabled={disabled}>{t.setup.copy}</Submit>
         </form>
       )}

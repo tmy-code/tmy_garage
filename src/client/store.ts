@@ -76,9 +76,16 @@ async function fetchSnapshot() {
   await persist('snapshot', snapshot);
 }
 
+let flushing: Promise<void> = Promise.resolve();
+
 /** Sends queued changes in order. Stops at the first network failure and keeps the rest for later. */
-async function flush(): Promise<void> {
-  if (state.syncing) return;
+function flush(): Promise<void> {
+  if (state.syncing) return flushing;
+  flushing = flushOnce();
+  return flushing;
+}
+
+async function flushOnce(): Promise<void> {
   update({ syncing: true });
   try {
     while (state.outbox.length > 0) {
@@ -94,7 +101,7 @@ async function flush(): Promise<void> {
           throw error;
         }
       }
-      update({ outbox: state.outbox.slice(1), reachable: true });
+      update({ outbox: state.outbox.filter((o) => o !== op), reachable: true });
       await persist('outbox', state.outbox);
     }
     await fetchSnapshot();
@@ -115,6 +122,22 @@ export async function enqueue(op: OutboxOp): Promise<void> {
   update({ outbox: enqueueOp(state.outbox, op) });
   await persist('outbox', state.outbox);
   void flush();
+}
+
+/**
+ * Takes back a Service or Odometer Reading just created: dropped from the queue if not sent yet,
+ * otherwise deleted on the server (which needs a connection).
+ */
+export async function undoCreate(op: OutboxOp): Promise<void> {
+  const inFlight = state.syncing && state.outbox[0]?.data.id === op.data.id;
+  if (!inFlight && state.outbox.some((o) => o.data.id === op.data.id)) {
+    update({ outbox: state.outbox.filter((o) => o.data.id !== op.data.id) });
+    await persist('outbox', state.outbox);
+    return;
+  }
+  // Being sent right now: let it arrive, then delete it, so the two requests can't cross.
+  if (inFlight) await flushing;
+  await online('DELETE', op.kind === 'service' ? `/api/services/${op.data.id}` : `/api/odometer-readings/${op.data.id}`);
 }
 
 /** Runs a change that needs a connection (vehicle and task setup), then refreshes the offline copy. */

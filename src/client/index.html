@@ -12,6 +12,12 @@
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icon.svg" />
     <title>TMY Garage</title>
+    <!-- Matches the app's background so opening it never flashes white before the styles load. -->
+    <style>
+      body { margin: 0; background: #f3f4f6; }
+      @media (prefers-color-scheme: dark) { body { background: #111827; } }
+      @media (prefers-color-scheme: dark) and (pointer: coarse) { body { background: #000000; } }
+    </style>
   </head>
   <body>
     <div id="root"></div>

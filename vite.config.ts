@@ -37,7 +37,8 @@ export default defineConfig({
   ],
   server: {
     proxy: {
-      '/api': 'http://localhost:3000',
+      // A regex so that the client's own src/client/api.ts module is not sent to the server.
+      '^/api/': 'http://localhost:3000',
     },
   },
   test: {
