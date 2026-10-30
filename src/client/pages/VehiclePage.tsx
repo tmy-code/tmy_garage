@@ -91,10 +91,7 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
                 t.vehicle.noReading
               ) : (
                 <>
-                  <strong>
-                    {usage.kmPerDay ? '≈ ' : ''}
-                    {formatKm(usage.estimatedOdometer)}
-                  </strong>
+                  <strong>{formatKm(usage.estimatedOdometer)}</strong>
                   <span className="muted">
                     {usage.kmPerDay ? t.vehicle.rate(Math.round(usage.kmPerDay * 30)) : ''}
                     {usage.latest ? t.vehicle.lastReading(formatKm(usage.latest.odometer), formatDate(usage.latest.date, t)) : ''}

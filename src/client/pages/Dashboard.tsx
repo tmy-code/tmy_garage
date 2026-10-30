@@ -99,10 +99,7 @@ function VehicleCard({ vehicle, snapshot, today }: { vehicle: Vehicle; snapshot:
           <Icon name={vehicle.kind} /> {vehicle.name}
         </h2>
         {usage.estimatedOdometer !== null ? (
-          <span className="muted">
-            {usage.kmPerDay ? '≈ ' : ''}
-            {formatKm(usage.estimatedOdometer)}
-          </span>
+          <span className="muted">{formatKm(usage.estimatedOdometer)}</span>
         ) : null}
       </div>
       {due.length === 0 ? <p className="muted">{t.dashboard.noTasks}</p> : null}
