@@ -9,20 +9,31 @@ import { dismissRejected, sync, useStore } from './store.ts';
 
 export function Layout({ title, back, actions, children }: { title: string; back?: string; actions?: ReactNode; children: ReactNode }) {
   const t = useT();
+  // "Garage" sits in the middle of every top bar and leads home; the page's own name is its heading below.
+  // Home screens (no back arrow) would only repeat "Garage", so their heading is for screen readers only.
   return (
     <>
       <header className="topbar">
-        {back !== undefined ? (
-          <a className="back" href={`#${back}`} aria-label={t.back}>
-            ‹
-          </a>
-        ) : null}
-        <h1>{title}</h1>
-        <SyncBadge />
-        {actions}
+        <div className="topbar-side">
+          {back !== undefined ? (
+            <a className="back" href={`#${back}`} aria-label={t.back}>
+              ‹
+            </a>
+          ) : null}
+        </div>
+        <a className="home-link" href="#/">
+          {t.garage}
+        </a>
+        <div className="topbar-side topbar-end">
+          <SyncBadge />
+          {actions}
+        </div>
       </header>
       <RejectedBanner />
-      <main>{children}</main>
+      <main>
+        <h1 className={back !== undefined ? 'page-title' : 'visually-hidden'}>{title}</h1>
+        {children}
+      </main>
       <ToastHost />
       <ConfirmHost />
     </>

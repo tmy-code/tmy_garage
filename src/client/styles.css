@@ -131,18 +131,41 @@ section {
   color: var(--topbar-text);
 }
 
-.topbar h1 {
-  flex: 1;
-  min-width: 0;
+.topbar-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Both sides share the room equally so "Garage" stays centred; a wide side pushes it over rather than overlapping. */
+  flex: 1 1 0;
+  min-width: max-content;
+}
+
+.topbar-end {
+  justify-content: flex-end;
+}
+
+.home-link {
+  flex: none;
   font-size: 1.2rem;
-  line-height: 1.2;
-  /* Long titles wrap onto a second line rather than being cut to "Spéc…". */
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
+  font-weight: 700;
+  text-decoration: none;
+  padding: 6px 4px;
+}
+
+.page-title {
+  font-size: 1.4rem;
+  line-height: 1.25;
+  margin: 0 0 16px;
   overflow-wrap: anywhere;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 @media (max-width: 480px) {
@@ -150,13 +173,9 @@ section {
     gap: 8px;
   }
 
-  .topbar h1 {
-    font-size: 1.05rem;
+  .home-link {
+    font-size: 1.1rem;
   }
-}
-
-.topbar > :not(h1) {
-  flex: none;
 }
 
 .back {
