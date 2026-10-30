@@ -6,6 +6,7 @@ import { confirmDelete, Field, FormError, Layout, NeedsConnection } from '../com
 import { showToast } from '../feedback.ts';
 import { parseNumber, taskName } from '../format.ts';
 import { messages, useT, type Messages } from '../i18n.ts';
+import { KNOWN_MAKES } from '../brands.tsx';
 import { Icon } from '../icons.tsx';
 import { navigate } from '../router.ts';
 import { online, useStore } from '../store.ts';
@@ -111,7 +112,12 @@ export function VehicleForm({ existing }: { existing?: Vehicle }) {
           <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={80} />
         </Field>
         <Field label={t.setup.make}>
-          <input value={make} onChange={(e) => setMake(e.target.value)} maxLength={60} />
+          <input value={make} onChange={(e) => setMake(e.target.value)} maxLength={60} list="known-makes" />
+          <datalist id="known-makes">
+            {KNOWN_MAKES.map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
         </Field>
         <Field label={t.setup.model}>
           <input value={model} onChange={(e) => setModel(e.target.value)} maxLength={60} />

@@ -7,6 +7,7 @@ import type { Snapshot, Vehicle } from '../../shared/types.ts';
 import { LanguageSwitch, Layout, StatusChip } from '../components.tsx';
 import { describeDue, formatDate, formatKm, taskName } from '../format.ts';
 import { useT } from '../i18n.ts';
+import { VehicleIcon } from '../brands.tsx';
 import { Icon } from '../icons.tsx';
 
 /** Nudge for a fresh odometer reading so the projection stays honest. */
@@ -63,7 +64,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
             {sold.map((v) => (
               <li key={v.id}>
                 <a href={`#/vehicles/${v.id}`}>
-                  <Icon name={v.kind} /> {v.name} <span className="muted">{v.soldDate ? t.dashboard.soldOn(formatDate(v.soldDate, t)) : ''}</span>
+                  <VehicleIcon vehicle={v} /> {v.name} <span className="muted">{v.soldDate ? t.dashboard.soldOn(formatDate(v.soldDate, t)) : ''}</span>
                 </a>
               </li>
             ))}
@@ -96,7 +97,7 @@ function VehicleCard({ vehicle, snapshot, today }: { vehicle: Vehicle; snapshot:
     <a className="card vehicle-card" href={`#/vehicles/${vehicle.id}`}>
       <div className="card-head">
         <h2>
-          <Icon name={vehicle.kind} /> {vehicle.name}
+          <VehicleIcon vehicle={vehicle} /> {vehicle.name}
         </h2>
         {usage.estimatedOdometer !== null ? (
           <span className="muted">{formatKm(usage.estimatedOdometer)}</span>

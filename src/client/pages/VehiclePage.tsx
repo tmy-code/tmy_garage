@@ -7,6 +7,7 @@ import type { PartUsed, Snapshot, Vehicle } from '../../shared/types.ts';
 import { Layout, StatusChip } from '../components.tsx';
 import { describeDue, describeInterval, describeOfficialInterval, formatDate, formatKm, formatMoney, taskName } from '../format.ts';
 import { useT } from '../i18n.ts';
+import { VehicleIcon } from '../brands.tsx';
 import { Icon } from '../icons.tsx';
 import { useStore } from '../store.ts';
 import { describePart } from './Workshop.tsx';
@@ -74,7 +75,7 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
           <section className="card">
             {subtitle ? (
               <p className="muted vehicle-subtitle">
-                <Icon name={vehicle.kind} /> {subtitle}
+                <VehicleIcon vehicle={vehicle} /> {subtitle}
               </p>
             ) : null}
             {vehicle.status === 'sold' ? <p className="banner banner-warn">{t.vehicle.sold(saleDetails)}</p> : null}
