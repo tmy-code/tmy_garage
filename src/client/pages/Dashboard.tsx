@@ -163,16 +163,14 @@ function UpcomingLine({ item, vehicle, snapshot, today }: { item: Upcoming; vehi
     case 'reading':
       return null;
   }
-  // A Task due by distance only, with no projected date, says how many km are left.
+  // A Task with a distance interval also says how many km are left before it is due.
   const km = item.kind === 'task' ? item.due.kmRemaining : null;
-  const text =
-    item.date !== null
-      ? when(item.date, item.status, today, t)
-      : km !== null
-        ? km < 0
-          ? t.due.over(formatKm(-km))
-          : t.due.left(formatKm(km))
-        : '';
+  const text = [
+    item.date !== null ? when(item.date, item.status, today, t) : null,
+    km !== null ? (km < 0 ? t.due.over(formatKm(-km)) : t.due.left(formatKm(km))) : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <a href={href}>

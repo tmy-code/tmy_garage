@@ -317,9 +317,10 @@ section {
 
 .due-lines a {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: baseline;
-  gap: 12px;
+  gap: 0 12px;
   padding: 7px 0;
   color: inherit;
   text-decoration: none;
@@ -330,9 +331,9 @@ section {
 }
 
 .due-lines .muted {
+  margin-left: auto;
   font-size: 0.9rem;
   text-align: right;
-  white-space: nowrap;
 }
 
 .due-name {
