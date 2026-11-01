@@ -803,16 +803,24 @@ export function WorkshopForm({ task, vehicle, snapshot }: { task: MaintenanceTas
 
 // --- Shopping list ---
 
-/** The workshop pages of every owned Vehicle, reached from the menu. */
+/** The workshop pages of the Vehicles shown on the garage page, reached from the menu. */
 export function WorkshopPage({ snapshot }: { snapshot: Snapshot }) {
   const t = useT();
-  const owned = snapshot.vehicles.filter((v) => v.status === 'owned');
+  const shown = snapshot.vehicles.filter((v) => v.onGaragePage);
   const count = (items: { vehicleId: string }[], id: string) => t.workshop.count(items.filter((x) => x.vehicleId === id).length);
   return (
     <Layout title={t.workshop.section}>
-      {owned.length === 0 ? <p className="empty">{t.dashboard.noVehicles}</p> : null}
+      {snapshot.vehicles.length === 0 ? <p className="empty">{t.dashboard.noVehicles}</p> : null}
+      {snapshot.vehicles.length > 0 && shown.length === 0 ? (
+        <div className="empty">
+          <p>{t.dashboard.noneShown}</p>
+          <a className="button" href="#/vehicles/manage">
+            {t.dashboard.manage}
+          </a>
+        </div>
+      ) : null}
       <div className="card-grid">
-        {owned.map((v) => (
+        {shown.map((v) => (
           <section key={v.id}>
             <h2 className="with-icon">
               <VehicleIcon vehicle={v} /> {v.name}
