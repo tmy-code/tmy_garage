@@ -335,6 +335,15 @@ describe('workshop data', () => {
     for (const gone of ['spark_plugs', 'atf', 'battery_12v']) expect(fitted).not.toContain(gone);
   });
 
+  it('gives a flex-fuel car the parts and options of a petrol one, and refuses it on a motorcycle', async () => {
+    const car = await create({ ...CAR, fuel: 'flexfuel', distribution: 'belt', hasTurbo: true, hasDirectInjection: true });
+    expect(car).toMatchObject({ fuel: 'flexfuel', hasTurbo: true, hasDirectInjection: true });
+    const fitted = await fittedParts(car.id);
+    expect(fitted).toEqual(expect.arrayContaining(['engine_oil', 'spark_plugs', 'timing_belt_kit', 'clutch_kit']));
+    expect(fitted).not.toContain('fuel_filter');
+    expect((await call('POST', '/api/vehicles', { ...BIKE, name: 'Test vehicle', fuel: 'flexfuel' })).status).toBe(422);
+  });
+
   it('leaves out the engine parts of an electric car', async () => {
     const car = await create({ ...CAR, fuel: 'electric', drivetrain: 'awd' });
     const fitted = await fittedParts(car.id);
@@ -1044,6 +1053,20 @@ describe('migrations', () => {
     await later.request('/api/vehicles/sold/unsell', { method: 'POST' });
     expect((await tasks('sold')).filter((t) => t.standardPart === 'engine_oil').map((t) => t.id)).toEqual(['sold-oil']);
     expect(migrated.prepare('SELECT COUNT(*) AS n FROM schedule_moves').get()).toEqual({ n: 0 });
+    migrated.close();
+  });
+
+  it('keeps each vehicle’s fuel when flex-fuel joins the fuels', () => {
+    const path = join(dir, 'garage.sqlite');
+    const old = openDatabase(path, undefined, 15);
+    old.exec(`INSERT INTO vehicles (id, garage_id, kind, name, fuel) VALUES ('p', 'default', 'car', 'Petrol car', 'phev'), ('n', 'default', 'car', 'Old car', NULL)`);
+    old.close();
+    const migrated = openDatabase(path);
+    expect(migrated.prepare('SELECT id, fuel FROM vehicles ORDER BY id').all()).toEqual([
+      { id: 'n', fuel: null },
+      { id: 'p', fuel: 'phev' },
+    ]);
+    migrated.exec(`UPDATE vehicles SET fuel = 'flexfuel' WHERE id = 'n'`);
     migrated.close();
   });
 

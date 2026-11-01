@@ -15,7 +15,7 @@ const optionalText = (max: number) =>
 export const vehicleKind = z.enum(['car', 'motorcycle']);
 export const vehicleSpecKind = z.enum(['torque', 'other']);
 // What a Vehicle is built with (its Build), which decides its Standard Parts.
-export const fuelType = z.enum(['petrol', 'diesel', 'hybrid', 'phev', 'electric']);
+export const fuelType = z.enum(['petrol', 'flexfuel', 'diesel', 'hybrid', 'phev', 'electric']);
 export const transmission = z.enum(['manual', 'automatic', 'dct', 'cvt', 'e_cvt', 'single_speed']);
 export const drivetrain = z.enum(['fwd', 'rwd', 'awd']);
 export const distribution = z.enum(['belt', 'chain', 'none']);

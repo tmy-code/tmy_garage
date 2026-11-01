@@ -412,6 +412,13 @@ const MIGRATIONS: string[] = [
   ALTER TABLE maintenance_tasks ADD COLUMN category TEXT CHECK (category IN ('engine', 'ignition', 'fuel_exhaust', 'cooling',
     'transmission', 'drivetrain', 'brakes', 'tires_suspension', 'electrical', 'hvac', 'body', 'other'));
   `,
+  `
+  -- Flex-fuel (E85) joins the fuels, so the column is recreated with a wider check.
+  ALTER TABLE vehicles ADD COLUMN fuel_new TEXT CHECK (fuel_new IN ('petrol', 'flexfuel', 'diesel', 'hybrid', 'phev', 'electric'));
+  UPDATE vehicles SET fuel_new = fuel;
+  ALTER TABLE vehicles DROP COLUMN fuel;
+  ALTER TABLE vehicles RENAME COLUMN fuel_new TO fuel;
+  `,
 ];
 
 function schemaVersion(db: DatabaseSync): number {

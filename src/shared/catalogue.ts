@@ -43,7 +43,8 @@ export type Build = VehicleSpecs & { kind: VehicleKind };
 // --- What a Build can be ---
 
 export function fuelsOf(kind: VehicleKind): readonly FuelType[] {
-  return kind === 'motorcycle' ? ['petrol', 'electric'] : ['petrol', 'diesel', 'hybrid', 'phev', 'electric'];
+  // Flex-fuel (E85) is a petrol engine that also runs on ethanol: for its parts and options it is petrol.
+  return kind === 'motorcycle' ? ['petrol', 'electric'] : ['petrol', 'flexfuel', 'diesel', 'hybrid', 'phev', 'electric'];
 }
 
 export function transmissionsOf(kind: VehicleKind, fuel: FuelType | null): readonly Transmission[] {
@@ -65,7 +66,7 @@ export function flagsOf(kind: VehicleKind, fuel: FuelType | null, transmission: 
   if (kind === 'motorcycle') return transmission === 'manual' ? ['hasHydraulicClutch'] : [];
   const flags: SpecFlag[] = [];
   if (fuel !== 'electric') flags.push('hasTurbo');
-  if (fuel === 'petrol' || fuel === 'hybrid' || fuel === 'phev') flags.push('hasDirectInjection');
+  if (fuel === 'petrol' || fuel === 'flexfuel' || fuel === 'hybrid' || fuel === 'phev') flags.push('hasDirectInjection');
   if (fuel !== 'electric') flags.push('hasStartStop');
   if (fuel === 'diesel') flags.push('hasAdblue');
   flags.push('hasAc', 'hasAirSuspension');
@@ -153,7 +154,7 @@ interface PartTemplate {
 }
 
 const COMBUSTION: Rule = ['combustion', '=', true];
-const SPARK_IGNITION: Rule = ['fuel', 'in', ['petrol', 'hybrid', 'phev']];
+const SPARK_IGNITION: Rule = ['fuel', 'in', ['petrol', 'flexfuel', 'hybrid', 'phev']];
 
 /**
  * The Standard Parts a car or motorcycle might have and when it has them, from the vehicle parts database: its

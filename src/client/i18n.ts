@@ -572,7 +572,7 @@ const en = {
     builtWith: 'What it is built with',
     builtWithHint: 'Decides which parts this vehicle has, and the maintenance tasks it starts with.',
     fuel: 'Fuel',
-    fuels: { petrol: 'Petrol', diesel: 'Diesel', hybrid: 'Hybrid', phev: 'Plug-in hybrid', electric: 'Electric' },
+    fuels: { petrol: 'Petrol', flexfuel: 'Flex-fuel (E85)', diesel: 'Diesel', hybrid: 'Hybrid', phev: 'Plug-in hybrid', electric: 'Electric' },
     transmission: 'Gearbox',
     transmissions: {
       manual: 'Manual',
@@ -1221,7 +1221,7 @@ const fr: Messages = {
     builtWith: 'Motorisation',
     builtWithHint: 'Détermine les pièces de ce véhicule et les tâches d’entretien avec lesquelles il démarre.',
     fuel: 'Carburant',
-    fuels: { petrol: 'Essence', diesel: 'Diesel', hybrid: 'Hybride', phev: 'Hybride rechargeable', electric: 'Électrique' },
+    fuels: { petrol: 'Essence', flexfuel: 'Superéthanol E85 (flexfuel)', diesel: 'Diesel', hybrid: 'Hybride', phev: 'Hybride rechargeable', electric: 'Électrique' },
     transmission: 'Boîte de vitesses',
     transmissions: {
       manual: 'Manuelle',
