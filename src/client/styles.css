@@ -858,12 +858,6 @@ body > .banner {
   }
 }
 
-@media (max-width: 999px) {
-  .wide-only {
-    display: none !important;
-  }
-}
-
 /* Wide screens: the page grows and splits into columns. Phones keep the single column above. */
 @media (min-width: 1000px) {
   .topbar {
@@ -892,11 +886,6 @@ body > .banner {
   .card-grid > .card,
   .card-grid > section {
     margin: 0;
-  }
-
-  /* Vehicle cards in a row share one height, and the buttons below line up with their columns. */
-  .dashboard-grid {
-    align-items: stretch;
   }
 
   .dashboard-actions {
