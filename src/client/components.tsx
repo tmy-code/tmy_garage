@@ -62,7 +62,7 @@ const SECTIONS = [
   ['workshop', '/workshop', 'wrench'],
   ['shopping', '/shopping', 'cart'],
   ['insurance', '/insurance', 'shield'],
-  ['reminders', '/reminders', 'bell'],
+  ['settings', '/settings', 'settings'],
 ] as const;
 
 type Section = (typeof SECTIONS)[number][0];
@@ -72,7 +72,7 @@ function sectionOf([section, , sub]: string[]): Section {
   if (section === 'workshop' || section === 'tasks') return 'workshop';
   if (section === 'vehicles' && (sub === 'parts' || sub === 'fitted' || sub === 'specs')) return 'workshop';
   if (section === 'shopping') return 'shopping';
-  if (section === 'reminders') return 'reminders';
+  if (section === 'settings' || section === 'reminders') return 'settings';
   if (section === 'insurance' || section === 'policies' || section === 'terms' || section === 'claims' || section === 'drivers' || section === 'quotes') return 'insurance';
   if (section === 'vehicles' && (sub === 'insurance' || sub === 'quote-pack' || sub === 'quotes')) return 'insurance';
   return 'garage';

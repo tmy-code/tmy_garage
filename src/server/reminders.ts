@@ -213,7 +213,7 @@ export function reminderMessage(reminders: Reminder[], snapshot: Snapshot, lang:
 }
 
 export function testMessage(lang: ReminderLang): PushMessage {
-  return { ...TEXT[lang].test, url: '/#/reminders' };
+  return { ...TEXT[lang].test, url: '/#/settings' };
 }
 
 /**

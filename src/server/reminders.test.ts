@@ -280,7 +280,7 @@ describe('sending', () => {
     await call('PUT', '/api/push/subscription', device('phone'));
     await vi.waitFor(() => expect(sent).toHaveLength(1));
     expect((await call('POST', '/api/push/test', { endpoint: device('phone').endpoint })).status).toBe(204);
-    expect(sent[1]!.message).toMatchObject({ title: 'Reminders are on', url: '/#/reminders' });
+    expect(sent[1]!.message).toMatchObject({ title: 'Reminders are on', url: '/#/settings' });
 
     expect((await call('POST', '/api/push/unsubscribe', { endpoint: device('phone').endpoint })).status).toBe(204);
     expect((await call('POST', '/api/push/test', { endpoint: device('phone').endpoint })).status).toBe(404);

@@ -1091,3 +1091,15 @@ body > .banner {
     border-color: var(--border);
   }
 }
+
+/* A vehicle on the Manage page: its garage-page checkbox, then its Edit button. */
+.manage-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.manage-row .check {
+  flex: 1;
+  min-width: 0;
+}

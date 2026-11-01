@@ -14,7 +14,7 @@ import {
   VehicleInsurancePage,
 } from './pages/Insurance.tsx';
 import { DocumentsPage, InspectionForm, InspectionsPage, ModificationForm, ModificationsPage } from './pages/Papers.tsx';
-import { RemindersPage } from './pages/Reminders.tsx';
+import { SettingsPage } from './pages/Settings.tsx';
 import { ReadingForm, ServiceForm } from './pages/ServiceForm.tsx';
 import { CopyTasks, SellForm, TaskForm, VehicleForm } from './pages/SetupForms.tsx';
 import { VehiclePage } from './pages/VehiclePage.tsx';
@@ -68,9 +68,14 @@ export function App() {
   if (section === 'workshop') return <WorkshopPage snapshot={snapshot} />;
   if (section === 'shopping') return <ShoppingPage snapshot={snapshot} />;
   if (section === 'insurance') return <InsurancePage snapshot={snapshot} />;
-  if (section === 'reminders') return <RemindersPage />;
+  // Reminders used to have their own page; links to it (a test notification, say) open the settings.
+  if (section === 'settings' || section === 'reminders') return <SettingsPage />;
   if (section === 'vehicles' && id === 'new') return <VehicleForm />;
-  if (section === 'vehicles' && id === 'manage') return <ManageGaragePage snapshot={snapshot} />;
+  if (section === 'vehicles' && id === 'manage') {
+    if (sub === undefined) return <ManageGaragePage snapshot={snapshot} />;
+    const edited = snapshot.vehicles.find((v) => v.id === sub);
+    return edited ? <VehicleForm key={edited.id} existing={edited} returnTo="/vehicles/manage" /> : <NotFound what="vehicle" />;
+  }
   if (section === 'vehicles') {
     if (!vehicle) return <NotFound what="vehicle" />;
     switch (sub) {

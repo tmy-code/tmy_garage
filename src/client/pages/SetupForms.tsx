@@ -99,7 +99,8 @@ function within<T extends string>(value: T | '', options: readonly T[]): T | '' 
   return value && options.includes(value) ? value : '';
 }
 
-export function VehicleForm({ existing }: { existing?: Vehicle }) {
+/** `returnTo` is where to go once saved or cancelled, when not the vehicle's page (e.g. the Manage page). */
+export function VehicleForm({ existing, returnTo }: { existing?: Vehicle; returnTo?: string }) {
   const t = useT();
   const [kind, setKind] = useState<Vehicle['kind']>(existing?.kind ?? 'motorcycle');
   const [name, setName] = useState(existing?.name ?? '');
@@ -125,7 +126,7 @@ export function VehicleForm({ existing }: { existing?: Vehicle }) {
     () => Object.fromEntries(SPEC_FLAGS.map((flag) => [flag, existing?.[flag] ?? false])) as Record<SpecFlag, boolean>,
   );
   const { error, disabled, run } = useSubmit();
-  const back = existing ? `/vehicles/${existing.id}` : '/';
+  const back = returnTo ?? (existing ? `/vehicles/${existing.id}` : '/');
   // Each choice narrows the next ones (an electric vehicle is single-speed); a choice that no longer fits is dropped.
   const fuelValue = within(fuel, fuelsOf(kind));
   const transmissions = transmissionsOf(kind, fuelValue || null);
@@ -163,7 +164,7 @@ export function VehicleForm({ existing }: { existing?: Vehicle }) {
       const saved = existing
         ? await online<Vehicle>('PUT', `/api/vehicles/${existing.id}`, body)
         : await online<Vehicle>('POST', '/api/vehicles', body);
-      navigate(`/vehicles/${saved.id}`, { replace: true });
+      navigate(returnTo ?? `/vehicles/${saved.id}`, { replace: true });
     });
   }
 

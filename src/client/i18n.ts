@@ -61,7 +61,10 @@ const en = {
     workshop: 'Workshop',
     shopping: 'Shopping',
     insurance: 'Insurance',
-    reminders: 'Reminders',
+    settings: 'Settings',
+  },
+  settings: {
+    title: 'Settings',
   },
   dashboard: {
     addVehicle: '+ Vehicle',
@@ -75,6 +78,7 @@ const en = {
     manageTitle: 'Vehicles on this page',
     manageIntro: 'Tick the vehicles that get a card on the garage page, sold or not. The others stay listed below the cards.',
     showOnPage: (name: string) => `Show ${name} on the garage page`,
+    editVehicle: (name: string) => `Edit ${name}`,
     later: 'Later',
     allClear: 'Nothing due in the coming year.',
     noReading: 'Add an odometer reading to start projecting Due Dates.',
@@ -715,7 +719,10 @@ const fr: Messages = {
     workshop: 'Atelier',
     shopping: 'Courses',
     insurance: 'Assurance',
-    reminders: 'Rappels',
+    settings: 'Réglages',
+  },
+  settings: {
+    title: 'Réglages',
   },
   dashboard: {
     addVehicle: '+ Véhicule',
@@ -729,6 +736,7 @@ const fr: Messages = {
     manageTitle: 'Véhicules sur cette page',
     manageIntro: 'Cochez les véhicules qui ont une carte sur la page garage, vendus ou non. Les autres restent listés sous les cartes.',
     showOnPage: (name) => `Afficher ${name} sur la page garage`,
+    editVehicle: (name) => `Modifier ${name}`,
     later: 'Plus tard',
     allClear: 'Rien à prévoir dans l’année.',
     noReading: 'Ajoutez un relevé kilométrique pour estimer les échéances.',

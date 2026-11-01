@@ -7,6 +7,7 @@ import { FormError, LanguageSwitch, Layout, NeedsConnection } from '../component
 import { formatDate, formatKm, taskName } from '../format.ts';
 import { useT, type Messages } from '../i18n.ts';
 import { VehicleIcon } from '../brands.tsx';
+import { Icon } from '../icons.tsx';
 import { online } from '../store.ts';
 import { useSubmit } from './SetupForms.tsx';
 
@@ -106,18 +107,23 @@ export function ManageGaragePage({ snapshot }: { snapshot: Snapshot }) {
       <p className="muted">{t.dashboard.manageIntro}</p>
       <div className="form">
         {vehicles.map((v) => (
-          <label key={v.id} className={`check ${v.onGaragePage ? 'check-on' : ''}`}>
-            <input
-              type="checkbox"
-              checked={v.onGaragePage}
-              onChange={() => toggle(v)}
-              disabled={disabled}
-              aria-label={t.dashboard.showOnPage(v.name)}
-            />
-            <span className="due-name with-icon">
-              <VehicleIcon vehicle={v} /> {v.name} <SoldNote vehicle={v} />
-            </span>
-          </label>
+          <div key={v.id} className="manage-row">
+            <label className={`check ${v.onGaragePage ? 'check-on' : ''}`}>
+              <input
+                type="checkbox"
+                checked={v.onGaragePage}
+                onChange={() => toggle(v)}
+                disabled={disabled}
+                aria-label={t.dashboard.showOnPage(v.name)}
+              />
+              <span className="due-name with-icon">
+                <VehicleIcon vehicle={v} /> {v.name} <SoldNote vehicle={v} />
+              </span>
+            </label>
+            <a className="button button-small" href={`#/vehicles/manage/${v.id}`} aria-label={t.dashboard.editVehicle(v.name)}>
+              <Icon name="pencil" /> {t.vehicle.editShort}
+            </a>
+          </div>
         ))}
         <FormError error={error} />
       </div>

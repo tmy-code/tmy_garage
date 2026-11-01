@@ -4,7 +4,27 @@ import { useT } from '../i18n.ts';
 import { Icon } from '../icons.tsx';
 import { pushState, PushRefused, sendTest, turnOff, turnOn, type PushState } from '../push.ts';
 
-export function RemindersPage() {
+/** What the owner sets up for the app on this device: Reminders and the language. */
+export function SettingsPage() {
+  const t = useT();
+  return (
+    <Layout title={t.settings.title} back="/">
+      <NeedsConnection />
+      <section>
+        <h2 className="with-icon">
+          <Icon name="bell" /> {t.reminders.title}
+        </h2>
+        <Reminders />
+      </section>
+      <section>
+        <LanguageSwitch />
+      </section>
+    </Layout>
+  );
+}
+
+/** Turning Reminders on or off on this device, and sending a test one. */
+function Reminders() {
   const t = useT();
   const [state, setState] = useState<PushState | null>(null);
   const [busy, setBusy] = useState(false);
@@ -36,8 +56,7 @@ export function RemindersPage() {
   };
 
   return (
-    <Layout title={t.reminders.title} back="/">
-      <NeedsConnection />
+    <>
       <p>{t.reminders.intro}</p>
       <p className="muted">{t.reminders.eachDevice}</p>
       {state && explanation[state] ? <p className="banner banner-warn">{explanation[state]}</p> : null}
@@ -62,8 +81,6 @@ export function RemindersPage() {
           </>
         ) : null}
       </div>
-      {/* Also on the home screen; here too, next to the other per-device setting. */}
-      <LanguageSwitch />
-    </Layout>
+    </>
   );
 }
