@@ -345,6 +345,11 @@ const MIGRATIONS: string[] = [
   ALTER TABLE fitment_positions ADD COLUMN standard_part TEXT;
   CREATE UNIQUE INDEX fitment_positions_standard ON fitment_positions (vehicle_id, standard_part) WHERE standard_part IS NOT NULL;
   `,
+  `
+  -- Whether the Vehicle has a card on the garage page, whatever its sale status. Until now that was the owned ones.
+  ALTER TABLE vehicles ADD COLUMN on_garage_page INTEGER NOT NULL DEFAULT 1;
+  UPDATE vehicles SET on_garage_page = 0 WHERE status = 'sold';
+  `,
 ];
 
 function schemaVersion(db: DatabaseSync): number {

@@ -121,6 +121,22 @@ describe('vehicles and tasks', () => {
     expect(await res.json()).toMatchObject({ status: 'sold', soldDate: '2028-05-01', soldOdometer: 40000, soldPrice: 4500 });
   });
 
+  it('shows a vehicle on the garage page until sold, unless the user chooses otherwise', async () => {
+    const bike = await createVehicle();
+    expect(bike.onGaragePage).toBe(true);
+    const sold = (await (await call('POST', `/api/vehicles/${bike.id}/sell`, { date: '2028-05-01' })).json()) as Vehicle;
+    expect(sold.onGaragePage).toBe(false);
+    const shown = await call('PUT', `/api/vehicles/${bike.id}/garage-page`, { shown: true });
+    expect(await shown.json()).toMatchObject({ status: 'sold', onGaragePage: true });
+    // Editing the vehicle's details keeps the choice.
+    await call('PUT', `/api/vehicles/${bike.id}`, { kind: 'motorcycle', name: 'Renamed' });
+    expect((await snapshot()).vehicles[0]).toMatchObject({ name: 'Renamed', onGaragePage: true });
+    await call('PUT', `/api/vehicles/${bike.id}/garage-page`, { shown: false });
+    const back = (await (await call('POST', `/api/vehicles/${bike.id}/unsell`)).json()) as Vehicle;
+    expect(back).toMatchObject({ status: 'owned', onGaragePage: true });
+    expect((await call('PUT', '/api/vehicles/nope/garage-page', { shown: true })).status).toBe(404);
+  });
+
   it('refuses to delete a task that appears in a Service', async () => {
     const bike = await createVehicle();
     const task = await createTask(bike.id);
@@ -831,6 +847,20 @@ describe('migrations', () => {
     const migrated = openDatabase(path);
     expect(migrated.prepare('SELECT garage_id, vehicle_id, owner_kind FROM documents').all()).toEqual([
       { garage_id: 'default', vehicle_id: 'v1', owner_kind: 'vehicle' },
+    ]);
+    migrated.close();
+  });
+
+  it('keeps sold vehicles off the garage page, as before, when the choice arrives', () => {
+    const path = join(dir, 'garage.sqlite');
+    const old = openDatabase(path, undefined, 10);
+    old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('kept', 'default', 'car', 'Kept car')`);
+    old.exec(`INSERT INTO vehicles (id, garage_id, kind, name, status) VALUES ('gone', 'default', 'car', 'Sold car', 'sold')`);
+    old.close();
+    const migrated = openDatabase(path);
+    expect(migrated.prepare('SELECT id, on_garage_page FROM vehicles ORDER BY id').all()).toEqual([
+      { id: 'gone', on_garage_page: 0 },
+      { id: 'kept', on_garage_page: 1 },
     ]);
     migrated.close();
   });

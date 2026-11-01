@@ -76,6 +76,8 @@ export const vehicleInput = z.object({
   cooling: cooling.nullish().transform((v) => v ?? null),
 });
 
+export const garagePageInput = z.object({ shown: z.boolean() });
+
 export const sellInput = z.object({
   date: isoDate,
   odometer: odometer.nullish().transform((v) => v ?? null),

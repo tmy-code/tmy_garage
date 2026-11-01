@@ -22,6 +22,7 @@ import {
   pushSubscriptionInput,
   quoteInput,
   sellInput,
+  garagePageInput,
   serviceInput,
   taskInput,
   termInput,
@@ -101,6 +102,7 @@ const toVehicle = (r: Row): Vehicle => ({
   finalDrive: r.final_drive,
   cooling: r.cooling,
   status: r.status,
+  onGaragePage: r.on_garage_page === 1,
   soldDate: r.sold_date,
   soldOdometer: r.sold_odometer,
   soldPrice: r.sold_price,
@@ -646,7 +648,8 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     const id = c.req.param('id');
     vehicleOrThrow(id);
     const s = await parse(c, sellInput);
-    db.prepare(`UPDATE vehicles SET status = 'sold', sold_date = ?, sold_odometer = ?, sold_price = ? WHERE id = ?`).run(
+    // A sold Vehicle leaves the garage page, unless the user puts it back there.
+    db.prepare(`UPDATE vehicles SET status = 'sold', on_garage_page = 0, sold_date = ?, sold_odometer = ?, sold_price = ? WHERE id = ?`).run(
       s.date,
       s.odometer,
       s.price,
@@ -658,7 +661,17 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
   app.post('/api/vehicles/:id/unsell', (c) => {
     const id = c.req.param('id');
     vehicleOrThrow(id);
-    db.prepare(`UPDATE vehicles SET status = 'owned', sold_date = NULL, sold_odometer = NULL, sold_price = NULL WHERE id = ?`).run(id);
+    db.prepare(
+      `UPDATE vehicles SET status = 'owned', on_garage_page = 1, sold_date = NULL, sold_odometer = NULL, sold_price = NULL WHERE id = ?`,
+    ).run(id);
+    return c.json(toVehicle(vehicleOrThrow(id)));
+  });
+
+  app.put('/api/vehicles/:id/garage-page', async (c) => {
+    const id = c.req.param('id');
+    vehicleOrThrow(id);
+    const { shown } = await parse(c, garagePageInput);
+    db.prepare('UPDATE vehicles SET on_garage_page = ? WHERE id = ?').run(shown ? 1 : 0, id);
     return c.json(toVehicle(vehicleOrThrow(id)));
   });
 

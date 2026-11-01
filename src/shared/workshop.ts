@@ -183,6 +183,7 @@ export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
       timing: v.timing ?? null,
       finalDrive: v.finalDrive ?? null,
       cooling: v.cooling ?? null,
+      onGaragePage: v.onGaragePage ?? v.status === 'owned',
     })),
     inspections: snapshot.inspections ?? [],
     modifications: snapshot.modifications ?? [],

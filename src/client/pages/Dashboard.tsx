@@ -3,40 +3,56 @@ import { daysBetween, todayIso } from '../../shared/dates.ts';
 import { usageOf } from '../../shared/due.ts';
 import type { Snapshot, Vehicle } from '../../shared/types.ts';
 import { upcoming, type Upcoming } from '../../shared/upcoming.ts';
-import { LanguageSwitch, Layout } from '../components.tsx';
+import { FormError, LanguageSwitch, Layout, NeedsConnection } from '../components.tsx';
 import { formatDate, formatKm, taskName } from '../format.ts';
 import { useT, type Messages } from '../i18n.ts';
 import { VehicleIcon } from '../brands.tsx';
+import { online } from '../store.ts';
+import { useSubmit } from './SetupForms.tsx';
 
 const GROUPS = ['overdue', 'dueSoon', 'ok'] as const;
 
-/** The main page: what is coming up, one card per owned Vehicle, grouped by how urgent it is. */
+/** The main page: what is coming up, one card per Vehicle shown here (the owned ones unless the user chose otherwise). */
 export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
   const t = useT();
   const today = todayIso();
-  const owned = snapshot.vehicles.filter((v) => v.status === 'owned');
-  const sold = snapshot.vehicles.filter((v) => v.status === 'sold');
+  const shown = snapshot.vehicles.filter((v) => v.onGaragePage);
+  const others = snapshot.vehicles.filter((v) => !v.onGaragePage);
   const items = useMemo(() => upcoming(snapshot, today), [snapshot, today]);
 
   return (
     <Layout
       title={t.garage}
       actions={
-        <a className="button button-small" href="#/vehicles/new">
-          {t.dashboard.addVehicle}
-        </a>
+        <>
+          {snapshot.vehicles.length > 0 ? (
+            <a className="button button-small" href="#/vehicles/manage">
+              {t.dashboard.manage}
+            </a>
+          ) : null}
+          <a className="button button-small" href="#/vehicles/new">
+            {t.dashboard.addVehicle}
+          </a>
+        </>
       }
     >
-      {owned.length === 0 ? (
+      {snapshot.vehicles.length === 0 ? (
         <div className="empty">
           <p>{t.dashboard.noVehicles}</p>
           <a className="button" href="#/vehicles/new">
             {t.dashboard.addFirst}
           </a>
         </div>
+      ) : shown.length === 0 ? (
+        <div className="empty">
+          <p>{t.dashboard.noneShown}</p>
+          <a className="button" href="#/vehicles/manage">
+            {t.dashboard.manage}
+          </a>
+        </div>
       ) : (
         <div className="card-grid">
-          {owned.map((v) => (
+          {shown.map((v) => (
             <VehicleCard
               key={v.id}
               vehicle={v}
@@ -47,14 +63,14 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
           ))}
         </div>
       )}
-      {sold.length > 0 ? (
+      {others.length > 0 ? (
         <details className="sold">
-          <summary>{t.dashboard.soldVehicles(sold.length)}</summary>
+          <summary>{t.dashboard.otherVehicles(others.length)}</summary>
           <ul className="list">
-            {sold.map((v) => (
+            {others.map((v) => (
               <li key={v.id}>
                 <a href={`#/vehicles/${v.id}`}>
-                  <VehicleIcon vehicle={v} /> {v.name} <span className="muted">{v.soldDate ? t.dashboard.soldOn(formatDate(v.soldDate, t)) : ''}</span>
+                  <VehicleIcon vehicle={v} /> {v.name} <SoldNote vehicle={v} />
                 </a>
               </li>
             ))}
@@ -62,6 +78,49 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
         </details>
       ) : null}
       <LanguageSwitch />
+    </Layout>
+  );
+}
+
+/** "sold 3 March 2025" for a sold Vehicle, nothing for an owned one. */
+function SoldNote({ vehicle }: { vehicle: Vehicle }) {
+  const t = useT();
+  if (vehicle.status !== 'sold') return null;
+  return <span className="muted">{vehicle.soldDate ? t.dashboard.soldOn(formatDate(vehicle.soldDate, t)) : t.dashboard.sold}</span>;
+}
+
+/** Which Vehicles get a card on the garage page, whatever their sale status. Each tick is saved at once. */
+export function ManageGaragePage({ snapshot }: { snapshot: Snapshot }) {
+  const t = useT();
+  const { error, disabled, run } = useSubmit();
+  // Owned first, then sold, each in the order they were added.
+  const vehicles = [...snapshot.vehicles].sort((a, b) => Number(a.status === 'sold') - Number(b.status === 'sold'));
+
+  function toggle(vehicle: Vehicle) {
+    void run(() => online('PUT', `/api/vehicles/${vehicle.id}/garage-page`, { shown: !vehicle.onGaragePage }));
+  }
+
+  return (
+    <Layout title={t.dashboard.manageTitle} back="/">
+      <NeedsConnection />
+      <p className="muted">{t.dashboard.manageIntro}</p>
+      <div className="form">
+        {vehicles.map((v) => (
+          <label key={v.id} className={`check ${v.onGaragePage ? 'check-on' : ''}`}>
+            <input
+              type="checkbox"
+              checked={v.onGaragePage}
+              onChange={() => toggle(v)}
+              disabled={disabled}
+              aria-label={t.dashboard.showOnPage(v.name)}
+            />
+            <span className="due-name with-icon">
+              <VehicleIcon vehicle={v} /> {v.name} <SoldNote vehicle={v} />
+            </span>
+          </label>
+        ))}
+        <FormError error={error} />
+      </div>
     </Layout>
   );
 }
@@ -85,7 +144,13 @@ function VehicleCard({ vehicle, items, snapshot, today }: { vehicle: Vehicle; it
           {reading.daysSince === null ? t.dashboard.noReading : t.dashboard.staleReading(reading.daysSince)}
         </a>
       ) : null}
-      {due.length === 0 ? <p className="muted">{t.dashboard.allClear}</p> : null}
+      {vehicle.status === 'sold' ? (
+        <p>
+          <SoldNote vehicle={vehicle} />
+        </p>
+      ) : due.length === 0 ? (
+        <p className="muted">{t.dashboard.allClear}</p>
+      ) : null}
       {GROUPS.map((status) => {
         const group = due.filter((i) => i.status === status);
         if (group.length === 0) return null;

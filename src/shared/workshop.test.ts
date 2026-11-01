@@ -63,6 +63,7 @@ const base: Snapshot = {
       finalDrive: null,
       cooling: null,
       status: 'owned',
+      onGaragePage: true,
       soldDate: null,
       soldOdometer: null,
       soldPrice: null,

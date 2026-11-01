@@ -1,7 +1,7 @@
 import { useLayoutEffect } from 'react';
 import { LanguageSwitch, Layout, NotFound } from './components.tsx';
 import { useT } from './i18n.ts';
-import { Dashboard } from './pages/Dashboard.tsx';
+import { Dashboard, ManageGaragePage } from './pages/Dashboard.tsx';
 import {
   ClaimForm,
   DriverForm,
@@ -70,6 +70,7 @@ export function App() {
   if (section === 'insurance') return <InsurancePage snapshot={snapshot} />;
   if (section === 'reminders') return <RemindersPage />;
   if (section === 'vehicles' && id === 'new') return <VehicleForm />;
+  if (section === 'vehicles' && id === 'manage') return <ManageGaragePage snapshot={snapshot} />;
   if (section === 'vehicles') {
     if (!vehicle) return <NotFound what="vehicle" />;
     switch (sub) {

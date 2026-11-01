@@ -43,6 +43,8 @@ export interface Vehicle {
   finalDrive: FinalDrive | null;
   cooling: Cooling | null;
   status: 'owned' | 'sold';
+  /** Whether it has a card on the garage page, whatever its status; selling it hides it, and the user can change either. */
+  onGaragePage: boolean;
   soldDate: IsoDate | null;
   soldOdometer: number | null;
   soldPrice: number | null;

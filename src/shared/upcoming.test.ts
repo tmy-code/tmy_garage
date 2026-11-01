@@ -26,6 +26,7 @@ function vehicle(id: string, overrides: Partial<Vehicle> = {}): Vehicle {
     finalDrive: null,
     cooling: null,
     status: 'owned',
+    onGaragePage: true,
     soldDate: null,
     soldOdometer: null,
     soldPrice: null,
