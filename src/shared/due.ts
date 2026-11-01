@@ -66,7 +66,8 @@ export function estimateUsage(points: OdometerPoint[]): Usage {
 export function usageOf(snapshot: Snapshot, vehicleId: string): Usage {
   const points: OdometerPoint[] = [
     ...snapshot.readings.filter((r) => r.vehicleId === vehicleId),
-    ...snapshot.services.filter((s) => s.vehicleId === vehicleId),
+    // A Service may have left the odometer out.
+    ...snapshot.services.filter((s): s is Service & { odometer: number } => s.vehicleId === vehicleId && s.odometer !== null),
     // A Technical Inspection records the odometer too.
     ...snapshot.inspections.filter((i) => i.vehicleId === vehicleId),
   ].map(({ date, odometer }) => ({ date, odometer }));
@@ -90,7 +91,7 @@ export function effectiveInterval(task: MaintenanceTask): { km: number | null; m
 function lastDoneOf(task: MaintenanceTask, services: Service[]): DueInfo['lastDone'] {
   const last = services
     .filter((s) => s.taskIds.includes(task.id))
-    .sort(byDateThenOdometer)
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.odometer ?? 0) - (b.odometer ?? 0)))
     .at(-1);
   if (last) return { date: last.date, odometer: last.odometer, source: 'service' };
   if (task.baselineDate !== null) {

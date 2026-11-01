@@ -128,7 +128,8 @@ export interface Service {
   id: string;
   vehicleId: string;
   date: IsoDate;
-  odometer: number;
+  /** Null when the Service's Tasks are all time-based and the owner left it out. */
+  odometer: number | null;
   taskIds: string[];
   notes: string | null;
   partsUsed: PartUsed[];

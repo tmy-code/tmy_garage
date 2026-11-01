@@ -182,6 +182,14 @@ describe('services and readings (replayed by the offline send queue)', () => {
     expect(s.services).toEqual([{ ...body, partsUsed: [] }]);
   });
 
+  it('stores a Service without an odometer value, for time-based tasks', async () => {
+    const bike = await createVehicle();
+    const coolant = await createTask(bike.id, { name: 'Coolant', intervalKm: null, intervalMonths: 36 });
+    const body = { id: 'svc-00002', vehicleId: bike.id, date: '2026-07-14', taskIds: [coolant.id], notes: null };
+    expect((await call('PUT', '/api/services/svc-00002', body)).status).toBe(200);
+    expect((await snapshot()).services).toEqual([{ ...body, odometer: null, partsUsed: [] }]);
+  });
+
   it('updates a Service and its tasks on a later PUT', async () => {
     const bike = await createVehicle();
     const oil = await createTask(bike.id);
@@ -1067,6 +1075,21 @@ describe('migrations', () => {
       { id: 'p', fuel: 'phev' },
     ]);
     migrated.exec(`UPDATE vehicles SET fuel = 'flexfuel' WHERE id = 'n'`);
+    migrated.close();
+  });
+
+  it('keeps every Service’s odometer when it becomes optional', () => {
+    const path = join(dir, 'garage.sqlite');
+    const old = openDatabase(path, undefined, 16);
+    old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v1', 'default', 'car', 'Old car')`);
+    old.exec(`INSERT INTO maintenance_tasks (id, vehicle_id, name, interval_km) VALUES ('t1', 'v1', 'Oil', 10000)`);
+    old.exec(`INSERT INTO services (id, vehicle_id, date, odometer) VALUES ('s1', 'v1', '2026-01-10', 20000)`);
+    old.exec(`INSERT INTO service_tasks (service_id, task_id) VALUES ('s1', 't1')`);
+    old.close();
+    const migrated = openDatabase(path);
+    expect(migrated.prepare('SELECT id, odometer FROM services').all()).toEqual([{ id: 's1', odometer: 20000 }]);
+    expect(migrated.prepare('SELECT service_id, task_id FROM service_tasks').all()).toEqual([{ service_id: 's1', task_id: 't1' }]);
+    migrated.exec(`INSERT INTO services (id, vehicle_id, date) VALUES ('s2', 'v1', '2026-02-01')`);
     migrated.close();
   });
 

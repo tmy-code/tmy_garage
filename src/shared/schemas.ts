@@ -229,7 +229,8 @@ export const serviceInput = z.object({
   id: clientId,
   vehicleId: z.string().min(1),
   date: isoDate,
-  odometer,
+  // Left out when the Service's Tasks are all time-based; the form asks for it when one counts distance.
+  odometer: odometer.nullish().transform((v) => v ?? null),
   taskIds: z.array(z.string().min(1)).min(1, 'A Service completes at least one Maintenance Task'),
   notes: optionalText(2000),
   // Services queued on a phone before Parts Used existed arrive without them.

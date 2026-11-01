@@ -17,7 +17,7 @@ import { describePart } from './Workshop.tsx';
 const HISTORY_PREVIEW = 5;
 
 type HistoryEntry =
-  | { kind: 'service'; id: string; date: string; odometer: number; text: string; notes: string | null; partsUsed: PartUsed[] }
+  | { kind: 'service'; id: string; date: string; odometer: number | null; text: string; notes: string | null; partsUsed: PartUsed[] }
   | { kind: 'reading'; id: string; date: string; odometer: number };
 
 /** Maintenance Tasks, one per line: status, name, interval, when due and when last done. */
@@ -86,7 +86,7 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
         text: s.taskIds.map((id) => (tasks.get(id) ? taskName(tasks.get(id)!, t) : t.vehicle.deletedTask)).join(', '),
       })),
     ...snapshot.readings.filter((r) => r.vehicleId === vehicle.id).map((r) => ({ kind: 'reading' as const, ...r })),
-  ].sort((a, b) => (a.date === b.date ? b.odometer - a.odometer : a.date < b.date ? 1 : -1));
+  ].sort((a, b) => (a.date === b.date ? (b.odometer ?? 0) - (a.odometer ?? 0) : a.date < b.date ? 1 : -1));
 
   // A motorbike's make is already shown in capitals in front.
   const subtitle = [makeAsName(vehicle) ? null : vehicle.make, vehicle.model, vehicle.year, vehicle.registration].filter(Boolean).join(' · ');
@@ -250,7 +250,8 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
                   {h.kind === 'service' ? (
                     <a href={`#/services/${h.id}/edit`} className="history-row">
                       <span>
-                        <strong>{formatDate(h.date, t)}</strong> · {formatKm(h.odometer)}
+                        <strong>{formatDate(h.date, t)}</strong>
+                        {h.odometer !== null ? ` · ${formatKm(h.odometer)}` : ''}
                         {pending.has(h.id) ? <span className="chip chip-pending">{t.vehicle.waitingToSync}</span> : null}
                       </span>
                       <span className="with-icon">

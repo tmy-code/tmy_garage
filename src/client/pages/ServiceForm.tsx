@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { todayIso } from '../../shared/dates.ts';
-import { vehicleDue } from '../../shared/due.ts';
+import { effectiveInterval, vehicleDue } from '../../shared/due.ts';
 import type { PartUnit } from '../../shared/schemas.ts';
 import type { OdometerReading, PartUsed, Service, Snapshot, Vehicle } from '../../shared/types.ts';
 import { lastUsed, partSpecsOf, positionsOf } from '../../shared/workshop.ts';
@@ -82,7 +82,7 @@ export function ServiceForm({
   const tasks = new Map(snapshot.tasks.map((task) => [task.id, task]));
 
   const [date, setDate] = useState(existing?.date ?? today);
-  const [odometerText, setOdometerText] = useState(existing ? String(existing.odometer) : '');
+  const [odometerText, setOdometerText] = useState(existing ? String(existing.odometer ?? '') : '');
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(existing?.taskIds ?? due.filter((d) => d.taskId === preselect).map((d) => d.taskId)),
   );
@@ -100,6 +100,11 @@ export function ServiceForm({
   const tasksField = useRef<HTMLFieldSetElement>(null);
 
   const odometer = parseNumber(odometerText);
+  // The odometer is needed when a ticked Task counts distance; for time-based ones alone it can be left out.
+  const needsOdometer = [...selected].some((id) => {
+    const task = tasks.get(id);
+    return task !== undefined && effectiveInterval(task).km !== null;
+  });
   const lowerThanLatest =
     odometer !== null && !Number.isNaN(odometer) && usage.latest && date >= usage.latest.date && odometer < usage.latest.odometer;
   const back = `/vehicles/${vehicle.id}`;
@@ -161,8 +166,9 @@ export function ServiceForm({
     event.preventDefault();
     setError(null);
     // Each problem is shown next to its field, and the first one is brought into view.
-    const badOdometer = odometer === null || Number.isNaN(odometer) || odometer < 0 || !Number.isInteger(odometer);
-    setOdometerError(badOdometer ? t.service.errorOdometer : null);
+    const badOdometer =
+      odometer === null ? needsOdometer : Number.isNaN(odometer) || odometer < 0 || !Number.isInteger(odometer);
+    setOdometerError(badOdometer ? (odometer === null ? t.service.needsOdometer : t.service.errorOdometer) : null);
     setTasksError(selected.size === 0 ? t.service.errorTasks : null);
     if (badOdometer) {
       odometerInput.current?.focus();
@@ -219,7 +225,13 @@ export function ServiceForm({
             <Field
               label={t.service.odometer}
               error={odometerError}
-              hint={lowerThanLatest ? t.service.lowerThanLatest(formatKm(usage.latest!.odometer)) : undefined}
+              hint={
+                lowerThanLatest
+                  ? t.service.lowerThanLatest(formatKm(usage.latest!.odometer))
+                  : needsOdometer || selected.size === 0
+                    ? undefined
+                    : t.service.odometerOptional
+              }
             >
               <input
                 ref={odometerInput}

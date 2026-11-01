@@ -8,11 +8,11 @@ export interface PartUsage {
   part: PartUsed;
   serviceId: string;
   date: IsoDate;
-  odometer: number;
+  odometer: number | null;
 }
 
 function newestFirst(a: Service, b: Service): number {
-  return a.date === b.date ? b.odometer - a.odometer : a.date < b.date ? 1 : -1;
+  return a.date === b.date ? (b.odometer ?? 0) - (a.odometer ?? 0) : a.date < b.date ? 1 : -1;
 }
 
 function usages(snapshot: Snapshot, vehicleId: string, matches: (p: PartUsed) => boolean): PartUsage[] {

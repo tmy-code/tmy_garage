@@ -419,6 +419,14 @@ const MIGRATIONS: string[] = [
   ALTER TABLE vehicles DROP COLUMN fuel;
   ALTER TABLE vehicles RENAME COLUMN fuel_new TO fuel;
   `,
+  `
+  -- A Service doing only time-based Tasks (e.g. coolant every 3 years) may leave the odometer out. The column is
+  -- recreated without NOT NULL; the table itself stays, since Services' tasks, parts and closed defects refer to it.
+  ALTER TABLE services ADD COLUMN odometer_new INTEGER;
+  UPDATE services SET odometer_new = odometer;
+  ALTER TABLE services DROP COLUMN odometer;
+  ALTER TABLE services RENAME COLUMN odometer_new TO odometer;
+  `,
 ];
 
 function schemaVersion(db: DatabaseSync): number {

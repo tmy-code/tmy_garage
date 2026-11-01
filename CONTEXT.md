@@ -35,11 +35,11 @@ The Interval the Service Schedule gives for a Maintenance Task, kept alongside t
 _Avoid_: Recommended interval, OEM interval
 
 **Service**:
-One occasion on which the user performed one or more Maintenance Tasks on a Vehicle, at a given date and odometer reading.
+One occasion on which the user performed one or more Maintenance Tasks on a Vehicle, at a given date and odometer reading. The odometer reading is required only when one of those Tasks has a distance Interval; a Service of time-based Tasks alone (e.g. coolant every 3 years) may leave it out.
 _Avoid_: Maintenance (as a noun for an occasion), intervention, visit
 
 **Odometer Reading**:
-The distance shown on a Vehicle's odometer on a given date, logged by the user at any time; every Service also records one.
+The distance shown on a Vehicle's odometer on a given date, logged by the user at any time; a Service also records one, unless its Tasks are all time-based and the user left it out.
 _Avoid_: Mileage entry, km log
 
 **Due Date**:

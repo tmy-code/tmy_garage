@@ -160,6 +160,15 @@ describe('computeDue', () => {
     expect(due.lastDone).toEqual({ date: '2026-04-01', odometer: 18_000, source: 'service' });
   });
 
+  it('leaves a Service logged without an odometer out of the distance, keeping its date', () => {
+    const coolant = task({ id: 'coolant', intervalKm: null, intervalMonths: 36 });
+    const services: Service[] = [service('2026-01-01', 10_000), { ...service('2026-07-14', 0, ['coolant']), odometer: null }];
+    const snapshot = { tasks: [coolant], services, readings: [], inspections: [], partSpecs: [] } as unknown as Snapshot;
+    const { usage, due } = vehicleDue(snapshot, 'bike', '2026-08-01');
+    expect(usage.latest).toEqual({ date: '2026-01-01', odometer: 10_000 });
+    expect(due[0]).toMatchObject({ lastDone: { date: '2026-07-14', odometer: null }, timeDueDate: '2029-07-14', status: 'ok' });
+  });
+
   it('falls back to the baseline until a Service is logged', () => {
     const t = task({ baselineDate: '2026-03-15', baselineOdometer: 17_500 });
     expect(computeDue(t, [], noUsage, '2026-04-01').lastDone).toEqual({ date: '2026-03-15', odometer: 17_500, source: 'baseline' });
