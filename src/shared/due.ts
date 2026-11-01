@@ -11,11 +11,12 @@ export interface OdometerPoint {
   odometer: number;
 }
 
+/** What was logged about a Vehicle's distance: never a guess at today's odometer. */
 export interface Usage {
+  /** The latest odometer value logged (a reading, a Service or an inspection). */
   latest: OdometerPoint | null;
+  /** The recent rate, from logged values, for projecting distance-based Due Dates. */
   kmPerDay: number | null;
-  /** Today's odometer, projected from the latest reading at the recent rate. */
-  estimatedOdometer: number | null;
 }
 
 /** 'paused': the Task replaces a Standard Part that is not on the Vehicle, so it is not due at all. */
@@ -47,10 +48,10 @@ function rateBetween(first: OdometerPoint, last: OdometerPoint): number | null {
   return rate >= 0 ? rate : null;
 }
 
-export function estimateUsage(points: OdometerPoint[], today: IsoDate): Usage {
+export function estimateUsage(points: OdometerPoint[]): Usage {
   const sorted = [...points].sort(byDateThenOdometer);
   const latest = sorted.at(-1);
-  if (!latest) return { latest: null, kmPerDay: null, estimatedOdometer: null };
+  if (!latest) return { latest: null, kmPerDay: null };
 
   const windowStart = addDays(latest.date, -USAGE_WINDOW_DAYS);
   const firstInWindow = sorted.findIndex((p) => p.date >= windowStart);
@@ -59,20 +60,17 @@ export function estimateUsage(points: OdometerPoint[], today: IsoDate): Usage {
     rateBetween(sorted[firstInWindow]!, latest) ??
     rateBetween(sorted[Math.max(0, firstInWindow - 1)]!, latest) ??
     rateBetween(sorted[0]!, latest);
-
-  const daysSince = Math.max(0, daysBetween(latest.date, today));
-  const estimatedOdometer = Math.round(latest.odometer + (kmPerDay ?? 0) * daysSince);
-  return { latest, kmPerDay, estimatedOdometer };
+  return { latest, kmPerDay };
 }
 
-export function usageOf(snapshot: Snapshot, vehicleId: string, today: IsoDate): Usage {
+export function usageOf(snapshot: Snapshot, vehicleId: string): Usage {
   const points: OdometerPoint[] = [
     ...snapshot.readings.filter((r) => r.vehicleId === vehicleId),
     ...snapshot.services.filter((s) => s.vehicleId === vehicleId),
     // A Technical Inspection records the odometer too.
     ...snapshot.inspections.filter((i) => i.vehicleId === vehicleId),
   ].map(({ date, odometer }) => ({ date, odometer }));
-  return estimateUsage(points, today);
+  return estimateUsage(points);
 }
 
 function stricter(a: number | null, b: number | null): number | null {
@@ -118,8 +116,8 @@ export function computeDue(task: MaintenanceTask, services: Service[], usage: Us
   }
 
   const dueDate = minDate(timeDueDate, distanceDueDate);
-  const kmRemaining =
-    dueOdometer !== null && usage.estimatedOdometer !== null ? dueOdometer - usage.estimatedOdometer : null;
+  // Counted from the latest logged odometer value, not a guess at today's.
+  const kmRemaining = dueOdometer !== null && usage.latest ? dueOdometer - usage.latest.odometer : null;
   const daysRemaining = dueDate !== null ? daysBetween(today, dueDate) : null;
 
   let status: DueStatus;
@@ -172,7 +170,7 @@ export function compareDue(a: DueInfo, b: DueInfo): number {
 
 /** Due information for every Maintenance Task of a Vehicle, most urgent first; paused Tasks come last. */
 export function vehicleDue(snapshot: Snapshot, vehicleId: string, today: IsoDate): { usage: Usage; due: DueInfo[] } {
-  const usage = usageOf(snapshot, vehicleId, today);
+  const usage = usageOf(snapshot, vehicleId);
   const services = snapshot.services.filter((s) => s.vehicleId === vehicleId);
   const due = snapshot.tasks
     .filter((t) => t.vehicleId === vehicleId)

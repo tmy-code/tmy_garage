@@ -127,7 +127,7 @@ export function ManageGaragePage({ snapshot }: { snapshot: Snapshot }) {
 
 function VehicleCard({ vehicle, items, snapshot, today }: { vehicle: Vehicle; items: Upcoming[]; snapshot: Snapshot; today: string }) {
   const t = useT();
-  const usage = useMemo(() => usageOf(snapshot, vehicle.id, today), [snapshot, vehicle.id, today]);
+  const usage = useMemo(() => usageOf(snapshot, vehicle.id), [snapshot, vehicle.id]);
   const reading = items.find((i) => i.kind === 'reading');
   const due = items.filter((i) => i.kind !== 'reading');
 
@@ -137,7 +137,7 @@ function VehicleCard({ vehicle, items, snapshot, today }: { vehicle: Vehicle; it
         <h2 className="with-icon">
           <VehicleIcon vehicle={vehicle} /> {vehicle.name}
         </h2>
-        {usage.estimatedOdometer !== null ? <span className="muted">{formatKm(usage.estimatedOdometer)}</span> : null}
+        {usage.latest ? <span className="muted">{formatKm(usage.latest.odometer)}</span> : null}
       </a>
       {reading ? (
         <a className="nudge" href={`#/vehicles/${vehicle.id}/reading`}>

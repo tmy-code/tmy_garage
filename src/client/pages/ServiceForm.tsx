@@ -234,9 +234,6 @@ export function ServiceForm({
                 aria-invalid={odometerError ? true : undefined}
               />
             </Field>
-            {usage.estimatedOdometer !== null && !existing && !odometerText ? (
-              <EstimateButton km={usage.estimatedOdometer} onUse={(km) => (setOdometerText(String(km)), setOdometerError(null))} />
-            ) : null}
 
             <fieldset ref={tasksField} className={`field ${tasksError ? 'field-invalid' : ''}`}>
               <legend className="field-label">{t.service.tasksDone}</legend>
@@ -386,15 +383,6 @@ function toastCreated(op: OutboxOp, text: string, t: Messages, created: boolean)
   );
 }
 
-/** Fills the odometer with today's estimate in one tap, instead of a look-alike placeholder. */
-function EstimateButton({ km, onUse }: { km: number; onUse: (km: number) => void }) {
-  const t = useT();
-  return (
-    <button type="button" className="button button-small estimate" onClick={() => onUse(km)}>
-      {t.service.useEstimate(formatKm(km))}
-    </button>
-  );
-}
 
 /** Log an Odometer Reading, or correct or delete one. Logging works offline, like a Service. */
 export function ReadingForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; snapshot: Snapshot; existing?: OdometerReading }) {
@@ -466,9 +454,6 @@ export function ReadingForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
             aria-invalid={odometerError ? true : undefined}
           />
         </Field>
-        {usage.estimatedOdometer !== null && !existing && !odometerText ? (
-          <EstimateButton km={usage.estimatedOdometer} onUse={(km) => (setOdometerText(String(km)), setOdometerError(null))} />
-        ) : null}
         <FormError error={error} />
         <button type="submit" className="button button-primary button-block">
           {existing ? t.service.saveChanges : t.service.saveReading}

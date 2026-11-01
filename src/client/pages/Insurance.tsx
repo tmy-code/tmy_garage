@@ -994,7 +994,7 @@ const STATEMENT_FRESH_MONTHS = 3;
 export function QuotePackPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: Snapshot }) {
   const t = useT();
   const today = todayIso();
-  const usage = usageOf(snapshot, vehicle.id, today);
+  const usage = usageOf(snapshot, vehicle.id);
   const current = currentCover(snapshot, vehicle.id, today);
   const claims = recentClaims(snapshot, today);
   const drivers = current ? snapshot.drivers.filter((d) => current.policy.driverIds.includes(d.id)) : snapshot.drivers;
@@ -1039,7 +1039,10 @@ export function QuotePackPage({ vehicle, snapshot }: { vehicle: Vehicle; snapsho
             <Fact label={t.insurance.purchaseDate} value={date(vehicle.purchaseDate)} />
             <Fact label={t.insurance.parking} value={vehicle.overnightParking ? t.insurance.parkings[vehicle.overnightParking] : null} />
             <Fact label={t.insurance.annualKm} value={km !== null ? t.insurance.perYearKm(formatKm(km)) : null} />
-            <Fact label={t.insurance.odometerNow} value={usage.estimatedOdometer !== null ? formatKm(usage.estimatedOdometer) : null} />
+            <Fact
+              label={t.insurance.lastOdometer}
+              value={usage.latest ? t.insurance.odometerOn(formatKm(usage.latest.odometer), date(usage.latest.date)!) : null}
+            />
           </dl>
         </section>
 

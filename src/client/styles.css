@@ -585,11 +585,6 @@ section {
   border-width: 2px;
 }
 
-.estimate {
-  align-self: flex-start;
-  margin-top: -8px;
-}
-
 .loading {
   animation: fade-in 0.3s 0.4s both;
 }

@@ -459,11 +459,9 @@ function PositionEditor({ existing, editor }: { existing: FitmentPosition; edito
   );
 }
 
-function FittedLine({ item, estimatedOdometer, t }: { item: FittedItem; estimatedOdometer: number | null; t: Messages }) {
-  const since =
-    estimatedOdometer !== null && item.odometer !== null && estimatedOdometer > item.odometer
-      ? t.workshop.since(formatKm(estimatedOdometer - item.odometer))
-      : '';
+/** `odometer` is the latest logged value, so "ago" never rests on a guess. */
+function FittedLine({ item, odometer, t }: { item: FittedItem; odometer: number | null; t: Messages }) {
+  const since = odometer !== null && item.odometer !== null && odometer > item.odometer ? t.workshop.since(formatKm(odometer - item.odometer)) : '';
   return (
     <>
       <span>
@@ -516,7 +514,7 @@ export function FittedPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: 
                         )}
                       </div>
                       {current ? (
-                        <FittedLine item={current} estimatedOdometer={usage.estimatedOdometer} t={t} />
+                        <FittedLine item={current} odometer={usage.latest?.odometer ?? null} t={t} />
                       ) : (
                         <span className="muted">{t.workshop.nothingFitted}</span>
                       )}
@@ -527,7 +525,7 @@ export function FittedPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: 
                           </summary>
                           {previous.map((p, i) => (
                             <p key={i} className="history-row">
-                              <FittedLine item={p} estimatedOdometer={null} t={t} />
+                              <FittedLine item={p} odometer={null} t={t} />
                             </p>
                           ))}
                         </details>
