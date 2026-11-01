@@ -7,7 +7,6 @@ import { LanguageSwitch, Layout } from '../components.tsx';
 import { formatDate, formatKm, taskName } from '../format.ts';
 import { useT, type Messages } from '../i18n.ts';
 import { VehicleIcon } from '../brands.tsx';
-import { Icon } from '../icons.tsx';
 
 const GROUPS = ['overdue', 'dueSoon', 'ok'] as const;
 
@@ -36,30 +35,17 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
           </a>
         </div>
       ) : (
-        <>
-          <div className="card-grid">
-            {owned.map((v) => (
-              <VehicleCard
-                key={v.id}
-                vehicle={v}
-                items={items.filter((i) => i.vehicleId === v.id)}
-                snapshot={snapshot}
-                today={today}
-              />
-            ))}
-          </div>
-          <div className="actions dashboard-actions">
-            <a className="button" href="#/shopping">
-              <Icon name="cart" /> {t.workshop.shopping}
-            </a>
-            <a className="button" href="#/insurance">
-              <Icon name="shield" /> {t.insurance.title}
-            </a>
-            <a className="button" href="#/reminders">
-              <Icon name="bell" /> {t.reminders.title}
-            </a>
-          </div>
-        </>
+        <div className="card-grid">
+          {owned.map((v) => (
+            <VehicleCard
+              key={v.id}
+              vehicle={v}
+              items={items.filter((i) => i.vehicleId === v.id)}
+              snapshot={snapshot}
+              today={today}
+            />
+          ))}
+        </div>
       )}
       {sold.length > 0 ? (
         <details className="sold">

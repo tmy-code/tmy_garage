@@ -5,6 +5,7 @@ import { formatDate } from './format.ts';
 import { LANGS, messages, setLang, useT } from './i18n.ts';
 import { Icon } from './icons.tsx';
 import { refreshPushSubscription } from './push.ts';
+import { useRoute } from './router.ts';
 import { dismissRejected, sync, useStore } from './store.ts';
 
 /** Matches the stylesheet's wide-screen breakpoint, where pages split into columns. */
@@ -39,6 +40,7 @@ export function Layout({ title, back, actions, children }: { title: string; back
         <a className="home-link" href="#/">
           {t.garage}
         </a>
+        <NavBar />
         <div className="topbar-side topbar-end">
           <SyncBadge />
           {actions}
@@ -52,6 +54,43 @@ export function Layout({ title, back, actions, children }: { title: string; back
       <ToastHost />
       <ConfirmHost />
     </>
+  );
+}
+
+const SECTIONS = [
+  ['garage', '/', 'home'],
+  ['workshop', '/workshop', 'wrench'],
+  ['shopping', '/shopping', 'cart'],
+  ['insurance', '/insurance', 'shield'],
+  ['reminders', '/reminders', 'bell'],
+] as const;
+
+type Section = (typeof SECTIONS)[number][0];
+
+/** Which menu entry the screen at this route belongs to. */
+function sectionOf([section, , sub]: string[]): Section {
+  if (section === 'workshop' || section === 'tasks') return 'workshop';
+  if (section === 'vehicles' && (sub === 'parts' || sub === 'fitted' || sub === 'specs')) return 'workshop';
+  if (section === 'shopping') return 'shopping';
+  if (section === 'reminders') return 'reminders';
+  if (section === 'insurance' || section === 'policies' || section === 'terms' || section === 'claims' || section === 'drivers' || section === 'quotes') return 'insurance';
+  if (section === 'vehicles' && (sub === 'insurance' || sub === 'quote-pack' || sub === 'quotes')) return 'insurance';
+  return 'garage';
+}
+
+/** The main sections, one tap away: a bar along the bottom on a phone, in the top bar on a wide screen. */
+function NavBar() {
+  const t = useT();
+  const current = sectionOf(useRoute());
+  return (
+    <nav className="tabbar" aria-label={t.nav.label}>
+      {SECTIONS.map(([key, path, icon]) => (
+        <a key={key} href={`#${path}`} className={key === current ? 'active' : undefined} aria-current={key === current ? 'page' : undefined}>
+          <Icon name={icon} />
+          <span>{t.nav[key]}</span>
+        </a>
+      ))}
+    </nav>
   );
 }
 

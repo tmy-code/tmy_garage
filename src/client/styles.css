@@ -119,7 +119,8 @@ h2 {
 main {
   max-width: 720px;
   margin: 0 auto;
-  padding: 16px 16px calc(32px + env(safe-area-inset-bottom));
+  /* Room for the bottom menu bar. */
+  padding: 16px 16px calc(96px + env(safe-area-inset-bottom));
 }
 
 section {
@@ -183,6 +184,41 @@ section {
   .home-link {
     font-size: 1.1rem;
   }
+}
+
+/* The menu: a bar along the bottom on a phone (moved into the top bar on wide screens, below). */
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  padding: 4px 4px env(safe-area-inset-bottom);
+  background: var(--topbar);
+  border-top: 1px solid var(--border);
+}
+
+.tabbar a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 0;
+  font-size: 0.7rem;
+  color: #9ca3af;
+  text-decoration: none;
+}
+
+.tabbar .icon {
+  width: 22px;
+  height: 22px;
+}
+
+.tabbar a.active {
+  color: var(--accent);
+  font-weight: 700;
 }
 
 .back {
@@ -567,7 +603,7 @@ section {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(16px + env(safe-area-inset-bottom));
+  bottom: calc(76px + env(safe-area-inset-bottom));
   z-index: 10;
   display: flex;
   justify-content: center;
@@ -891,6 +927,7 @@ body > .banner {
 @media print {
   .toast-host,
   .topbar,
+  .tabbar,
   .no-print,
   .language {
     display: none !important;
@@ -909,6 +946,41 @@ body > .banner {
 
 /* Wide screens: the page grows and splits into columns. Phones keep the single column above. */
 @media (min-width: 1000px) {
+  /* The menu takes the middle of the top bar; its first entry replaces the "Garage" home link. */
+  .home-link {
+    display: none;
+  }
+
+  .tabbar {
+    position: static;
+    display: flex;
+    gap: 4px;
+    padding: 0;
+    background: none;
+    border: 0;
+  }
+
+  .tabbar a {
+    flex-direction: row;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 0.95rem;
+  }
+
+  .tabbar a:hover {
+    color: var(--topbar-text);
+  }
+
+  .tabbar a.active {
+    color: var(--topbar-text);
+    background: rgb(255 255 255 / 0.1);
+  }
+
+  .toast-host {
+    bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+
   .topbar {
     padding-left: max(24px, calc((100% - 1600px) / 2 + 24px));
     padding-right: max(24px, calc((100% - 1600px) / 2 + 24px));
@@ -935,13 +1007,6 @@ body > .banner {
   .card-grid > .card,
   .card-grid > section {
     margin: 0;
-  }
-
-  .dashboard-actions {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
-    gap: 16px;
-    margin-top: 16px;
   }
 
   .list-grid {

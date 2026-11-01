@@ -18,6 +18,7 @@ import {
   partReferences,
   taskName,
 } from '../format.ts';
+import { VehicleIcon } from '../brands.tsx';
 import { messages, useT, type Messages } from '../i18n.ts';
 import { navigate } from '../router.ts';
 import { online } from '../store.ts';
@@ -803,6 +804,44 @@ export function WorkshopForm({ task, vehicle, snapshot }: { task: MaintenanceTas
 }
 
 // --- Shopping list ---
+
+/** The workshop pages of every owned Vehicle, reached from the menu. */
+export function WorkshopPage({ snapshot }: { snapshot: Snapshot }) {
+  const t = useT();
+  const owned = snapshot.vehicles.filter((v) => v.status === 'owned');
+  const count = (items: { vehicleId: string }[], id: string) => t.workshop.count(items.filter((x) => x.vehicleId === id).length);
+  return (
+    <Layout title={t.workshop.section}>
+      {owned.length === 0 ? <p className="empty">{t.dashboard.noVehicles}</p> : null}
+      <div className="card-grid">
+        {owned.map((v) => (
+          <section key={v.id}>
+            <h2 className="with-icon">
+              <VehicleIcon vehicle={v} /> {v.name}
+            </h2>
+            <ul className="list">
+              <li>
+                <a href={`#/vehicles/${v.id}/parts`}>
+                  {t.workshop.partSpecs} <span className="muted">{count(snapshot.partSpecs, v.id)}</span>
+                </a>
+              </li>
+              <li>
+                <a href={`#/vehicles/${v.id}/fitted`}>
+                  {t.workshop.fitted} <span className="muted">{count(snapshot.positions, v.id)}</span>
+                </a>
+              </li>
+              <li>
+                <a href={`#/vehicles/${v.id}/specs`}>
+                  {t.workshop.specs} <span className="muted">{count(snapshot.vehicleSpecs, v.id)}</span>
+                </a>
+              </li>
+            </ul>
+          </section>
+        ))}
+      </div>
+    </Layout>
+  );
+}
 
 export function ShoppingPage({ snapshot }: { snapshot: Snapshot }) {
   const t = useT();

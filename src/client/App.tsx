@@ -18,7 +18,7 @@ import { RemindersPage } from './pages/Reminders.tsx';
 import { ReadingForm, ServiceForm } from './pages/ServiceForm.tsx';
 import { CopyTasks, SellForm, TaskForm, VehicleForm } from './pages/SetupForms.tsx';
 import { VehiclePage } from './pages/VehiclePage.tsx';
-import { FittedPage, PartSpecsPage, ShoppingPage, SpecsPage, TaskPage, WorkshopForm } from './pages/Workshop.tsx';
+import { FittedPage, PartSpecsPage, ShoppingPage, SpecsPage, TaskPage, WorkshopForm, WorkshopPage } from './pages/Workshop.tsx';
 import { scrollForNewRoute, useRoute } from './router.ts';
 import { sync, useStore } from './store.ts';
 
@@ -65,6 +65,7 @@ export function App() {
   const vehicle = section === 'vehicles' && id ? snapshot.vehicles.find((v) => v.id === id) : undefined;
 
   if (section === undefined) return <Dashboard snapshot={snapshot} />;
+  if (section === 'workshop') return <WorkshopPage snapshot={snapshot} />;
   if (section === 'shopping') return <ShoppingPage snapshot={snapshot} />;
   if (section === 'insurance') return <InsurancePage snapshot={snapshot} />;
   if (section === 'reminders') return <RemindersPage />;

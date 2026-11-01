@@ -56,6 +56,14 @@ const en = {
     serviceSaved: 'Service saved',
     readingSaved: 'Odometer reading saved',
   },
+  nav: {
+    label: 'Sections',
+    garage: 'Garage',
+    workshop: 'Workshop',
+    shopping: 'Shopping',
+    insurance: 'Insurance',
+    reminders: 'Reminders',
+  },
   dashboard: {
     addVehicle: '+ Vehicle',
     noVehicles: 'No vehicles yet.',
@@ -675,6 +683,14 @@ const fr: Messages = {
     undone: 'Annulé',
     serviceSaved: 'Entretien enregistré',
     readingSaved: 'Relevé kilométrique enregistré',
+  },
+  nav: {
+    label: 'Rubriques',
+    garage: 'Garage',
+    workshop: 'Atelier',
+    shopping: 'Courses',
+    insurance: 'Assurance',
+    reminders: 'Rappels',
   },
   dashboard: {
     addVehicle: '+ Véhicule',
