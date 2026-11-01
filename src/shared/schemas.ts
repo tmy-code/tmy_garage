@@ -13,6 +13,12 @@ const optionalText = (max: number) =>
 
 export const vehicleKind = z.enum(['car', 'motorcycle']);
 export const vehicleSpecKind = z.enum(['torque', 'other']);
+// Characteristics that decide which Standard Parts a Vehicle has.
+export const fuelType = z.enum(['petrol', 'diesel', 'hybrid', 'electric']);
+export const gearbox = z.enum(['manual', 'automatic']);
+export const timingDrive = z.enum(['belt', 'chain']);
+export const finalDrive = z.enum(['chain', 'belt', 'shaft']);
+export const cooling = z.enum(['liquid', 'air']);
 export const inspectionResult = z.enum(['passed', 'majorDefects', 'criticalDefects']);
 export const defectSeverity = z.enum(['minor', 'major', 'critical']);
 export const documentOwnerKind = z.enum(['vehicle', 'service', 'modification', 'inspection', 'policy', 'cover', 'claim']);
@@ -62,6 +68,12 @@ export const vehicleInput = z.object({
   nationalType: optionalText(10),
   purchaseDate: isoDate.nullish().transform((v) => v ?? null),
   overnightParking: overnightParking.nullish().transform((v) => v ?? null),
+  // Unknown (null) is allowed: every part that could be on the Vehicle is then listed.
+  fuel: fuelType.nullish().transform((v) => v ?? null),
+  gearbox: gearbox.nullish().transform((v) => v ?? null),
+  timing: timingDrive.nullish().transform((v) => v ?? null),
+  finalDrive: finalDrive.nullish().transform((v) => v ?? null),
+  cooling: cooling.nullish().transform((v) => v ?? null),
 });
 
 export const sellInput = z.object({
@@ -320,6 +332,11 @@ export const pushSubscriptionInput = z.object({
 export const pushEndpointInput = z.object({ endpoint: z.string().max(2000) });
 
 export type VehicleKind = z.infer<typeof vehicleKind>;
+export type FuelType = z.infer<typeof fuelType>;
+export type Gearbox = z.infer<typeof gearbox>;
+export type TimingDrive = z.infer<typeof timingDrive>;
+export type FinalDrive = z.infer<typeof finalDrive>;
+export type Cooling = z.infer<typeof cooling>;
 export type OvernightParking = z.infer<typeof overnightParking>;
 export type CoverLevel = z.infer<typeof coverLevel>;
 export type Responsibility = z.infer<typeof responsibility>;

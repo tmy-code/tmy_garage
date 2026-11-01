@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { PART_CATEGORIES, partCategory } from '../../shared/catalogue.ts';
+import { PART_CATEGORIES, partCategory, partFits, relevantTraits } from '../../shared/catalogue.ts';
 import { todayIso } from '../../shared/dates.ts';
 import { vehicleDue } from '../../shared/due.ts';
 import type { PartUnit, VehicleSpecKind } from '../../shared/schemas.ts';
@@ -317,8 +317,9 @@ function PartSpecEditor({ vehicle, existing, editor }: { vehicle: Vehicle; exist
   );
 }
 
-function PartSpecLine({ spec }: { spec: PartSpec }) {
+function PartSpecLine({ spec, vehicle }: { spec: PartSpec; vehicle: Vehicle }) {
   const t = useT();
+  const mismatch = spec.standardPart !== null && !spec.notFitted && !partFits(vehicle.kind, spec.standardPart, vehicle);
   const references = partReferences(spec, t);
   const empty = !spec.characteristics && !references;
   return (
@@ -327,6 +328,7 @@ function PartSpecLine({ spec }: { spec: PartSpec }) {
       {spec.characteristics ? <span>{spec.characteristics}</span> : null}
       {references ? <span className="muted">{references}</span> : null}
       {empty && !spec.notFitted ? <span className="muted">{t.workshop.notSet}</span> : null}
+      {mismatch ? <span className="nudge">{t.workshop.doesNotFit}</span> : null}
     </>
   );
 }
@@ -358,7 +360,7 @@ function PartSpecList({
               .join(' ') || undefined}
           >
             <button type="button" className="item-row" onClick={() => editor.setEditing(spec.id)}>
-              <PartSpecLine spec={spec} />
+              <PartSpecLine spec={spec} vehicle={vehicle} />
             </button>
           </li>
         ),
@@ -411,6 +413,11 @@ export function PartSpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapsho
     >
       <NeedsConnection />
       <p className="muted">{t.workshop.partsIntro}</p>
+      {relevantTraits(vehicle.kind, vehicle.fuel).some((trait) => vehicle[trait] === null) ? (
+        <a className="nudge" href={`#/vehicles/${vehicle.id}/edit`}>
+          {t.workshop.traitsNudge}
+        </a>
+      ) : null}
       {side ? (
         <div className="split">
           <div>{lists}</div>

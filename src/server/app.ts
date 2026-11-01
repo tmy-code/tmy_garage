@@ -49,7 +49,7 @@ import type {
   Vehicle,
   VehicleSpec,
 } from '../shared/types.ts';
-import { STANDARD_PARTS } from '../shared/catalogue.ts';
+import { cleanTraits, partFits, STANDARD_PARTS, type Traits } from '../shared/catalogue.ts';
 import type { ClaimInput, TermInput, VehicleInput, VehicleKind } from '../shared/schemas.ts';
 import { todayIso } from '../shared/dates.ts';
 import { DEFAULT_GARAGE_ID } from './db.ts';
@@ -95,6 +95,11 @@ const toVehicle = (r: Row): Vehicle => ({
   nationalType: r.national_type,
   purchaseDate: r.purchase_date,
   overnightParking: r.overnight_parking,
+  fuel: r.fuel,
+  gearbox: r.gearbox,
+  timing: r.timing,
+  finalDrive: r.final_drive,
+  cooling: r.cooling,
   status: r.status,
   soldDate: r.sold_date,
   soldOdometer: r.sold_odometer,
@@ -513,23 +518,52 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     if (uploadsDir) for (const d of docs) rmSync(join(uploadsDir, d.id), { force: true });
   }
 
-  /** Gives a Vehicle the Standard Parts of its kind it does not list yet, so each only needs its Part Spec filled in. */
-  function ensureStandardParts(vehicleId: string, kind: VehicleKind) {
-    const existing = new Set(
-      (db.prepare('SELECT standard_part FROM part_specs WHERE vehicle_id = ? AND standard_part IS NOT NULL').all(vehicleId) as Row[]).map(
-        (r) => r.standard_part as string,
+  /** Whether a Part Spec holds anything the user filled in or relies on, so it is not quietly set aside. */
+  function partSpecInUse(id: string): boolean {
+    return (
+      db
+        .prepare(
+          `SELECT 1 FROM part_specs
+             WHERE id = ? AND (coalesce(characteristics, '') <> '' OR coalesce(oem_reference, '') <> '' OR coalesce(part_numbers, '') <> '')
+           UNION ALL SELECT 1 FROM required_parts WHERE part_spec_id = ?
+           UNION ALL SELECT 1 FROM parts_used WHERE part_spec_id = ?`,
+        )
+        .get(id, id, id) !== undefined
+    );
+  }
+
+  /**
+   * Gives a Vehicle the Standard Parts that fit its traits and it does not list yet, so each only needs its Part
+   * Spec filled in. When `before` differs from `after`, parts that stopped fitting are marked as not on the
+   * Vehicle (unless they are filled in or used, which the screens then flag) and parts that now fit are put back.
+   * A part whose fit did not change keeps whatever the user chose.
+   */
+  function syncStandardParts(vehicleId: string, kind: VehicleKind, after: Traits, before: Traits = after) {
+    const rows = new Map(
+      (db.prepare('SELECT id, standard_part FROM part_specs WHERE vehicle_id = ? AND standard_part IS NOT NULL').all(vehicleId) as Row[]).map(
+        (r) => [r.standard_part as string, r.id as string],
       ),
     );
     const insert = db.prepare('INSERT INTO part_specs (id, vehicle_id, standard_part, name, unit) VALUES (?, ?, ?, ?, ?)');
+    const setFitted = db.prepare('UPDATE part_specs SET not_fitted = ? WHERE id = ?');
     for (const [key, unit] of STANDARD_PARTS[kind]) {
-      if (!existing.has(key)) insert.run(randomUUID(), vehicleId, key, key, unit);
+      const fits = partFits(kind, key, after);
+      const id = rows.get(key);
+      if (id === undefined) {
+        if (fits) insert.run(randomUUID(), vehicleId, key, key, unit);
+      } else if (partFits(kind, key, before) !== fits) {
+        if (fits) setFitted.run(0, id);
+        else if (!partSpecInUse(id)) setFitted.run(1, id);
+      }
     }
   }
 
-  // Vehicles added before Standard Parts existed, or after the catalogue grew, get the missing ones.
+  const traitsOfRow = (r: Row): Traits => ({ fuel: r.fuel, gearbox: r.gearbox, timing: r.timing, finalDrive: r.final_drive, cooling: r.cooling });
+
+  // Vehicles added before Standard Parts existed, or after the catalogue grew, get the missing ones that fit.
   transaction(() => {
-    for (const v of db.prepare('SELECT id, kind FROM vehicles WHERE garage_id = ?').all(garageId) as Row[])
-      ensureStandardParts(v.id, v.kind);
+    for (const v of db.prepare('SELECT * FROM vehicles WHERE garage_id = ?').all(garageId) as Row[])
+      syncStandardParts(v.id, v.kind, traitsOfRow(v));
   });
 
   app.onError((error, c) => {
@@ -543,6 +577,9 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
   app.get('/api/snapshot', (c) => c.json(snapshot()));
 
   // --- Vehicles ---
+
+  /** The input with the traits that mean nothing for its kind and fuel cleared. */
+  const cleaned = (v: VehicleInput): VehicleInput => ({ ...v, ...cleanTraits(v.kind, v) });
 
   const vehicleValues = (v: VehicleInput) =>
     [
@@ -559,30 +596,36 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       v.nationalType,
       v.purchaseDate,
       v.overnightParking,
+      v.fuel,
+      v.gearbox,
+      v.timing,
+      v.finalDrive,
+      v.cooling,
     ] as const;
 
   app.post('/api/vehicles', async (c) => {
-    const v = await parse(c, vehicleInput);
+    const v = cleaned(await parse(c, vehicleInput));
     const id = randomUUID();
     db.prepare(
       `INSERT INTO vehicles (id, garage_id, kind, name, make, model, year, registration, first_registration,
-         vin, version, fiscal_power, national_type, purchase_date, overnight_parking)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         vin, version, fiscal_power, national_type, purchase_date, overnight_parking, fuel, gearbox, timing, final_drive, cooling)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(id, garageId, ...vehicleValues(v));
-    ensureStandardParts(id, v.kind);
+    syncStandardParts(id, v.kind, v);
     return c.json(toVehicle(vehicleOrThrow(id)), 201);
   });
 
   app.put('/api/vehicles/:id', async (c) => {
     const id = c.req.param('id');
-    vehicleOrThrow(id);
-    const v = await parse(c, vehicleInput);
+    const before = traitsOfRow(vehicleOrThrow(id));
+    const v = cleaned(await parse(c, vehicleInput));
     db.prepare(
       `UPDATE vehicles SET kind = ?, name = ?, make = ?, model = ?, year = ?, registration = ?, first_registration = ?,
-         vin = ?, version = ?, fiscal_power = ?, national_type = ?, purchase_date = ?, overnight_parking = ?
+         vin = ?, version = ?, fiscal_power = ?, national_type = ?, purchase_date = ?, overnight_parking = ?,
+         fuel = ?, gearbox = ?, timing = ?, final_drive = ?, cooling = ?
        WHERE id = ?`,
     ).run(...vehicleValues(v), id);
-    ensureStandardParts(id, v.kind);
+    syncStandardParts(id, v.kind, v, before);
     return c.json(toVehicle(vehicleOrThrow(id)));
   });
 

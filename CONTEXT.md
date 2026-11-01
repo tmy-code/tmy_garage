@@ -14,7 +14,7 @@ _Avoid_: Car (when meaning any vehicle), bike, asset, archived
 
 ### In the French interface
 
-The app speaks English and French. French screens use: Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Due Date → échéance, Interval → intervalle, Vehicle Spec → caractéristique, Torque Spec → couple de serrage, Required Tool → outil, Workshop Notes → notes d’atelier, Standard Part → pièce standard, Part Spec → spécification de pièce, OEM Reference → référence constructeur, Required Part → pièce nécessaire, Part Used → pièce utilisée, Fitment Position → emplacement, Shopping List → liste de courses, Technical Inspection → contrôle technique, Inspection Defect → défaillance, Modification → modification, Document → document, Insurer → assureur, Insurance Policy → contrat, Policy Term → période, Cover → garantie, Driver → conducteur, Claim → sinistre, Quote → devis, Quote Pack → dossier devis, Reminder → rappel.
+The app speaks English and French. French screens use: Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Due Date → échéance, Interval → intervalle, Vehicle Spec → caractéristique, Torque Spec → couple de serrage, Required Tool → outil, Workshop Notes → notes d’atelier, Build → motorisation, Standard Part → pièce standard, Part Spec → spécification de pièce, OEM Reference → référence constructeur, Required Part → pièce nécessaire, Part Used → pièce utilisée, Fitment Position → emplacement, Shopping List → liste de courses, Technical Inspection → contrôle technique, Inspection Defect → défaillance, Modification → modification, Document → document, Insurer → assureur, Insurance Policy → contrat, Policy Term → période, Cover → garantie, Driver → conducteur, Claim → sinistre, Quote → devis, Quote Pack → dossier devis, Reminder → rappel.
 
 ## Maintenance
 
@@ -80,8 +80,12 @@ _Avoid_: Défaillance, failure, issue
 Anything fitted to or consumed by a Vehicle during maintenance, measured in pieces or by volume (filters, pads, plugs, oil, coolant, chain lube).
 _Avoid_: Consumable, supply, spare (as separate categories)
 
+**Build**:
+What a Vehicle is built with, as far as its parts go: fuel, and for a car its gearbox and timing drive (belt or chain), for a motorcycle its final drive (chain, belt or shaft) and cooling. Each can be left unknown. It decides which Standard Parts the Vehicle has.
+_Avoid_: Specification, configuration, trim
+
 **Standard Part**:
-A Part every Vehicle of one kind has (e.g. engine oil, oil filter, front tyre for a motorcycle; cabin filter, timing belt kit for a car). Every Vehicle lists the Standard Parts of its kind; what varies between Vehicles is only their Part Spec. A Standard Part can be marked as not on a Vehicle (e.g. a timing belt kit on an engine with a timing chain). A Part outside this list is named by the user.
+A Part that a Vehicle of one kind might have (e.g. engine oil, oil filter, front tyre for a motorcycle; cabin filter, timing belt kit for a car). A Vehicle lists the Standard Parts that fit its Build (a petrol car with a timing chain gets no timing belt kit, glow plugs or clutch kit); what varies between Vehicles is only their Part Spec. While a Build is unknown, every Standard Part that might fit is listed. When the Build changes, Standard Parts that no longer fit are set aside as not on the Vehicle, unless the user has filled in their Part Spec or used them, in which case they are kept and flagged. A Standard Part can also be marked by the user as not on a Vehicle. A Part outside this list is named by the user.
 _Avoid_: Part type, category, catalogue entry
 
 **Part Spec**:

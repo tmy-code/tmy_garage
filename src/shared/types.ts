@@ -1,15 +1,20 @@
 import type { IsoDate } from './dates.ts';
 import type { StandardPartKey } from './catalogue.ts';
 import type {
+  Cooling,
   CoverLevel,
   DefectSeverity,
   DocumentOwnerKind,
   DocumentType,
+  FinalDrive,
+  FuelType,
+  Gearbox,
   InspectionResult,
   MotorcycleLicence,
   OvernightParking,
   PartUnit,
   Responsibility,
+  TimingDrive,
   VehicleKind,
   VehicleSpecKind,
 } from './schemas.ts';
@@ -31,6 +36,12 @@ export interface Vehicle {
   nationalType: string | null;
   purchaseDate: IsoDate | null;
   overnightParking: OvernightParking | null;
+  /** What the Vehicle is built with, which decides its Standard Parts; null when unknown or not applicable to its kind. */
+  fuel: FuelType | null;
+  gearbox: Gearbox | null;
+  timing: TimingDrive | null;
+  finalDrive: FinalDrive | null;
+  cooling: Cooling | null;
   status: 'owned' | 'sold';
   soldDate: IsoDate | null;
   soldOdometer: number | null;

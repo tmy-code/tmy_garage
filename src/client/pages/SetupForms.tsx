@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
+import { fuelsOf, relevantTraits } from '../../shared/catalogue.ts';
 import { todayIso } from '../../shared/dates.ts';
-import type { OvernightParking } from '../../shared/schemas.ts';
+import type { Cooling, FinalDrive, FuelType, Gearbox, OvernightParking, TimingDrive } from '../../shared/schemas.ts';
 import type { MaintenanceTask, Snapshot, Vehicle } from '../../shared/types.ts';
 import { confirmDelete, Field, FormError, Layout, NeedsConnection } from '../components.tsx';
 import { showToast } from '../feedback.ts';
@@ -47,6 +48,33 @@ function optionalNumber(text: string, label: string, t: Messages): number | null
   return n;
 }
 
+/** A choice among a few values, with "not sure" as the way to leave it empty. */
+function TraitSelect<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T | '';
+  options: readonly (readonly [T, string])[];
+  onChange: (value: T | '') => void;
+}) {
+  const t = useT();
+  return (
+    <Field label={label}>
+      <select value={value} onChange={(e) => onChange(e.target.value as T | '')}>
+        <option value="">{t.setup.notSure}</option>
+        {options.map(([v, text]) => (
+          <option key={v} value={v}>
+            {text}
+          </option>
+        ))}
+      </select>
+    </Field>
+  );
+}
+
 export function VehicleForm({ existing }: { existing?: Vehicle }) {
   const t = useT();
   const [kind, setKind] = useState<Vehicle['kind']>(existing?.kind ?? 'motorcycle');
@@ -62,8 +90,16 @@ export function VehicleForm({ existing }: { existing?: Vehicle }) {
   const [fiscalPower, setFiscalPower] = useState(existing?.fiscalPower ? String(existing.fiscalPower) : '');
   const [purchaseDate, setPurchaseDate] = useState(existing?.purchaseDate ?? '');
   const [overnightParking, setOvernightParking] = useState<OvernightParking | ''>(existing?.overnightParking ?? '');
+  const [fuel, setFuel] = useState<FuelType | ''>(existing?.fuel ?? '');
+  const [gearbox, setGearbox] = useState<Gearbox | ''>(existing?.gearbox ?? '');
+  const [timing, setTiming] = useState<TimingDrive | ''>(existing?.timing ?? '');
+  const [finalDrive, setFinalDrive] = useState<FinalDrive | ''>(existing?.finalDrive ?? '');
+  const [cooling, setCooling] = useState<Cooling | ''>(existing?.cooling ?? '');
   const { error, disabled, run } = useSubmit();
   const back = existing ? `/vehicles/${existing.id}` : '/';
+  const shown = relevantTraits(kind, fuel || null);
+  // A fuel the other kind cannot have (e.g. diesel on a motorcycle) is dropped when the kind changes.
+  const fuelValue = fuel && fuelsOf(kind).includes(fuel) ? fuel : '';
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -82,6 +118,11 @@ export function VehicleForm({ existing }: { existing?: Vehicle }) {
         fiscalPower: optionalNumber(fiscalPower, t.insurance.fiscalPower, t),
         purchaseDate: purchaseDate || null,
         overnightParking: overnightParking || null,
+        fuel: fuelValue || null,
+        gearbox: gearbox || null,
+        timing: timing || null,
+        finalDrive: finalDrive || null,
+        cooling: cooling || null,
       };
       const saved = existing
         ? await online<Vehicle>('PUT', `/api/vehicles/${existing.id}`, body)
@@ -131,6 +172,48 @@ export function VehicleForm({ existing }: { existing?: Vehicle }) {
         <Field label={t.setup.firstRegistration} hint={t.setup.firstRegistrationHint}>
           <input type="date" value={firstRegistration} onChange={(e) => setFirstRegistration(e.target.value)} />
         </Field>
+        <fieldset className="field">
+          <legend className="field-label">{t.setup.builtWith}</legend>
+          <p className="muted">{t.setup.builtWithHint}</p>
+          <TraitSelect
+            label={t.setup.fuel}
+            value={fuelValue}
+            onChange={setFuel}
+            options={fuelsOf(kind).map((f) => [f, t.setup.fuels[f]] as const)}
+          />
+          {shown.includes('gearbox') ? (
+            <TraitSelect
+              label={t.setup.gearbox}
+              value={gearbox}
+              onChange={setGearbox}
+              options={[['manual', t.setup.gearboxes.manual], ['automatic', t.setup.gearboxes.automatic]]}
+            />
+          ) : null}
+          {shown.includes('timing') ? (
+            <TraitSelect
+              label={t.setup.timing}
+              value={timing}
+              onChange={setTiming}
+              options={[['belt', t.setup.timings.belt], ['chain', t.setup.timings.chain]]}
+            />
+          ) : null}
+          {shown.includes('finalDrive') ? (
+            <TraitSelect
+              label={t.setup.finalDrive}
+              value={finalDrive}
+              onChange={setFinalDrive}
+              options={[['chain', t.setup.finalDrives.chain], ['belt', t.setup.finalDrives.belt], ['shaft', t.setup.finalDrives.shaft]]}
+            />
+          ) : null}
+          {shown.includes('cooling') ? (
+            <TraitSelect
+              label={t.setup.cooling}
+              value={cooling}
+              onChange={setCooling}
+              options={[['liquid', t.setup.coolings.liquid], ['air', t.setup.coolings.air]]}
+            />
+          ) : null}
+        </fieldset>
         <details className="part-details" open={Boolean(existing?.vin || existing?.fiscalPower || existing?.overnightParking)}>
           <summary>{t.insurance.factsSection}</summary>
           <p className="muted">{t.insurance.factsHint}</p>

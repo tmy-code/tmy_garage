@@ -332,6 +332,14 @@ const MIGRATIONS: string[] = [
   ALTER TABLE part_specs ADD COLUMN name_fr TEXT;
   ALTER TABLE part_specs ADD COLUMN oem_reference TEXT;
   `,
+  `
+  -- What a Vehicle is built with decides which Standard Parts it has; null is unknown or not applicable.
+  ALTER TABLE vehicles ADD COLUMN fuel TEXT CHECK (fuel IN ('petrol', 'diesel', 'hybrid', 'electric'));
+  ALTER TABLE vehicles ADD COLUMN gearbox TEXT CHECK (gearbox IN ('manual', 'automatic'));
+  ALTER TABLE vehicles ADD COLUMN timing TEXT CHECK (timing IN ('belt', 'chain'));
+  ALTER TABLE vehicles ADD COLUMN final_drive TEXT CHECK (final_drive IN ('chain', 'belt', 'shaft'));
+  ALTER TABLE vehicles ADD COLUMN cooling TEXT CHECK (cooling IN ('liquid', 'air'));
+  `,
 ];
 
 function schemaVersion(db: DatabaseSync): number {
