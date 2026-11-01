@@ -5,7 +5,10 @@ import {
   DRIVETRAINS,
   FINAL_DRIVES,
   flagsOf,
+  defaultInterval,
   fuelsOf,
+  isStandardPartKey,
+  partFits,
   SPEC_FLAGS,
   transmissionsOf,
   type SpecFlag,
@@ -16,7 +19,7 @@ import type { Cooling, Distribution, Drivetrain, FinalDrive, FuelType, Overnight
 import type { MaintenanceTask, Snapshot, Vehicle } from '../../shared/types.ts';
 import { confirmDelete, Field, FormError, Layout, NeedsConnection } from '../components.tsx';
 import { showToast } from '../feedback.ts';
-import { parseNumber, partName, taskName } from '../format.ts';
+import { describeEvery, parseNumber, partName, taskName } from '../format.ts';
 import { messages, useT, type Messages } from '../i18n.ts';
 import { KNOWN_MAKES } from '../brands.tsx';
 import { Icon } from '../icons.tsx';
@@ -380,6 +383,14 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
   const standardParts = partSpecsOf(snapshot, vehicle, { notFitted: true }).filter(
     (p) => p.standardPart !== null && (!p.notFitted || p.standardPart === existing?.standardPart),
   );
+  const fallback = standardPart && isStandardPartKey(standardPart) ? defaultInterval(vehicle, standardPart) : null;
+  const atDefault =
+    fallback !== null && intervalKm === String(fallback.intervalKm ?? '') && intervalMonths === String(fallback.intervalMonths ?? '');
+  // The only Task for a part the Vehicle has stays on its schedule: switching it off is done on the part.
+  const scheduled =
+    existing?.standardPart != null &&
+    partFits(vehicle, existing.standardPart) &&
+    !snapshot.tasks.some((task) => task.id !== existing.id && task.vehicleId === vehicle.id && task.standardPart === existing.standardPart);
   const { error, disabled, run } = useSubmit();
   const back = `/vehicles/${vehicle.id}`;
 
@@ -425,7 +436,7 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
         </Field>
         {standardParts.length > 0 ? (
           <Field label={t.setup.taskPart} hint={t.setup.taskPartHint}>
-            <select value={standardPart} onChange={(e) => setStandardPart(e.target.value)}>
+            <select value={standardPart} onChange={(e) => setStandardPart(e.target.value)} disabled={scheduled}>
               <option value="">{t.setup.noTaskPart}</option>
               {standardParts.map((p) => (
                 <option key={p.id} value={p.standardPart!}>
@@ -444,6 +455,26 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
             <input inputMode="numeric" value={intervalMonths} onChange={(e) => setIntervalMonths(e.target.value)} placeholder="12" />
           </Field>
         </div>
+        {fallback ? (
+          <div className="actions">
+            <p className="muted">
+              {atDefault ? t.setup.followsVehicle : t.setup.yourInterval}{' '}
+              {describeEvery(fallback.intervalKm, fallback.intervalMonths, t)}
+            </p>
+            {atDefault ? null : (
+              <button
+                type="button"
+                className="button button-small"
+                onClick={() => {
+                  setIntervalKm(String(fallback.intervalKm ?? ''));
+                  setIntervalMonths(String(fallback.intervalMonths ?? ''));
+                }}
+              >
+                {t.setup.useDefault}
+              </button>
+            )}
+          </div>
+        ) : null}
         <p className="field-label">{t.setup.official}</p>
         <div className="row">
           <Field label={t.setup.everyKm}>
@@ -466,7 +497,8 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
         <p className="muted">{t.setup.baselineHint}</p>
         <FormError error={error} />
         <Submit disabled={disabled}>{existing ? t.setup.save : t.setup.addTask}</Submit>
-        {existing ? (
+        {existing && scheduled ? <p className="muted">{t.setup.scheduledTask}</p> : null}
+        {existing && !scheduled ? (
           <button type="button" className="button button-danger button-block" onClick={remove} disabled={disabled}>
             {t.setup.deleteTask}
           </button>

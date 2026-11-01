@@ -50,7 +50,16 @@ import type {
   Vehicle,
   VehicleSpec,
 } from '../shared/types.ts';
-import { isFitted, partFits, starterTasks, templatesOf, type Build, type StandardPartKey } from '../shared/catalogue.ts';
+import {
+  defaultInterval,
+  isFitted,
+  isStandardPartKey,
+  partFits,
+  starterTasks,
+  templatesOf,
+  type Build,
+  type StandardPartKey,
+} from '../shared/catalogue.ts';
 import type { ClaimInput, TermInput, VehicleInput, VehicleKind } from '../shared/schemas.ts';
 import { todayIso } from '../shared/dates.ts';
 import { DEFAULT_GARAGE_ID } from './db.ts';
@@ -676,13 +685,92 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     }
   }
 
+  /** A name compared loosely: case, accents and spacing aside. */
+  const looseName = (name: string | null) =>
+    (name ?? '')
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+
+  /** Whether a Task's Interval is the owner's own rather than the catalogue's for its part on this Build. */
+  function isCustomInterval(build: Build, key: string | null, intervalKm: number | null, intervalMonths: number | null): boolean {
+    const d = key !== null && isStandardPartKey(key) ? defaultInterval(build, key) : null;
+    return d === null || d.intervalKm !== intervalKm || d.intervalMonths !== intervalMonths;
+  }
+
+  /**
+   * Keeps a Vehicle's Tasks on its maintenance schedule: every Standard Part that fits its Build has a Task replacing
+   * it (one that stops fitting is paused, not removed), and an Interval the owner never set follows the Build. With
+   * `adopt`, a Task of the owner's named like a missing schedule Task becomes it, keeping its history and Interval.
+   */
+  function syncSchedule(vehicleId: string, build: Build, adopt = false) {
+    const tasks = db
+      .prepare('SELECT id, name, name_fr, standard_part, custom_interval, interval_km, interval_months FROM maintenance_tasks WHERE vehicle_id = ? ORDER BY created_at')
+      .all(vehicleId) as Row[];
+    const covered = new Set(tasks.map((t) => t.standard_part as string | null));
+    const insert = db.prepare(
+      'INSERT INTO maintenance_tasks (id, vehicle_id, name, name_fr, interval_km, interval_months, standard_part) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    );
+    const link = db.prepare('UPDATE maintenance_tasks SET standard_part = ?, custom_interval = ? WHERE id = ?');
+    const hasParts = db.prepare('SELECT 1 FROM required_parts WHERE task_id = ?');
+    // A schedule Task needs its part (and the oil filter with the oil); how much is left for the owner to fill in.
+    const required = db.prepare(
+      `INSERT INTO required_parts (task_id, part_spec_id, quantity, sort)
+       SELECT ?, id, NULL, ? FROM part_specs WHERE vehicle_id = ? AND standard_part = ?`,
+    );
+    for (const s of starterTasks(build)) {
+      if (covered.has(s.standardPart)) continue;
+      const names = [looseName(s.name), looseName(s.nameFr)];
+      const own = adopt
+        ? tasks.find((t) => t.standard_part === null && (names.includes(looseName(t.name)) || (t.name_fr && names.includes(looseName(t.name_fr)))))
+        : undefined;
+      let taskId: string;
+      if (own) {
+        own.standard_part = s.standardPart;
+        own.custom_interval = isCustomInterval(build, s.standardPart, own.interval_km, own.interval_months) ? 1 : 0;
+        link.run(s.standardPart, own.custom_interval, own.id);
+        taskId = own.id;
+        if (hasParts.get(taskId) !== undefined) continue;
+      } else {
+        taskId = randomUUID();
+        insert.run(taskId, vehicleId, s.name, s.nameFr, s.intervalKm, s.intervalMonths, s.standardPart);
+      }
+      s.parts.forEach((code, i) => required.run(taskId, i, vehicleId, code));
+    }
+    const follow = db.prepare('UPDATE maintenance_tasks SET interval_km = ?, interval_months = ? WHERE id = ?');
+    for (const t of tasks) {
+      const d = !t.custom_interval && t.standard_part && isStandardPartKey(t.standard_part) ? defaultInterval(build, t.standard_part) : null;
+      if (d) follow.run(d.intervalKm, d.intervalMonths, t.id);
+    }
+  }
+
+  /**
+   * Whether a Task is the only one replacing a Standard Part that fits its Vehicle's Build: it cannot be deleted or
+   * unlinked (it would only come back); the owner switches it off by marking the part as not on the Vehicle.
+   */
+  function onlyScheduleTask(task: Row): boolean {
+    if (!task.standard_part || !partFits(buildOfRow(vehicleOrThrow(task.vehicle_id)), task.standard_part)) return false;
+    return (
+      db.prepare('SELECT 1 FROM maintenance_tasks WHERE vehicle_id = ? AND standard_part = ? AND id <> ?').get(task.vehicle_id, task.standard_part, task.id) ===
+      undefined
+    );
+  }
+
   // Vehicles added before Standard Parts existed, or after the catalogue grew, get the missing ones that fit. Those
-  // listed for the move to the current catalogue are moved, then have every part set by whether it fits.
+  // listed for the move to the current catalogue are moved, then have every part set by whether it fits. Owned
+  // Vehicles then get the schedule Tasks they lack; those listed for it first adopt the owner's own Tasks.
   transaction(() => {
     const moving = new Set((db.prepare('SELECT vehicle_id FROM part_catalogue_moves').all() as Row[]).map((r) => r.vehicle_id as string));
+    const scheduling = new Set((db.prepare('SELECT vehicle_id FROM schedule_moves').all() as Row[]).map((r) => r.vehicle_id as string));
     for (const v of db.prepare('SELECT * FROM vehicles WHERE garage_id = ?').all(garageId) as Row[]) {
       if (moving.has(v.id)) moveToCatalogue(v.id, v.kind);
       syncStandardParts(v.id, buildOfRow(v), moving.has(v.id) ? 'all' : undefined);
+      if (v.status === 'owned') {
+        syncSchedule(v.id, buildOfRow(v), scheduling.has(v.id));
+        db.prepare('DELETE FROM schedule_moves WHERE vehicle_id = ?').run(v.id);
+      }
     }
     db.prepare('DELETE FROM part_catalogue_moves WHERE vehicle_id IN (SELECT id FROM vehicles WHERE garage_id = ?)').run(garageId);
   });
@@ -743,27 +831,17 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(id, garageId, ...vehicleValues(v));
       syncStandardParts(id, v);
-      // A new Vehicle starts with a Maintenance Task per part it has, at the catalogue's generic interval, needing
-      // that part (and the oil filter with the oil); how much is left for the user to fill in.
-      const task = db.prepare(
-        'INSERT INTO maintenance_tasks (id, vehicle_id, name, name_fr, interval_km, interval_months, standard_part) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      );
-      const required = db.prepare(
-        `INSERT INTO required_parts (task_id, part_spec_id, quantity, sort)
-         SELECT ?, id, NULL, ? FROM part_specs WHERE vehicle_id = ? AND standard_part = ?`,
-      );
-      for (const t of starterTasks(v)) {
-        const taskId = randomUUID();
-        task.run(taskId, id, t.name, t.nameFr, t.intervalKm, t.intervalMonths, t.standardPart);
-        t.parts.forEach((code, i) => required.run(taskId, i, id, code));
-      }
+      // A new Vehicle starts with its maintenance schedule: a Task per part it has, at the catalogue's interval.
+      syncSchedule(id, v);
     });
     return c.json(toVehicle(vehicleOrThrow(id)), 201);
   });
 
   app.put('/api/vehicles/:id', async (c) => {
     const id = c.req.param('id');
-    const before = buildOfRow(vehicleOrThrow(id));
+    const row = vehicleOrThrow(id);
+    const before = buildOfRow(row);
+    const status = row.status;
     const v = await parse(c, vehicleInput);
     transaction(() => {
       db.prepare(
@@ -776,6 +854,8 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       ).run(...vehicleValues(v), id);
       // A Vehicle of another kind has a different catalogue: everything is set by whether it fits.
       syncStandardParts(id, v, before.kind === v.kind ? before : 'all');
+      // Parts that now fit get their Task; Intervals the owner never set follow the new Build.
+      if (status === 'owned') syncSchedule(id, v);
     });
     return c.json(toVehicle(vehicleOrThrow(id)));
   });
@@ -796,10 +876,15 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
 
   app.post('/api/vehicles/:id/unsell', (c) => {
     const id = c.req.param('id');
-    vehicleOrThrow(id);
-    db.prepare(
-      `UPDATE vehicles SET status = 'owned', on_garage_page = 1, sold_date = NULL, sold_odometer = NULL, sold_price = NULL WHERE id = ?`,
-    ).run(id);
+    const row = vehicleOrThrow(id);
+    transaction(() => {
+      db.prepare(
+        `UPDATE vehicles SET status = 'owned', on_garage_page = 1, sold_date = NULL, sold_odometer = NULL, sold_price = NULL WHERE id = ?`,
+      ).run(id);
+      // Owned again, it is back on its maintenance schedule (adopting its own Tasks if it was sold when the schedule came).
+      const waiting = db.prepare('DELETE FROM schedule_moves WHERE vehicle_id = ?').run(id).changes > 0;
+      syncSchedule(id, buildOfRow(row), waiting);
+    });
     return c.json(toVehicle(vehicleOrThrow(id)));
   });
 
@@ -825,14 +910,15 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
 
   app.post('/api/vehicles/:id/tasks', async (c) => {
     const vehicleId = c.req.param('id');
-    vehicleOrThrow(vehicleId);
+    const vehicle = vehicleOrThrow(vehicleId);
     const t = await parse(c, taskInput);
+    const standardPart = standardPartOrThrow(vehicleId, t.standardPart);
     const id = randomUUID();
     db.prepare(
       `INSERT INTO maintenance_tasks
          (id, vehicle_id, name, name_fr, interval_km, interval_months, official_interval_km, official_interval_months, baseline_date,
-          baseline_odometer, standard_part)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          baseline_odometer, standard_part, custom_interval)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       id,
       vehicleId,
@@ -844,50 +930,71 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       t.officialIntervalMonths,
       t.baselineDate,
       t.baselineOdometer,
-      standardPartOrThrow(vehicleId, t.standardPart),
+      standardPart,
+      isCustomInterval(buildOfRow(vehicle), standardPart, t.intervalKm, t.intervalMonths) ? 1 : 0,
     );
     return c.json(loadTask(id), 201);
   });
 
   app.post('/api/vehicles/:id/copy-tasks', async (c) => {
     const vehicleId = c.req.param('id');
-    vehicleOrThrow(vehicleId);
+    const build = buildOfRow(vehicleOrThrow(vehicleId));
     const { fromVehicleId } = await parse(c, copyTasksInput);
     vehicleOrThrow(fromVehicleId);
     if (fromVehicleId === vehicleId) throw new HttpError(422, 'Cannot copy a Vehicle onto itself');
     const source = db.prepare('SELECT * FROM maintenance_tasks WHERE vehicle_id = ? ORDER BY created_at').all(fromVehicleId) as Row[];
     const insert = db.prepare(
       `INSERT INTO maintenance_tasks (id, vehicle_id, name, name_fr, interval_km, interval_months, official_interval_km, official_interval_months,
-         standard_part)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         standard_part, custom_interval)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
-    // History is not copied: the copies start with no baseline, since they were never done on this Vehicle. A copy
-    // replaces the same Standard Part only if this Vehicle lists it too.
+    const scheduled = db.prepare('SELECT id FROM maintenance_tasks WHERE vehicle_id = ? AND standard_part = ? ORDER BY created_at');
+    const update = db.prepare(
+      `UPDATE maintenance_tasks SET name = ?, name_fr = ?, interval_km = ?, interval_months = ?, official_interval_km = ?,
+         official_interval_months = ?, custom_interval = ?
+       WHERE id = ?`,
+    );
+    // History is not copied: the copies start with no baseline, since they were never done on this Vehicle. A Task
+    // replacing a Standard Part this Vehicle already has a Task for gives that Task its name and Intervals instead;
+    // otherwise a copy replaces the same Standard Part only if this Vehicle lists it too.
     transaction(() => {
       for (const t of source) {
-        insert.run(
-          randomUUID(),
-          vehicleId,
-          t.name,
-          t.name_fr,
-          t.interval_km,
-          t.interval_months,
-          t.official_interval_km,
-          t.official_interval_months,
-          t.standard_part && hasStandardPart(vehicleId, t.standard_part) ? t.standard_part : null,
-        );
+        const standardPart = t.standard_part && hasStandardPart(vehicleId, t.standard_part) ? (t.standard_part as string) : null;
+        const custom = isCustomInterval(build, standardPart, t.interval_km, t.interval_months) ? 1 : 0;
+        const existing = standardPart ? (scheduled.get(vehicleId, standardPart) as Row | undefined) : undefined;
+        if (existing) {
+          update.run(t.name, t.name_fr, t.interval_km, t.interval_months, t.official_interval_km, t.official_interval_months, custom, existing.id);
+        } else {
+          insert.run(
+            randomUUID(),
+            vehicleId,
+            t.name,
+            t.name_fr,
+            t.interval_km,
+            t.interval_months,
+            t.official_interval_km,
+            t.official_interval_months,
+            standardPart,
+            custom,
+          );
+        }
       }
     });
     return c.json({ copied: source.length }, 201);
   });
 
+  const SCHEDULE_TASK_KEPT = 'This task is the vehicle’s only one for a part it has; mark the part as not on this vehicle to switch it off';
+
   app.put('/api/tasks/:id', async (c) => {
     const id = c.req.param('id');
     const task = taskOrThrow(id);
     const t = await parse(c, taskInput);
+    const standardPart = standardPartOrThrow(task.vehicle_id, t.standardPart);
+    if (standardPart !== task.standard_part && onlyScheduleTask(task)) throw new HttpError(409, SCHEDULE_TASK_KEPT);
+    const build = buildOfRow(vehicleOrThrow(task.vehicle_id));
     db.prepare(
       `UPDATE maintenance_tasks SET name = ?, name_fr = ?, interval_km = ?, interval_months = ?, official_interval_km = ?,
-         official_interval_months = ?, baseline_date = ?, baseline_odometer = ?, standard_part = ?
+         official_interval_months = ?, baseline_date = ?, baseline_odometer = ?, standard_part = ?, custom_interval = ?
        WHERE id = ?`,
     ).run(
       t.name,
@@ -898,7 +1005,9 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       t.officialIntervalMonths,
       t.baselineDate,
       t.baselineOdometer,
-      standardPartOrThrow(task.vehicle_id, t.standardPart),
+      standardPart,
+      // An Interval equal to the catalogue's for this Build is not the owner's own: it keeps following the Build.
+      isCustomInterval(build, standardPart, t.intervalKm, t.intervalMonths) ? 1 : 0,
       id,
     );
     return c.json(loadTask(id));
@@ -906,9 +1015,10 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
 
   app.delete('/api/tasks/:id', (c) => {
     const id = c.req.param('id');
-    taskOrThrow(id);
+    const task = taskOrThrow(id);
     const used = db.prepare('SELECT COUNT(*) AS n FROM service_tasks WHERE task_id = ?').get(id) as { n: number };
     if (used.n > 0) throw new HttpError(409, 'This Maintenance Task appears in logged Services and cannot be deleted');
+    if (onlyScheduleTask(task)) throw new HttpError(409, SCHEDULE_TASK_KEPT);
     db.prepare('DELETE FROM maintenance_tasks WHERE id = ?').run(id);
     return c.body(null, 204);
   });

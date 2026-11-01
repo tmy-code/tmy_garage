@@ -398,6 +398,15 @@ const MIGRATIONS: string[] = [
   DROP TABLE required_parts;
   ALTER TABLE required_parts_new RENAME TO required_parts;
   `,
+  `
+  -- Whether the owner set a schedule Task's Interval; until then it follows the Build (e.g. shorter with a turbo).
+  ALTER TABLE maintenance_tasks ADD COLUMN custom_interval INTEGER NOT NULL DEFAULT 0;
+
+  -- Vehicles whose Tasks join the maintenance schedule. The server does it, since it knows the catalogue: a Task
+  -- named like a schedule Task becomes it, then missing ones are added. Sold Vehicles wait until sold no more.
+  CREATE TABLE schedule_moves (vehicle_id TEXT PRIMARY KEY REFERENCES vehicles(id));
+  INSERT INTO schedule_moves SELECT id FROM vehicles;
+  `,
 ];
 
 function schemaVersion(db: DatabaseSync): number {

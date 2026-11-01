@@ -291,6 +291,14 @@ export interface StarterTask {
   parts: StandardPartKey[];
 }
 
+/** The catalogue's Interval for the Task replacing a Standard Part on a Vehicle with this Build (shorter with a turbo). */
+export function defaultInterval(build: Build, key: StandardPartKey): { intervalKm: number | null; intervalMonths: number | null } | null {
+  const t = BY_CODE.get(key);
+  if (!t || t.kind !== build.kind || t.goesWith !== undefined) return null;
+  return { intervalKm: build.hasTurbo && t.turboIntervalKm ? t.turboIntervalKm : t.intervalKm, intervalMonths: t.intervalMonths };
+}
+
+/** The Vehicle's maintenance schedule: a Task per Standard Part that fits its Build (the oil filter goes with the oil). */
 export function starterTasks(build: Build): StarterTask[] {
   const fitting = templatesOf(build.kind).filter((t) => partFits(build, t.code));
   return fitting
@@ -298,8 +306,7 @@ export function starterTasks(build: Build): StarterTask[] {
     .map((t) => ({
       name: t.task ? t.task.en : t.en,
       nameFr: t.task ? t.task.fr : t.fr,
-      intervalKm: build.hasTurbo && t.turboIntervalKm ? t.turboIntervalKm : t.intervalKm,
-      intervalMonths: t.intervalMonths,
+      ...defaultInterval(build, t.code)!,
       standardPart: t.code,
       parts: [t.code, ...fitting.filter((other) => other.goesWith === t.code).map((other) => other.code)],
     }));

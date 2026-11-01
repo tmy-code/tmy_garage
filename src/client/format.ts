@@ -69,6 +69,11 @@ function intervalParts(km: number | null, months: number | null, m: Messages): s
 /** The Interval that applies (the stricter of yours and the official one), e.g. "Every 10 000 km or 1 year". */
 export function describeInterval(task: MaintenanceTask, m: Messages = messages()): string {
   const { km, months } = effectiveInterval(task);
+  return describeEvery(km, months, m);
+}
+
+/** An Interval given as distance and months, e.g. "Every 10 000 km or 1 year". */
+export function describeEvery(km: number | null, months: number | null, m: Messages = messages()): string {
   return m.due.every(intervalParts(km, months, m));
 }
 

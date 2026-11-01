@@ -357,9 +357,49 @@ describe('workshop data', () => {
     expect(tasks.find((t) => t.name === 'Oil filter')).toBeUndefined();
     expect(tasks.find((t) => t.name === 'Brake fluid')).toMatchObject({ intervalKm: null, intervalMonths: 24 });
     expect(tasks).toHaveLength((await fittedParts(car.id)).length - 1);
-    // Editing a vehicle leaves its Tasks to the user.
+    // Parts that fit after an edit get their Task too: four-wheel drive adds two differentials and a transfer case.
     await call('PUT', `/api/vehicles/${car.id}`, { ...CAR, name: 'Test vehicle', drivetrain: 'awd' });
-    expect((await snapshot()).tasks.filter((t) => t.vehicleId === car.id)).toHaveLength(tasks.length);
+    const after = (await snapshot()).tasks.filter((t) => t.vehicleId === car.id);
+    expect(after).toHaveLength(tasks.length + 3);
+    expect(after.map((t) => t.standardPart)).toEqual(expect.arrayContaining(['diff_oil_front', 'diff_oil_rear', 'transfer_case_oil']));
+  });
+
+  it('keeps an Interval following the build until the owner sets their own', async () => {
+    const car = await create(CAR);
+    const tasks = async () => (await snapshot()).tasks.filter((t) => t.vehicleId === car.id);
+    const oil = (await tasks()).find((t) => t.standardPart === 'engine_oil')!;
+    const pads = (await tasks()).find((t) => t.standardPart === 'brake_pads_front')!;
+    const edit = (task: MaintenanceTask, intervalKm: number) =>
+      call('PUT', `/api/tasks/${task.id}`, { name: task.name, nameFr: task.nameFr, intervalKm, intervalMonths: task.intervalMonths, standardPart: task.standardPart });
+    await edit(pads, 30_000);
+    // A turbo shortens the oil change; the owner's own pads interval stays.
+    await call('PUT', `/api/vehicles/${car.id}`, { ...CAR, name: 'Test vehicle', hasTurbo: true });
+    expect((await tasks()).find((t) => t.id === oil.id)!.intervalKm).toBe(10_000);
+    expect((await tasks()).find((t) => t.id === pads.id)!.intervalKm).toBe(30_000);
+    // Set back to the default, it follows the build again.
+    await edit(pads, 40_000);
+    await edit(oil, 8_000);
+    await call('PUT', `/api/vehicles/${car.id}`, { ...CAR, name: 'Test vehicle' });
+    expect((await tasks()).find((t) => t.id === oil.id)!.intervalKm).toBe(8_000);
+    expect((await tasks()).find((t) => t.id === pads.id)!.intervalKm).toBe(40_000);
+  });
+
+  it('keeps a part’s only Task on the schedule, and gives a copied Interval to the Task already there', async () => {
+    const car = await create(CAR);
+    const other = await create(CAR);
+    const oil = (await snapshot()).tasks.find((t) => t.vehicleId === car.id && t.standardPart === 'engine_oil')!;
+    expect((await call('DELETE', `/api/tasks/${oil.id}`)).status).toBe(409);
+    expect((await call('PUT', `/api/tasks/${oil.id}`, { name: 'Oil', intervalKm: 5000, standardPart: null })).status).toBe(409);
+    await call('PUT', `/api/tasks/${oil.id}`, { name: 'Oil', intervalKm: 5000, standardPart: 'engine_oil' });
+    const before = (await snapshot()).tasks.filter((t) => t.vehicleId === other.id).length;
+    await call('POST', `/api/vehicles/${other.id}/copy-tasks`, { fromVehicleId: car.id });
+    const copied = (await snapshot()).tasks.filter((t) => t.vehicleId === other.id);
+    expect(copied).toHaveLength(before);
+    expect(copied.find((t) => t.standardPart === 'engine_oil')).toMatchObject({ name: 'Oil', intervalKm: 5000 });
+    // A part set aside no longer keeps its Task: it can go.
+    await call('PUT', `/api/vehicles/${car.id}`, { ...CAR, name: 'Test vehicle', transmission: 'automatic' });
+    const clutch = (await snapshot()).tasks.find((t) => t.vehicleId === car.id && t.standardPart === 'clutch_kit')!;
+    expect((await call('DELETE', `/api/tasks/${clutch.id}`)).status).toBe(204);
   });
 
   it('links each starter task to its part, needing it and what goes with it, quantity to fill in', async () => {
@@ -395,7 +435,9 @@ describe('workshop data', () => {
     db.prepare(`DELETE FROM part_specs WHERE vehicle_id = ? AND standard_part = 'moto_chain'`).run(other.id);
     await call('POST', `/api/vehicles/${other.id}/copy-tasks`, { fromVehicleId: bike.id });
     expect((await snapshot()).tasks.find((t) => t.vehicleId === other.id)!.standardPart).toBeNull();
-    await call('PUT', `/api/tasks/${chain.id}`, { name: 'Chain kit', intervalKm: 20000, standardPart: null });
+    // With a second Task for the chain, this one can be unlinked.
+    await createTask(bike.id, { name: 'Chain check', standardPart: 'moto_chain' });
+    expect((await call('PUT', `/api/tasks/${chain.id}`, { name: 'Chain kit', intervalKm: 20000, standardPart: null })).status).toBe(200);
     expect((await snapshot()).tasks.find((t) => t.id === chain.id)!.standardPart).toBeNull();
   });
 
@@ -960,6 +1002,36 @@ describe('migrations', () => {
     expect(migrated.prepare('SELECT task_id, part_spec_id, quantity FROM required_parts').all()).toEqual([
       { task_id: 't1', part_spec_id: 'p1', quantity: 4.5 },
     ]);
+    migrated.close();
+  });
+
+  it('puts owned vehicles on their schedule, adopting Tasks named like schedule Tasks, and sold ones once owned again', async () => {
+    const path = join(dir, 'garage.sqlite');
+    const old = openDatabase(path, undefined, 13);
+    const build = `'Exemple', 'Test', 'petrol', 'manual', 'fwd', 'chain'`;
+    old.exec(`INSERT INTO vehicles (id, garage_id, kind, name, make, model, fuel, transmission, drivetrain, distribution) VALUES
+      ('car', 'default', 'car', 'Old car', ${build})`);
+    old.exec(`INSERT INTO vehicles (id, garage_id, kind, name, make, model, fuel, transmission, drivetrain, distribution, status) VALUES
+      ('sold', 'default', 'car', 'Sold car', ${build}, 'sold')`);
+    old.exec(`INSERT INTO maintenance_tasks (id, vehicle_id, name, interval_km, interval_months) VALUES
+      ('oil', 'car', '  huile MOTEUR et filtre ', 6000, 12), ('own', 'car', 'Vidange boîte', 60000, NULL), ('sold-oil', 'sold', 'Engine oil and filter', 15000, 12)`);
+    old.exec(`INSERT INTO services (id, vehicle_id, date, odometer) VALUES ('s1', 'car', '2026-01-10', 20000)`);
+    old.exec(`INSERT INTO service_tasks (service_id, task_id) VALUES ('s1', 'oil')`);
+    old.close();
+
+    const migrated = openDatabase(path);
+    const later = createApp(migrated);
+    const tasks = async (vehicleId: string) =>
+      ((await (await later.request('/api/snapshot')).json()) as Snapshot).tasks.filter((t) => t.vehicleId === vehicleId);
+    const car = await tasks('car');
+    // The owner's oil Task became the schedule's, keeping its own Interval and history; no second oil Task.
+    expect(car.filter((t) => t.standardPart === 'engine_oil').map((t) => [t.id, t.intervalKm])).toEqual([['oil', 6000]]);
+    expect(car.find((t) => t.id === 'own')!.standardPart).toBeNull();
+    expect(car.find((t) => t.standardPart === 'clutch_kit')).toBeDefined();
+    expect(await tasks('sold')).toHaveLength(1);
+    await later.request('/api/vehicles/sold/unsell', { method: 'POST' });
+    expect((await tasks('sold')).filter((t) => t.standardPart === 'engine_oil').map((t) => t.id)).toEqual(['sold-oil']);
+    expect(migrated.prepare('SELECT COUNT(*) AS n FROM schedule_moves').get()).toEqual({ n: 0 });
     migrated.close();
   });
 
