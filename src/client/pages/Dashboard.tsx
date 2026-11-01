@@ -1,22 +1,23 @@
 import { useMemo } from 'react';
-import { todayIso } from '../../shared/dates.ts';
+import { daysBetween, todayIso } from '../../shared/dates.ts';
 import { usageOf } from '../../shared/due.ts';
 import type { Snapshot, Vehicle } from '../../shared/types.ts';
 import { upcoming, type Upcoming } from '../../shared/upcoming.ts';
-import { LanguageSwitch, Layout, StatusChip } from '../components.tsx';
-import { describeDue, formatDate, formatKm, taskName } from '../format.ts';
-import { useT } from '../i18n.ts';
+import { LanguageSwitch, Layout } from '../components.tsx';
+import { formatDate, formatKm, taskName } from '../format.ts';
+import { useT, type Messages } from '../i18n.ts';
 import { VehicleIcon } from '../brands.tsx';
 import { Icon } from '../icons.tsx';
 
-/** The main page: what is coming up on every owned Vehicle, in one list, most urgent first. */
+const GROUPS = ['overdue', 'dueSoon', 'ok'] as const;
+
+/** The main page: what is coming up, one card per owned Vehicle, grouped by how urgent it is. */
 export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
   const t = useT();
   const today = todayIso();
   const owned = snapshot.vehicles.filter((v) => v.status === 'owned');
   const sold = snapshot.vehicles.filter((v) => v.status === 'sold');
   const items = useMemo(() => upcoming(snapshot, today), [snapshot, today]);
-  const vehicles = new Map(owned.map((v) => [v.id, v]));
 
   return (
     <Layout
@@ -36,29 +37,17 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
         </div>
       ) : (
         <>
-          <section>
-            <h2>{t.dashboard.upcoming}</h2>
-            {items.every((i) => i.kind === 'reading') ? <p className="muted">{t.dashboard.allClear}</p> : null}
-            <ul className="list list-grid">
-              {items.map((item) => (
-                <li key={`${item.kind}-${item.vehicleId}-${keyOf(item)}`}>
-                  <UpcomingRow item={item} vehicle={vehicles.get(item.vehicleId)!} snapshot={snapshot} today={today} />
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          <section>
-            <h2>{t.dashboard.vehicles}</h2>
-            <ul className="list list-grid">
-              {owned.map((v) => (
-                <li key={v.id}>
-                  <VehicleRow vehicle={v} snapshot={snapshot} today={today} />
-                </li>
-              ))}
-            </ul>
-          </section>
-
+          <div className="card-grid">
+            {owned.map((v) => (
+              <VehicleCard
+                key={v.id}
+                vehicle={v}
+                items={items.filter((i) => i.vehicleId === v.id)}
+                snapshot={snapshot}
+                today={today}
+              />
+            ))}
+          </div>
           <div className="actions dashboard-actions">
             <a className="button" href="#/shopping">
               <Icon name="cart" /> {t.workshop.shopping}
@@ -91,74 +80,104 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
   );
 }
 
+function VehicleCard({ vehicle, items, snapshot, today }: { vehicle: Vehicle; items: Upcoming[]; snapshot: Snapshot; today: string }) {
+  const t = useT();
+  const usage = useMemo(() => usageOf(snapshot, vehicle.id, today), [snapshot, vehicle.id, today]);
+  const reading = items.find((i) => i.kind === 'reading');
+  const due = items.filter((i) => i.kind !== 'reading');
+
+  return (
+    <section className="card vehicle-card">
+      <a className="vehicle-head" href={`#/vehicles/${vehicle.id}`}>
+        <h2 className="with-icon">
+          <VehicleIcon vehicle={vehicle} /> {vehicle.name}
+        </h2>
+        {usage.estimatedOdometer !== null ? <span className="muted">{formatKm(usage.estimatedOdometer)}</span> : null}
+      </a>
+      {reading ? (
+        <a className="nudge" href={`#/vehicles/${vehicle.id}/reading`}>
+          {reading.daysSince === null ? t.dashboard.noReading : t.dashboard.staleReading(reading.daysSince)}
+        </a>
+      ) : null}
+      {due.length === 0 ? <p className="muted">{t.dashboard.allClear}</p> : null}
+      {GROUPS.map((status) => {
+        const group = due.filter((i) => i.status === status);
+        if (group.length === 0) return null;
+        return (
+          <div key={status}>
+            <h3 className={`due-group due-group-${status}`}>{status === 'ok' ? t.dashboard.later : t.status[status]}</h3>
+            <ul className="due-lines">
+              {group.map((item) => (
+                <li key={`${item.kind}-${keyOf(item)}`}>
+                  <UpcomingLine item={item} vehicle={vehicle} snapshot={snapshot} today={today} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
 function keyOf(item: Upcoming): string {
   if (item.kind === 'task') return item.due.taskId;
   if (item.kind === 'document') return item.document.id;
   return '';
 }
 
-/** One coming-up line, opening the screen where it is dealt with. */
-function UpcomingRow({ item, vehicle, snapshot, today }: { item: Upcoming; vehicle: Vehicle; snapshot: Snapshot; today: string }) {
+/** How soon, in a few words: days for what is urgent, the date for what can wait. */
+function when(date: string, status: Upcoming['status'], today: string, t: Messages): string {
+  if (status === 'ok') return formatDate(date, t);
+  const days = daysBetween(today, date);
+  return days < 0 ? t.due.daysAgo(-days) : days === 0 ? t.due.today : t.due.inDays(days);
+}
+
+/** One line: what it is, and when. Opens the screen where it is dealt with. */
+function UpcomingLine({ item, vehicle, snapshot, today }: { item: Upcoming; vehicle: Vehicle; snapshot: Snapshot; today: string }) {
   const t = useT();
   const base = `#/vehicles/${vehicle.id}`;
   let href: string;
   let name: string;
-  let text: string | null = null;
   switch (item.kind) {
-    case 'task': {
-      const task = snapshot.tasks.find((x) => x.id === item.due.taskId)!;
-      href = `#/tasks/${task.id}`;
-      name = taskName(task, t);
-      text = describeDue(item.due, t);
+    case 'task':
+      href = `#/tasks/${item.due.taskId}`;
+      name = taskName(snapshot.tasks.find((x) => x.id === item.due.taskId)!, t);
       break;
-    }
     case 'inspection':
       href = `${base}/inspections`;
       name = t.papers.nextInspection;
-      text = t.papers.dueBy(formatDate(item.date!, t));
       break;
     case 'insurance':
       href = `${base}/insurance`;
       name = item.insurer;
-      text = item.status === 'overdue' ? t.insurance.renewalPassed(formatDate(item.date!, t)) : t.insurance.renewsOn(formatDate(item.date!, t));
       break;
     case 'document':
       href = `${base}/documents`;
       name = item.document.title ?? t.papers.types[item.document.type];
-      text = item.date! < today ? t.papers.expired(formatDate(item.date!, t)) : t.papers.expires(formatDate(item.date!, t));
       break;
     case 'defects':
       href = `${base}/inspections`;
       name = t.papers.openDefects(item.count);
       break;
     case 'reading':
-      href = `${base}/reading`;
-      name = t.vehicle.odometerReading;
-      text = item.daysSince === null ? t.dashboard.noReading : t.dashboard.staleReading(item.daysSince);
-      break;
+      return null;
   }
+  // A Task due by distance only, with no projected date, says how many km are left.
+  const km = item.kind === 'task' ? item.due.kmRemaining : null;
+  const text =
+    item.date !== null
+      ? when(item.date, item.status, today, t)
+      : km !== null
+        ? km < 0
+          ? t.due.over(formatKm(-km))
+          : t.due.left(formatKm(km))
+        : '';
 
   return (
-    <a href={href} className="task-row">
-      <div className="task-title">
-        {item.kind === 'reading' ? null : <StatusChip status={item.status} />}
-        <span className="due-name with-icon">
-          <VehicleIcon vehicle={vehicle} /> {vehicle.name} · {name}
-        </span>
-      </div>
-      {text ? <span className={item.kind === 'reading' ? 'nudge' : 'due-text'}>{text}</span> : null}
-    </a>
-  );
-}
-
-function VehicleRow({ vehicle, snapshot, today }: { vehicle: Vehicle; snapshot: Snapshot; today: string }) {
-  const usage = useMemo(() => usageOf(snapshot, vehicle.id, today), [snapshot, vehicle.id, today]);
-  return (
-    <a href={`#/vehicles/${vehicle.id}`} className="history-row">
-      <span className="due-name with-icon">
-        <VehicleIcon vehicle={vehicle} /> {vehicle.name}
-      </span>
-      {usage.estimatedOdometer !== null ? <span className="muted">{formatKm(usage.estimatedOdometer)}</span> : null}
+    <a href={href}>
+      <span>{name}</span>
+      <span className="muted">{text}</span>
     </a>
   );
 }

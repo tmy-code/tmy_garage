@@ -272,25 +272,67 @@ section {
   margin: 4px 0 12px;
 }
 
-.due-list,
 .list {
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.due-list li {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  column-gap: 8px;
+/* Dashboard: a card per Vehicle, its upcoming items under Overdue / Due soon / Later. */
+.vehicle-head {
+  display: flex;
+  justify-content: space-between;
   align-items: baseline;
-  padding: 6px 0;
+  gap: 8px;
+  color: inherit;
+  text-decoration: none;
 }
 
-.due-list .due-text {
-  grid-column: 2;
-  font-size: 0.9rem;
+.vehicle-card .nudge {
+  display: block;
+}
+
+.due-group {
+  margin: 14px 0 2px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--muted);
+}
+
+.due-group-overdue {
+  color: var(--overdue);
+}
+
+.due-group-dueSoon {
+  color: var(--soon);
+}
+
+.due-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.due-lines a {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 7px 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.due-lines li + li a {
+  border-top: 1px solid var(--border);
+}
+
+.due-lines .muted {
+  font-size: 0.9rem;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .due-name {
