@@ -58,10 +58,19 @@ const base: Snapshot = {
       purchaseDate: null,
       overnightParking: null,
       fuel: null,
-      gearbox: null,
-      timing: null,
-      finalDrive: null,
+      transmission: null,
+      drivetrain: null,
+      distribution: null,
       cooling: null,
+      finalDrive: null,
+      cylinders: null,
+      hasHydraulicClutch: false,
+      hasTurbo: false,
+      hasDirectInjection: false,
+      hasStartStop: false,
+      hasAdblue: false,
+      hasAc: false,
+      hasAirSuspension: false,
       status: 'owned',
       onGaragePage: true,
       soldDate: null,
@@ -77,7 +86,7 @@ const base: Snapshot = {
     {
       id: 'oil-spec',
       vehicleId: 'bike',
-      standardPart: 'engineOil',
+      standardPart: 'moto_engine_oil',
       notFitted: false,
       name: 'Engine oil',
       nameFr: null,
@@ -89,7 +98,7 @@ const base: Snapshot = {
     {
       id: 'filter-spec',
       vehicleId: 'bike',
-      standardPart: 'oilFilter',
+      standardPart: 'moto_oil_filter',
       notFitted: false,
       name: 'Oil filter',
       nameFr: null,
@@ -99,7 +108,7 @@ const base: Snapshot = {
       unit: 'piece',
     },
   ],
-  positions: [{ id: 'rear', vehicleId: 'bike', standardPart: 'rearTyre', name: 'rearTyre' }],
+  positions: [{ id: 'rear', vehicleId: 'bike', standardPart: 'moto_tire_rear', name: 'moto_tire_rear' }],
   inspections: [],
   modifications: [],
   documents: [],
@@ -165,14 +174,14 @@ describe('fitments', () => {
       positions: [
         { id: 'old', vehicleId: 'bike', standardPart: null, name: 'Top box' },
         ...base.positions,
-        { id: 'chain', vehicleId: 'bike', standardPart: 'chainKit', name: 'chainKit' },
+        { id: 'chain', vehicleId: 'bike', standardPart: 'moto_chain', name: 'moto_chain' },
       ],
     };
-    expect(positionsOf(snapshot, bike).map((p) => p.id)).toEqual(['chain', 'rear', 'old']);
+    expect(positionsOf(snapshot, bike).map((p) => p.id)).toEqual(['rear', 'chain', 'old']);
   });
 
   it('hides the position of a part marked as not on the vehicle, unless something was fitted there', () => {
-    const notFitted = { ...base.partSpecs[1]!, id: 'tyre-spec', standardPart: 'rearTyre' as const, notFitted: true };
+    const notFitted = { ...base.partSpecs[1]!, id: 'tyre-spec', standardPart: 'moto_tire_rear' as const, notFitted: true };
     const hidden: Snapshot = { ...base, partSpecs: [...base.partSpecs, notFitted] };
     expect(positionsOf(hidden, bike)).toEqual([]);
     const used: Snapshot = { ...hidden, services: [service('s1', '2024-04-01', 10_000, ['tyre'], [part({ positionId: 'rear' })])] };

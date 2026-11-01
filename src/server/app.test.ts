@@ -20,7 +20,7 @@ import type {
   Vehicle,
   VehicleSpec,
 } from '../shared/types.ts';
-import { STANDARD_PARTS } from '../shared/catalogue.ts';
+import { partFits, templatesOf, type Build } from '../shared/catalogue.ts';
 import { createApp } from './app.ts';
 import { openDatabase } from './db.ts';
 
@@ -35,10 +35,17 @@ function call(method: string, path: string, body?: unknown) {
   });
 }
 
+/** What a test motorcycle and car are built with; tests override what they look at. */
+const BIKE = { kind: 'motorcycle', make: 'Exemple', model: 'Test', fuel: 'petrol', transmission: 'manual', cooling: 'liquid', finalDrive: 'chain', cylinders: 2 };
+const CAR = { kind: 'car', make: 'Exemple', model: 'Test', fuel: 'petrol', transmission: 'manual', drivetrain: 'fwd', distribution: 'chain' };
+
+/** A motorcycle without the Maintenance Tasks a new vehicle starts with, so tests see only the Tasks they add. */
 async function createVehicle(name = 'Test bike'): Promise<Vehicle> {
-  const res = await call('POST', '/api/vehicles', { kind: 'motorcycle', name });
+  const res = await call('POST', '/api/vehicles', { ...BIKE, name });
   expect(res.status).toBe(201);
-  return res.json();
+  const vehicle = (await res.json()) as Vehicle;
+  db.prepare('DELETE FROM maintenance_tasks WHERE vehicle_id = ?').run(vehicle.id);
+  return vehicle;
 }
 
 async function createTask(vehicleId: string, overrides: object = {}): Promise<MaintenanceTask> {
@@ -129,7 +136,7 @@ describe('vehicles and tasks', () => {
     const shown = await call('PUT', `/api/vehicles/${bike.id}/garage-page`, { shown: true });
     expect(await shown.json()).toMatchObject({ status: 'sold', onGaragePage: true });
     // Editing the vehicle's details keeps the choice.
-    await call('PUT', `/api/vehicles/${bike.id}`, { kind: 'motorcycle', name: 'Renamed' });
+    await call('PUT', `/api/vehicles/${bike.id}`, { ...BIKE, name: 'Renamed' });
     expect((await snapshot()).vehicles[0]).toMatchObject({ name: 'Renamed', onGaragePage: true });
     await call('PUT', `/api/vehicles/${bike.id}/garage-page`, { shown: false });
     const back = (await (await call('POST', `/api/vehicles/${bike.id}/unsell`)).json()) as Vehicle;
@@ -254,13 +261,13 @@ describe('workshop data', () => {
     });
     // Positions are the vehicle's fitted Standard Parts: a tyre is fitted, engine oil is not.
     const positions = s.positions.filter((p) => p.vehicleId === bike.id).map((p) => p.standardPart);
-    expect(positions).toEqual(expect.arrayContaining(['rearTyre', 'chainKit', 'battery']));
-    expect(positions).not.toContain('engineOil');
+    expect(positions).toEqual(expect.arrayContaining(['moto_tire_rear', 'moto_chain', 'moto_battery']));
+    expect(positions).not.toContain('moto_engine_oil');
   });
 
   it('gives positions only from the Standard Parts, which cannot be added, renamed or deleted by hand', async () => {
     const bike = await createVehicle();
-    const rear = (await snapshot()).positions.find((p) => p.vehicleId === bike.id && p.standardPart === 'rearTyre')!;
+    const rear = (await snapshot()).positions.find((p) => p.vehicleId === bike.id && p.standardPart === 'moto_tire_rear')!;
     expect((await call('POST', `/api/vehicles/${bike.id}/positions`, { name: 'Top box' })).status).toBe(404);
     expect((await call('PUT', `/api/positions/${rear.id}`, { name: 'Renamed' })).status).toBe(409);
     expect((await call('DELETE', `/api/positions/${rear.id}`)).status).toBe(409);
@@ -271,116 +278,128 @@ describe('workshop data', () => {
     expect((await call('DELETE', '/api/positions/old')).status).toBe(204);
   });
 
-  it('gives a motorcycle with a belt drive a drive belt position and no chain kit one', async () => {
-    const res = await call('POST', '/api/vehicles', { kind: 'motorcycle', name: 'Belt bike', finalDrive: 'belt' });
-    const bike = (await res.json()) as Vehicle;
-    const positions = (await snapshot()).positions.filter((p) => p.vehicleId === bike.id).map((p) => p.standardPart);
-    expect(positions).toContain('finalDriveBelt');
-    expect(positions).not.toContain('chainKit');
-  });
-
-  it('adds the positions to vehicles created before positions came from the Standard Parts', async () => {
-    db.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('old', 'default', 'motorcycle', 'Old bike')`);
-    const later = createApp(db);
-    const s = (await (await later.request('/api/snapshot')).json()) as Snapshot;
-    expect(s.positions.filter((p) => p.vehicleId === 'old').map((p) => p.standardPart)).toEqual(
-      expect.arrayContaining(['frontTyre', 'rearTyre', 'chainKit']),
-    );
-  });
-
   /** The Standard Parts a vehicle lists, minus those marked as not on it. */
   async function fittedParts(vehicleId: string): Promise<string[]> {
     return (await snapshot()).partSpecs.filter((p) => p.vehicleId === vehicleId && !p.notFitted).map((p) => p.standardPart!);
   }
 
-  async function createCar(traits: object): Promise<Vehicle> {
-    const res = await call('POST', '/api/vehicles', { kind: 'car', name: 'Test car', ...traits });
+  async function create(build: object): Promise<Vehicle> {
+    const res = await call('POST', '/api/vehicles', { name: 'Test vehicle', ...build });
     expect(res.status).toBe(201);
     return res.json();
   }
 
-  it('lists every part a vehicle might have while its traits are unknown', async () => {
-    const bike = await createVehicle();
-    const car = await createCar({});
-    const parts = (await snapshot()).partSpecs;
-    const of = (v: Vehicle) => parts.filter((p) => p.vehicleId === v.id).map((p) => p.standardPart);
-    expect(of(bike)).toEqual(expect.arrayContaining(['engineOil', 'coolant', 'chainKit']));
-    expect(of(bike)).not.toContain('finalDriveBelt');
-    expect(of(car)).toEqual(expect.arrayContaining(['timingBeltKit', 'timingChainKit', 'cabinFilter', 'sparkPlugs']));
-    expect(of(car)).not.toEqual(expect.arrayContaining(['clutchKit']));
-    expect(parts.find((p) => p.vehicleId === bike.id && p.standardPart === 'engineOil')).toMatchObject({ unit: 'litre', notFitted: false });
+  it('requires what the parts depend on, and refuses what cannot go together', async () => {
+    const refused = async (build: object) => {
+      const res = await call('POST', '/api/vehicles', { name: 'Test vehicle', ...build });
+      expect(res.status).toBe(422);
+      return ((await res.json()) as { error: string }).error;
+    };
+    expect(await refused({ ...CAR, drivetrain: null })).toMatch(/^drivetrain:/);
+    expect(await refused({ ...CAR, make: '' })).toMatch(/^make:/);
+    expect(await refused({ ...BIKE, cylinders: null })).toMatch(/^cylinders:/);
+    expect(await refused({ ...BIKE, fuel: 'diesel' })).toMatch(/^fuel:/);
+    expect(await refused({ ...CAR, fuel: 'hybrid', transmission: 'manual' })).toMatch(/^transmission:/);
+    expect(await refused({ ...BIKE, transmission: 'e_cvt' })).toMatch(/^transmission:/);
+    // What an electric vehicle always is, and options that cannot apply, are set rather than refused.
+    const ev = await create({ ...CAR, fuel: 'electric', transmission: 'manual', distribution: 'belt', hasTurbo: true, hasAc: true, cooling: 'air' });
+    expect(ev).toMatchObject({ transmission: 'single_speed', distribution: 'none', hasTurbo: false, hasAc: true, cooling: null });
   });
 
   it('lists only the parts that fit a petrol automatic car with a timing chain', async () => {
-    const car = await createCar({ fuel: 'petrol', gearbox: 'automatic', timing: 'chain' });
+    const car = await create({ ...CAR, transmission: 'automatic', distribution: 'chain' });
     const fitted = await fittedParts(car.id);
-    expect(fitted).toEqual(expect.arrayContaining(['engineOil', 'sparkPlugs', 'gearboxFilter', 'timingChainKit']));
-    for (const gone of ['timingBeltKit', 'clutchKit', 'glowPlugs', 'adBlue']) expect(fitted).not.toContain(gone);
+    expect(fitted).toEqual(expect.arrayContaining(['engine_oil', 'oil_filter', 'spark_plugs', 'atf', 'battery_12v']));
+    for (const gone of ['timing_belt_kit', 'clutch_kit', 'fuel_filter', 'dct_oil', 'ac_dryer', 'battery_12v_agm']) expect(fitted).not.toContain(gone);
   });
 
-  it('lists the parts of a manual diesel car with a timing belt', async () => {
-    const car = await createCar({ fuel: 'diesel', gearbox: 'manual', timing: 'belt' });
+  it('lists the parts of a manual four-wheel-drive diesel with a timing belt, turbo, start-stop and A/C', async () => {
+    const car = await create({ ...CAR, fuel: 'diesel', drivetrain: 'awd', distribution: 'belt', hasTurbo: true, hasStartStop: true, hasAc: true });
     const fitted = await fittedParts(car.id);
-    expect(fitted).toEqual(expect.arrayContaining(['glowPlugs', 'adBlue', 'clutchKit', 'timingBeltKit', 'fuelFilter']));
-    for (const gone of ['sparkPlugs', 'gearboxFilter', 'timingChainKit']) expect(fitted).not.toContain(gone);
+    expect(fitted).toEqual(
+      expect.arrayContaining(['fuel_filter', 'clutch_kit', 'clutch_fluid', 'timing_belt_kit', 'diff_oil_rear', 'diff_oil_front', 'transfer_case_oil', 'ac_dryer', 'battery_12v_agm']),
+    );
+    for (const gone of ['spark_plugs', 'atf', 'battery_12v']) expect(fitted).not.toContain(gone);
   });
 
-  it('leaves out the engine parts of an electric car and ignores its gearbox and timing', async () => {
-    const car = await createCar({ fuel: 'electric', gearbox: 'manual', timing: 'belt' });
-    expect(car).toMatchObject({ fuel: 'electric', gearbox: null, timing: null });
+  it('leaves out the engine parts of an electric car', async () => {
+    const car = await create({ ...CAR, fuel: 'electric', drivetrain: 'awd' });
     const fitted = await fittedParts(car.id);
-    expect(fitted).toEqual(expect.arrayContaining(['cabinFilter', 'frontBrakePads', 'battery']));
-    for (const gone of ['engineOil', 'oilFilter', 'sparkPlugs', 'timingBeltKit', 'timingChainKit', 'clutchKit']) expect(fitted).not.toContain(gone);
+    expect(fitted).toEqual(expect.arrayContaining(['ev_battery_coolant', 'ev_reduction_gear_oil', 'ev_reduction_gear_oil_rear', 'cabin_filter']));
+    for (const gone of ['engine_oil', 'oil_filter', 'coolant', 'spark_plugs', 'timing_belt_kit']) expect(fitted).not.toContain(gone);
   });
 
-  it('lists the parts of a liquid-cooled motorcycle with a shaft drive', async () => {
-    const res = await call('POST', '/api/vehicles', { kind: 'motorcycle', name: 'Shaft bike', fuel: 'petrol', finalDrive: 'shaft', cooling: 'air', gearbox: 'manual' });
-    const bike = (await res.json()) as Vehicle;
-    expect(bike).toMatchObject({ gearbox: null, finalDrive: 'shaft', cooling: 'air' });
+  it('lists the parts of an air-cooled motorcycle with a shaft drive and a hydraulic clutch', async () => {
+    const bike = await create({ ...BIKE, finalDrive: 'shaft', cooling: 'air', hasHydraulicClutch: true });
     const fitted = await fittedParts(bike.id);
-    expect(fitted).toEqual(expect.arrayContaining(['finalDriveOil', 'sparkPlugs']));
-    for (const gone of ['chainKit', 'finalDriveBelt', 'coolant']) expect(fitted).not.toContain(gone);
+    expect(fitted).toEqual(expect.arrayContaining(['moto_shaft_oil', 'moto_spark_plugs', 'moto_clutch_fluid', 'moto_clutch_plates']));
+    for (const gone of ['moto_chain', 'moto_sprockets', 'moto_drive_belt', 'moto_coolant']) expect(fitted).not.toContain(gone);
   });
 
-  it('updates the parts when a trait changes, keeping filled-in parts and the user’s own choices', async () => {
-    const car = await createCar({ fuel: 'petrol', gearbox: 'manual', timing: 'chain' });
+  it('gives a motorcycle with a belt drive a drive belt position and no chain one', async () => {
+    const bike = await create({ ...BIKE, finalDrive: 'belt' });
+    const positions = (await snapshot()).positions.filter((p) => p.vehicleId === bike.id).map((p) => p.standardPart);
+    expect(positions).toContain('moto_drive_belt');
+    expect(positions).not.toContain('moto_chain');
+  });
+
+  it('starts a new vehicle with a Maintenance Task per part, at the catalogue interval', async () => {
+    const car = await create({ ...CAR, hasTurbo: true });
+    const tasks = (await snapshot()).tasks.filter((t) => t.vehicleId === car.id);
+    // Oil and filter are changed together, sooner with a turbo.
+    expect(tasks.find((t) => t.name === 'Engine oil and filter')).toMatchObject({
+      nameFr: 'Huile moteur et filtre',
+      intervalKm: 10_000,
+      intervalMonths: 12,
+      officialIntervalKm: null,
+    });
+    expect(tasks.find((t) => t.name === 'Oil filter')).toBeUndefined();
+    expect(tasks.find((t) => t.name === 'Brake fluid')).toMatchObject({ intervalKm: null, intervalMonths: 24 });
+    expect(tasks).toHaveLength((await fittedParts(car.id)).length - 1);
+    // Editing a vehicle leaves its Tasks to the user.
+    await call('PUT', `/api/vehicles/${car.id}`, { ...CAR, name: 'Test vehicle', drivetrain: 'awd' });
+    expect((await snapshot()).tasks.filter((t) => t.vehicleId === car.id)).toHaveLength(tasks.length);
+  });
+
+  it('updates the parts when the build changes, keeping filled-in parts and the user’s own choices', async () => {
+    const car = await create(CAR);
     const parts = async () => (await snapshot()).partSpecs.filter((p) => p.vehicleId === car.id);
     const part = async (key: string) => (await parts()).find((p) => p.standardPart === key)!;
-    const clutch = await part('clutchKit');
+    const clutch = await part('clutch_kit');
     await call('PUT', `/api/part-specs/${clutch.id}`, { name: 'x', unit: 'piece', characteristics: 'Sachs 3000 951' });
-    const fuelFilter = await part('fuelFilter');
-    await call('PUT', `/api/part-specs/${fuelFilter.id}`, { name: 'x', unit: 'piece', notFitted: true });
+    const cabin = await part('cabin_filter');
+    await call('PUT', `/api/part-specs/${cabin.id}`, { name: 'x', unit: 'piece', notFitted: true });
 
-    const change = { kind: 'car', name: 'Test car', fuel: 'petrol', gearbox: 'automatic', timing: 'belt' };
+    const change = { ...CAR, name: 'Test vehicle', transmission: 'automatic', distribution: 'belt' };
     expect((await call('PUT', `/api/vehicles/${car.id}`, change)).status).toBe(200);
 
-    expect((await part('timingBeltKit')).notFitted).toBe(false);
-    expect((await part('timingChainKit')).notFitted).toBe(true);
-    expect((await part('gearboxFilter')).notFitted).toBe(false);
+    expect((await part('timing_belt_kit')).notFitted).toBe(false);
+    expect((await part('atf')).notFitted).toBe(false);
+    expect((await part('clutch_fluid')).notFitted).toBe(true);
     // The clutch kit has a spec filled in, so it is kept (the screens flag it) rather than lost.
-    expect(await part('clutchKit')).toMatchObject({ notFitted: false, characteristics: 'Sachs 3000 951' });
+    expect(await part('clutch_kit')).toMatchObject({ notFitted: false, characteristics: 'Sachs 3000 951' });
     // Its fit did not change, so the user's own "not on this vehicle" stands.
-    expect((await part('fuelFilter')).notFitted).toBe(true);
+    expect((await part('cabin_filter')).notFitted).toBe(true);
 
-    await call('PUT', `/api/vehicles/${car.id}`, { ...change, gearbox: 'manual' });
-    expect((await part('gearboxFilter')).notFitted).toBe(true);
-    expect((await part('clutchKit')).notFitted).toBe(false);
+    await call('PUT', `/api/vehicles/${car.id}`, { ...change, transmission: 'manual' });
+    expect((await part('atf')).notFitted).toBe(true);
+    expect((await part('clutch_fluid')).notFitted).toBe(false);
   });
 
   it('edits only the Part Spec of a Standard Part, and never deletes it', async () => {
     const bike = await createVehicle();
-    const filter = (await snapshot()).partSpecs.find((p) => p.standardPart === 'oilFilter')!;
+    const filter = (await snapshot()).partSpecs.find((p) => p.standardPart === 'moto_oil_filter')!;
     await call('PUT', `/api/part-specs/${filter.id}`, {
       name: 'Renamed',
       oemReference: '15410-MFJ-D01',
       partNumbers: 'HF204',
       unit: 'litre',
     });
-    const chain = (await snapshot()).partSpecs.find((p) => p.vehicleId === bike.id && p.standardPart === 'chainKit')!;
+    const chain = (await snapshot()).partSpecs.find((p) => p.vehicleId === bike.id && p.standardPart === 'moto_chain')!;
     await call('PUT', `/api/part-specs/${chain.id}`, { name: chain.name, unit: chain.unit, notFitted: true });
     const parts = (await snapshot()).partSpecs;
     expect(parts.find((p) => p.id === filter.id)).toMatchObject({
-      name: 'oilFilter',
+      name: 'moto_oil_filter',
       oemReference: '15410-MFJ-D01',
       partNumbers: 'HF204',
       unit: 'piece',
@@ -389,13 +408,17 @@ describe('workshop data', () => {
     expect((await call('DELETE', `/api/part-specs/${filter.id}`)).status).toBe(409);
   });
 
-  it('adds the Standard Parts to vehicles created before they existed', async () => {
+  it('gives a vehicle whose build was never filled in the parts every vehicle of its kind has', async () => {
     db.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('old', 'default', 'car', 'Old car')`);
     const later = createApp(db);
-    const parts = (await (await later.request('/api/snapshot')).json()) as Snapshot;
-    // Nothing the catalogue gained since is added to a vehicle whose traits are unknown.
-    const legacy = STANDARD_PARTS.car.filter(([, , needs]) => !('strict' in needs));
-    expect(parts.partSpecs.filter((p) => p.vehicleId === 'old')).toHaveLength(legacy.length);
+    const s = (await (await later.request('/api/snapshot')).json()) as Snapshot;
+    const old = s.vehicles.find((v) => v.id === 'old')!;
+    const expected = templatesOf('car').filter((t) => partFits(old as Build, t.code)).map((t) => t.code);
+    expect(s.partSpecs.filter((p) => p.vehicleId === 'old').map((p) => p.standardPart)).toEqual(expected);
+    // Details not filled in never match, so nothing that depends on them is listed.
+    expect(expected).toEqual(expect.arrayContaining(['tires', 'brake_pads_front', 'engine_oil']));
+    expect(expected).not.toContain('timing_belt_kit');
+    expect(s.positions.filter((p) => p.vehicleId === 'old').map((p) => p.standardPart)).toEqual(expect.arrayContaining(['tires', 'oil_filter']));
   });
 
   it('saves a Task’s workshop card as a whole', async () => {
@@ -459,7 +482,7 @@ describe('workshop data', () => {
       characteristics: '180/55 ZR17',
       unit: 'piece',
     });
-    const rear = (await snapshot()).positions.find((p) => p.vehicleId === bike.id && p.standardPart === 'rearTyre')!;
+    const rear = (await snapshot()).positions.find((p) => p.vehicleId === bike.id && p.standardPart === 'moto_tire_rear')!;
     const part = {
       partSpecId: tyre.id,
       positionId: rear.id,
@@ -491,8 +514,8 @@ describe('workshop data', () => {
     const bike = await createVehicle();
     const task = await createTask(bike.id);
     const s = await snapshot();
-    const chainSpec = s.partSpecs.find((p) => p.vehicleId === bike.id && p.standardPart === 'chainKit')!;
-    const chain = s.positions.find((p) => p.vehicleId === bike.id && p.standardPart === 'chainKit')!;
+    const chainSpec = s.partSpecs.find((p) => p.vehicleId === bike.id && p.standardPart === 'moto_chain')!;
+    const chain = s.positions.find((p) => p.vehicleId === bike.id && p.standardPart === 'moto_chain')!;
     await call('PUT', '/api/services/svc-00001', {
       id: 'svc-00001',
       vehicleId: bike.id,
@@ -525,7 +548,7 @@ describe('workshop data', () => {
 
 describe('technical inspections and modifications', () => {
   it('stores a vehicle’s first registration date', async () => {
-    const res = await call('POST', '/api/vehicles', { kind: 'car', name: 'Car', firstRegistration: '2011-03-04' });
+    const res = await call('POST', '/api/vehicles', { ...CAR, name: 'Car', firstRegistration: '2011-03-04' });
     expect(await res.json()).toMatchObject({ firstRegistration: '2011-03-04' });
   });
 
@@ -689,7 +712,7 @@ describe('insurance', () => {
   it('keeps registration certificate facts on the Vehicle', async () => {
     const bike = await createVehicle();
     const res = await call('PUT', `/api/vehicles/${bike.id}`, {
-      kind: 'motorcycle',
+      ...BIKE,
       name: 'Test bike',
       vin: 'VF1TESTVIN0000001',
       fiscalPower: 7,
@@ -848,6 +871,41 @@ describe('migrations', () => {
     expect(migrated.prepare('SELECT garage_id, vehicle_id, owner_kind FROM documents').all()).toEqual([
       { garage_id: 'default', vehicle_id: 'v1', owner_kind: 'vehicle' },
     ]);
+    migrated.close();
+  });
+
+  it('moves Standard Parts to the parts catalogue, keeping what was filled in or used', async () => {
+    const path = join(dir, 'garage.sqlite');
+    const old = openDatabase(path, undefined, 11);
+    old.exec(`INSERT INTO vehicles (id, garage_id, kind, name, fuel, gearbox, timing) VALUES ('v1', 'default', 'car', 'Old car', 'diesel', 'manual', 'belt')`);
+    old.exec(`INSERT INTO part_specs (id, vehicle_id, standard_part, name, unit, characteristics) VALUES
+      ('oil', 'v1', 'engineOil', 'engineOil', 'litre', '5W-30'),
+      ('glow', 'v1', 'glowPlugs', 'glowPlugs', 'piece', 'Bosch 0 250 000 000'),
+      ('chain', 'v1', 'timingChainKit', 'timingChainKit', 'piece', NULL),
+      ('tyres', 'v1', 'frontTyres', 'frontTyres', 'piece', NULL),
+      ('plugs', 'v1', 'sparkPlugs', 'sparkPlugs', 'piece', NULL)`);
+    old.exec(`INSERT INTO fitment_positions (id, vehicle_id, name, standard_part) VALUES
+      ('front', 'v1', 'frontTyres', 'frontTyres'), ('rear', 'v1', 'rearTyres', 'rearTyres'), ('belt', 'v1', 'timingChainKit', 'timingChainKit')`);
+    old.exec(`INSERT INTO modifications (id, vehicle_id, name, fitted_date, position_id) VALUES ('m1', 'v1', 'Wider tyres', '2025-01-01', 'rear')`);
+    old.close();
+
+    const migrated = openDatabase(path);
+    const later = createApp(migrated);
+    const s = (await (await later.request('/api/snapshot')).json()) as Snapshot;
+    expect(s.vehicles[0]).toMatchObject({ fuel: 'diesel', transmission: 'manual', distribution: 'belt', drivetrain: null });
+    const spec = (id: string) => s.partSpecs.find((p) => p.id === id);
+    expect(spec('oil')).toMatchObject({ standardPart: 'engine_oil', characteristics: '5W-30', notFitted: false });
+    expect(spec('tyres')).toMatchObject({ standardPart: 'tires' });
+    // No equivalent among the parts to replace: kept under its own name when filled in, dropped when empty.
+    expect(spec('glow')).toMatchObject({ standardPart: null, name: 'Glow plugs', nameFr: 'Bougies de préchauffage', characteristics: 'Bosch 0 250 000 000' });
+    expect(spec('chain')).toBeUndefined();
+    // A petrol part on a diesel is set aside.
+    expect(spec('plugs')).toMatchObject({ standardPart: 'spark_plugs', notFitted: true });
+    const position = (id: string) => s.positions.find((p) => p.id === id);
+    expect(position('front')).toMatchObject({ standardPart: 'tires' });
+    expect(position('rear')).toMatchObject({ standardPart: null, name: 'Rear tyres' });
+    expect(position('belt')).toBeUndefined();
+    expect(migrated.prepare('SELECT COUNT(*) AS n FROM part_catalogue_moves').get()).toEqual({ n: 0 });
     migrated.close();
   });
 

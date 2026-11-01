@@ -28,10 +28,19 @@ function vehicle(overrides: Partial<Vehicle> = {}): Vehicle {
     purchaseDate: null,
     overnightParking: null,
     fuel: null,
-    gearbox: null,
-    timing: null,
-    finalDrive: null,
+    transmission: null,
+    drivetrain: null,
+    distribution: null,
     cooling: null,
+    finalDrive: null,
+    cylinders: null,
+    hasHydraulicClutch: false,
+    hasTurbo: false,
+    hasDirectInjection: false,
+    hasStartStop: false,
+    hasAdblue: false,
+    hasAc: false,
+    hasAirSuspension: false,
     status: 'owned',
     onGaragePage: true,
     soldDate: null,
@@ -235,8 +244,9 @@ describe('sending', () => {
     app = createApp(db, undefined, { push: sender });
     sent = [];
     gone = new Set();
-    const v = (await (await call('POST', '/api/vehicles', { kind: 'motorcycle', name: 'Test bike' })).json()) as Vehicle;
-    await call('POST', `/api/vehicles/${v.id}/tasks`, { name: 'Oil change', intervalMonths: 12, baselineDate: '2020-01-01' });
+    // Added directly, without the Maintenance Tasks a new vehicle starts with: the tests count Reminders for this one Task.
+    db.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v', 'default', 'motorcycle', 'Test bike')`);
+    await call('POST', '/api/vehicles/v/tasks', { name: 'Oil change', intervalMonths: 12, baselineDate: '2020-01-01' });
   });
 
   it('gives a new device what is already due, then only what is new', async () => {

@@ -29,7 +29,7 @@ function usages(snapshot: Snapshot, vehicleId: string, matches: (p: PartUsed) =>
 export function partSpecsOf(snapshot: Snapshot, vehicle: Vehicle, { notFitted = false, keep = [] as (string | null)[] } = {}): PartSpec[] {
   return snapshot.partSpecs
     .filter((p) => p.vehicleId === vehicle.id && (notFitted || !p.notFitted || keep.includes(p.id)))
-    .sort((a, b) => catalogueOrder(vehicle.kind, a.standardPart) - catalogueOrder(vehicle.kind, b.standardPart));
+    .sort((a, b) => catalogueOrder(a.standardPart) - catalogueOrder(b.standardPart));
 }
 
 /** The most recent Part Used for a Part Spec: what to buy again. */
@@ -67,7 +67,7 @@ export function positionsOf(snapshot: Snapshot, vehicle: Vehicle): FitmentPositi
   ]);
   return snapshot.positions
     .filter((p) => p.vehicleId === vehicle.id && (!p.standardPart || !notFitted.has(p.standardPart) || used.has(p.id)))
-    .sort((a, b) => catalogueOrder(vehicle.kind, a.standardPart) - catalogueOrder(vehicle.kind, b.standardPart));
+    .sort((a, b) => catalogueOrder(a.standardPart) - catalogueOrder(b.standardPart));
 }
 
 export function fitments(snapshot: Snapshot, vehicle: Vehicle): Fitment[] {
@@ -179,10 +179,19 @@ export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
       purchaseDate: v.purchaseDate ?? null,
       overnightParking: v.overnightParking ?? null,
       fuel: v.fuel ?? null,
-      gearbox: v.gearbox ?? null,
-      timing: v.timing ?? null,
-      finalDrive: v.finalDrive ?? null,
+      transmission: v.transmission ?? null,
+      drivetrain: v.drivetrain ?? null,
+      distribution: v.distribution ?? null,
       cooling: v.cooling ?? null,
+      finalDrive: v.finalDrive ?? null,
+      cylinders: v.cylinders ?? null,
+      hasHydraulicClutch: v.hasHydraulicClutch ?? false,
+      hasTurbo: v.hasTurbo ?? false,
+      hasDirectInjection: v.hasDirectInjection ?? false,
+      hasStartStop: v.hasStartStop ?? false,
+      hasAdblue: v.hasAdblue ?? false,
+      hasAc: v.hasAc ?? false,
+      hasAirSuspension: v.hasAirSuspension ?? false,
       onGaragePage: v.onGaragePage ?? v.status === 'owned',
     })),
     inspections: snapshot.inspections ?? [],

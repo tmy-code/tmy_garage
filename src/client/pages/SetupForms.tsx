@@ -1,7 +1,17 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { fuelsOf, relevantTraits } from '../../shared/catalogue.ts';
+import {
+  COOLINGS,
+  distributionsOf,
+  DRIVETRAINS,
+  FINAL_DRIVES,
+  flagsOf,
+  fuelsOf,
+  SPEC_FLAGS,
+  transmissionsOf,
+  type SpecFlag,
+} from '../../shared/catalogue.ts';
 import { todayIso } from '../../shared/dates.ts';
-import type { Cooling, FinalDrive, FuelType, Gearbox, OvernightParking, TimingDrive } from '../../shared/schemas.ts';
+import type { Cooling, Distribution, Drivetrain, FinalDrive, FuelType, OvernightParking, Transmission } from '../../shared/schemas.ts';
 import type { MaintenanceTask, Snapshot, Vehicle } from '../../shared/types.ts';
 import { confirmDelete, Field, FormError, Layout, NeedsConnection } from '../components.tsx';
 import { showToast } from '../feedback.ts';
@@ -48,8 +58,8 @@ function optionalNumber(text: string, label: string, t: Messages): number | null
   return n;
 }
 
-/** A choice among a few values, with "not sure" as the way to leave it empty. */
-function TraitSelect<T extends string>({
+/** A required choice among a few values; nothing is chosen until the user picks one. */
+function BuildSelect<T extends string>({
   label,
   value,
   options,
@@ -58,13 +68,15 @@ function TraitSelect<T extends string>({
   label: string;
   value: T | '';
   options: readonly (readonly [T, string])[];
-  onChange: (value: T | '') => void;
+  onChange: (value: T) => void;
 }) {
   const t = useT();
   return (
     <Field label={label}>
-      <select value={value} onChange={(e) => onChange(e.target.value as T | '')}>
-        <option value="">{t.setup.notSure}</option>
+      <select value={value} onChange={(e) => onChange(e.target.value as T)} required>
+        <option value="" disabled>
+          {t.setup.choose}
+        </option>
         {options.map(([v, text]) => (
           <option key={v} value={v}>
             {text}
@@ -73,6 +85,12 @@ function TraitSelect<T extends string>({
       </select>
     </Field>
   );
+}
+
+/** The value if it is still one of the options, the only option if there is just one, or nothing chosen. */
+function within<T extends string>(value: T | '', options: readonly T[]): T | '' {
+  if (options.length === 1) return options[0]!;
+  return value && options.includes(value) ? value : '';
 }
 
 export function VehicleForm({ existing }: { existing?: Vehicle }) {
@@ -91,15 +109,24 @@ export function VehicleForm({ existing }: { existing?: Vehicle }) {
   const [purchaseDate, setPurchaseDate] = useState(existing?.purchaseDate ?? '');
   const [overnightParking, setOvernightParking] = useState<OvernightParking | ''>(existing?.overnightParking ?? '');
   const [fuel, setFuel] = useState<FuelType | ''>(existing?.fuel ?? '');
-  const [gearbox, setGearbox] = useState<Gearbox | ''>(existing?.gearbox ?? '');
-  const [timing, setTiming] = useState<TimingDrive | ''>(existing?.timing ?? '');
+  const [transmission, setTransmission] = useState<Transmission | ''>(existing?.transmission ?? '');
+  const [drivetrain, setDrivetrain] = useState<Drivetrain | ''>(existing?.drivetrain ?? '');
+  const [distribution, setDistribution] = useState<Distribution | ''>(existing?.distribution ?? '');
   const [finalDrive, setFinalDrive] = useState<FinalDrive | ''>(existing?.finalDrive ?? '');
   const [cooling, setCooling] = useState<Cooling | ''>(existing?.cooling ?? '');
+  const [cylinders, setCylinders] = useState(existing?.cylinders ? String(existing.cylinders) : '');
+  const [flags, setFlags] = useState<Record<SpecFlag, boolean>>(
+    () => Object.fromEntries(SPEC_FLAGS.map((flag) => [flag, existing?.[flag] ?? false])) as Record<SpecFlag, boolean>,
+  );
   const { error, disabled, run } = useSubmit();
   const back = existing ? `/vehicles/${existing.id}` : '/';
-  const shown = relevantTraits(kind, fuel || null);
-  // A fuel the other kind cannot have (e.g. diesel on a motorcycle) is dropped when the kind changes.
-  const fuelValue = fuel && fuelsOf(kind).includes(fuel) ? fuel : '';
+  // Each choice narrows the next ones (an electric vehicle is single-speed); a choice that no longer fits is dropped.
+  const fuelValue = within(fuel, fuelsOf(kind));
+  const transmissions = transmissionsOf(kind, fuelValue || null);
+  const transmissionValue = within(transmission, transmissions);
+  const distributions = distributionsOf(fuelValue || null);
+  const distributionValue = within(distribution, distributions);
+  const allowedFlags = flagsOf(kind, fuelValue || null, transmissionValue || null);
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -119,10 +146,13 @@ export function VehicleForm({ existing }: { existing?: Vehicle }) {
         purchaseDate: purchaseDate || null,
         overnightParking: overnightParking || null,
         fuel: fuelValue || null,
-        gearbox: gearbox || null,
-        timing: timing || null,
-        finalDrive: finalDrive || null,
+        transmission: transmissionValue || null,
+        drivetrain: drivetrain || null,
+        distribution: distributionValue || null,
         cooling: cooling || null,
+        finalDrive: finalDrive || null,
+        cylinders: optionalNumber(cylinders, t.setup.cylinders, t),
+        ...Object.fromEntries(SPEC_FLAGS.map((flag) => [flag, allowedFlags.includes(flag) && flags[flag]])),
       };
       const saved = existing
         ? await online<Vehicle>('PUT', `/api/vehicles/${existing.id}`, body)
@@ -153,7 +183,7 @@ export function VehicleForm({ existing }: { existing?: Vehicle }) {
           <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={80} />
         </Field>
         <Field label={t.setup.make}>
-          <input value={make} onChange={(e) => setMake(e.target.value)} maxLength={60} list="known-makes" />
+          <input value={make} onChange={(e) => setMake(e.target.value)} required maxLength={60} list="known-makes" />
           <datalist id="known-makes">
             {KNOWN_MAKES.map((m) => (
               <option key={m} value={m} />
@@ -161,7 +191,7 @@ export function VehicleForm({ existing }: { existing?: Vehicle }) {
           </datalist>
         </Field>
         <Field label={t.setup.model}>
-          <input value={model} onChange={(e) => setModel(e.target.value)} maxLength={60} />
+          <input value={model} onChange={(e) => setModel(e.target.value)} required maxLength={60} />
         </Field>
         <Field label={t.setup.year}>
           <input inputMode="numeric" value={year} onChange={(e) => setYear(e.target.value)} maxLength={4} />
@@ -175,43 +205,68 @@ export function VehicleForm({ existing }: { existing?: Vehicle }) {
         <fieldset className="field">
           <legend className="field-label">{t.setup.builtWith}</legend>
           <p className="muted">{t.setup.builtWithHint}</p>
-          <TraitSelect
+          <BuildSelect
             label={t.setup.fuel}
             value={fuelValue}
             onChange={setFuel}
             options={fuelsOf(kind).map((f) => [f, t.setup.fuels[f]] as const)}
           />
-          {shown.includes('gearbox') ? (
-            <TraitSelect
-              label={t.setup.gearbox}
-              value={gearbox}
-              onChange={setGearbox}
-              options={[['manual', t.setup.gearboxes.manual], ['automatic', t.setup.gearboxes.automatic]]}
+          {transmissions.length > 1 ? (
+            <BuildSelect
+              label={t.setup.transmission}
+              value={transmissionValue}
+              onChange={setTransmission}
+              options={transmissions.map((x) => [x, t.setup.transmissions[x]] as const)}
             />
           ) : null}
-          {shown.includes('timing') ? (
-            <TraitSelect
-              label={t.setup.timing}
-              value={timing}
-              onChange={setTiming}
-              options={[['belt', t.setup.timings.belt], ['chain', t.setup.timings.chain]]}
-            />
-          ) : null}
-          {shown.includes('finalDrive') ? (
-            <TraitSelect
-              label={t.setup.finalDrive}
-              value={finalDrive}
-              onChange={setFinalDrive}
-              options={[['chain', t.setup.finalDrives.chain], ['belt', t.setup.finalDrives.belt], ['shaft', t.setup.finalDrives.shaft]]}
-            />
-          ) : null}
-          {shown.includes('cooling') ? (
-            <TraitSelect
-              label={t.setup.cooling}
-              value={cooling}
-              onChange={setCooling}
-              options={[['liquid', t.setup.coolings.liquid], ['air', t.setup.coolings.air]]}
-            />
+          {kind === 'car' ? (
+            <>
+              <BuildSelect
+                label={t.setup.drivetrain}
+                value={drivetrain}
+                onChange={setDrivetrain}
+                options={DRIVETRAINS.map((x) => [x, t.setup.drivetrains[x]] as const)}
+              />
+              {distributions.length > 1 ? (
+                <BuildSelect
+                  label={t.setup.distribution}
+                  value={distributionValue}
+                  onChange={setDistribution}
+                  options={distributions.map((x) => [x, t.setup.distributions[x]] as const)}
+                />
+              ) : null}
+            </>
+          ) : (
+            <>
+              <BuildSelect
+                label={t.setup.finalDrive}
+                value={finalDrive}
+                onChange={setFinalDrive}
+                options={FINAL_DRIVES.map((x) => [x, t.setup.finalDrives[x]] as const)}
+              />
+              <BuildSelect
+                label={t.setup.cooling}
+                value={cooling}
+                onChange={setCooling}
+                options={COOLINGS.map((x) => [x, t.setup.coolings[x]] as const)}
+              />
+              <Field label={t.setup.cylinders}>
+                <input inputMode="numeric" value={cylinders} onChange={(e) => setCylinders(e.target.value)} required maxLength={2} />
+              </Field>
+            </>
+          )}
+          {allowedFlags.length > 0 ? (
+            <>
+              <p className="field-label">{t.setup.options}</p>
+              <div className="check-grid">
+                {allowedFlags.map((flag) => (
+                  <label key={flag} className={`check ${flags[flag] ? 'check-on' : ''}`}>
+                    <input type="checkbox" checked={flags[flag]} onChange={(e) => setFlags({ ...flags, [flag]: e.target.checked })} />
+                    <span>{t.setup.flags[flag]}</span>
+                  </label>
+                ))}
+              </div>
+            </>
           ) : null}
         </fieldset>
         <details className="part-details" open={Boolean(existing?.vin || existing?.fiscalPower || existing?.overnightParking)}>

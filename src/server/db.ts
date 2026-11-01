@@ -350,6 +350,38 @@ const MIGRATIONS: string[] = [
   ALTER TABLE vehicles ADD COLUMN on_garage_page INTEGER NOT NULL DEFAULT 1;
   UPDATE vehicles SET on_garage_page = 0 WHERE status = 'sold';
   `,
+  `
+  -- The Build as the vehicle parts database describes it. The gearbox becomes the transmission and the timing drive
+  -- the distribution; fuel and final drive take more values, so those columns are recreated with a wider check.
+  ALTER TABLE vehicles ADD COLUMN transmission TEXT CHECK (transmission IN ('manual', 'automatic', 'dct', 'cvt', 'e_cvt', 'single_speed'));
+  UPDATE vehicles SET transmission = CASE WHEN fuel = 'electric' THEN 'single_speed' ELSE gearbox END;
+  ALTER TABLE vehicles DROP COLUMN gearbox;
+  ALTER TABLE vehicles ADD COLUMN distribution TEXT CHECK (distribution IN ('belt', 'chain', 'none'));
+  UPDATE vehicles SET distribution = CASE WHEN kind <> 'car' THEN NULL WHEN fuel = 'electric' THEN 'none' ELSE timing END;
+  ALTER TABLE vehicles DROP COLUMN timing;
+  ALTER TABLE vehicles ADD COLUMN fuel_new TEXT CHECK (fuel_new IN ('petrol', 'diesel', 'hybrid', 'phev', 'electric'));
+  UPDATE vehicles SET fuel_new = fuel;
+  ALTER TABLE vehicles DROP COLUMN fuel;
+  ALTER TABLE vehicles RENAME COLUMN fuel_new TO fuel;
+  ALTER TABLE vehicles ADD COLUMN final_drive_new TEXT CHECK (final_drive_new IN ('chain', 'belt', 'shaft', 'gear', 'none'));
+  UPDATE vehicles SET final_drive_new = final_drive;
+  ALTER TABLE vehicles DROP COLUMN final_drive;
+  ALTER TABLE vehicles RENAME COLUMN final_drive_new TO final_drive;
+  ALTER TABLE vehicles ADD COLUMN drivetrain TEXT CHECK (drivetrain IN ('fwd', 'rwd', 'awd'));
+  ALTER TABLE vehicles ADD COLUMN cylinders INTEGER CHECK (cylinders >= 1);
+  ALTER TABLE vehicles ADD COLUMN has_hydraulic_clutch INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE vehicles ADD COLUMN has_turbo INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE vehicles ADD COLUMN has_direct_injection INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE vehicles ADD COLUMN has_start_stop INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE vehicles ADD COLUMN has_adblue INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE vehicles ADD COLUMN has_ac INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE vehicles ADD COLUMN has_air_suspension INTEGER NOT NULL DEFAULT 0;
+
+  -- Standard Parts move to the parts catalogue's codes. The server does it, since it knows the catalogue, for the
+  -- Vehicles listed here, then empties the list.
+  CREATE TABLE part_catalogue_moves (vehicle_id TEXT PRIMARY KEY REFERENCES vehicles(id));
+  INSERT INTO part_catalogue_moves SELECT id FROM vehicles;
+  `,
 ];
 
 function schemaVersion(db: DatabaseSync): number {

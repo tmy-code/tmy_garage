@@ -50,7 +50,7 @@ import type {
   Vehicle,
   VehicleSpec,
 } from '../shared/types.ts';
-import { cleanTraits, isFitted, partFits, STANDARD_PARTS, type StandardPartKey, type Traits } from '../shared/catalogue.ts';
+import { isFitted, partFits, starterTasks, templatesOf, type Build, type StandardPartKey } from '../shared/catalogue.ts';
 import type { ClaimInput, TermInput, VehicleInput, VehicleKind } from '../shared/schemas.ts';
 import { todayIso } from '../shared/dates.ts';
 import { DEFAULT_GARAGE_ID } from './db.ts';
@@ -81,9 +81,67 @@ async function parse<T>(c: Context, schema: ZodType<T, any, any>): Promise<T> {
 
 type Row = Record<string, any>;
 
+/** A Vehicle row's Build. */
+const buildOfRow = (r: Row): Build => ({
+  kind: r.kind,
+  fuel: r.fuel,
+  transmission: r.transmission,
+  drivetrain: r.drivetrain,
+  distribution: r.distribution,
+  cooling: r.cooling,
+  finalDrive: r.final_drive,
+  cylinders: r.cylinders,
+  hasHydraulicClutch: r.has_hydraulic_clutch === 1,
+  hasTurbo: r.has_turbo === 1,
+  hasDirectInjection: r.has_direct_injection === 1,
+  hasStartStop: r.has_start_stop === 1,
+  hasAdblue: r.has_adblue === 1,
+  hasAc: r.has_ac === 1,
+  hasAirSuspension: r.has_air_suspension === 1,
+});
+
+/**
+ * The Standard Parts of the catalogue before it came from the vehicle parts database, with the code each moved to
+ * (null when the new catalogue has no such part to replace) and their names, for those kept as a Part named by the user.
+ */
+const LEGACY_PARTS: Record<string, { car?: StandardPartKey | null; motorcycle?: StandardPartKey | null; en: string; fr: string }> = {
+  engineOil: { car: 'engine_oil', motorcycle: 'moto_engine_oil', en: 'Engine oil', fr: 'Huile moteur' },
+  oilFilter: { car: 'oil_filter', motorcycle: 'moto_oil_filter', en: 'Oil filter', fr: 'Filtre à huile' },
+  airFilter: { car: 'air_filter', motorcycle: 'moto_air_filter', en: 'Air filter', fr: 'Filtre à air' },
+  cabinFilter: { car: 'cabin_filter', en: 'Cabin filter', fr: 'Filtre d’habitacle' },
+  fuelFilter: { car: 'fuel_filter', en: 'Fuel filter', fr: 'Filtre à carburant' },
+  sparkPlugs: { car: 'spark_plugs', motorcycle: 'moto_spark_plugs', en: 'Spark plugs', fr: 'Bougies' },
+  glowPlugs: { car: null, en: 'Glow plugs', fr: 'Bougies de préchauffage' },
+  adBlue: { car: null, en: 'AdBlue', fr: 'AdBlue' },
+  gearboxOil: { car: null, en: 'Gearbox oil', fr: 'Huile de boîte' },
+  gearboxFilter: { car: null, en: 'Gearbox filter', fr: 'Filtre de boîte' },
+  clutchKit: { car: 'clutch_kit', en: 'Clutch kit', fr: 'Kit d’embrayage' },
+  brakeFluid: { car: 'brake_fluid', motorcycle: 'moto_brake_fluid', en: 'Brake fluid', fr: 'Liquide de frein' },
+  coolant: { car: 'coolant', motorcycle: 'moto_coolant', en: 'Coolant', fr: 'Liquide de refroidissement' },
+  forkOil: { motorcycle: 'moto_fork_oil_seals', en: 'Fork oil', fr: 'Huile de fourche' },
+  acRefrigerant: { car: null, en: 'AC refrigerant', fr: 'Gaz de climatisation' },
+  frontBrakePads: { car: 'brake_pads_front', motorcycle: 'moto_brake_pads_front', en: 'Front brake pads', fr: 'Plaquettes avant' },
+  rearBrakePads: { car: 'brake_pads_rear', motorcycle: 'moto_brake_pads_rear', en: 'Rear brake pads', fr: 'Plaquettes arrière' },
+  frontBrakeDiscs: { car: 'brake_discs_front', en: 'Front brake discs', fr: 'Disques avant' },
+  rearBrakeDiscs: { car: 'brake_discs_rear', en: 'Rear brake discs', fr: 'Disques arrière' },
+  chainKit: { motorcycle: 'moto_chain', en: 'Chain kit', fr: 'Kit chaîne' },
+  finalDriveBelt: { motorcycle: 'moto_drive_belt', en: 'Drive belt', fr: 'Courroie de transmission' },
+  finalDriveOil: { motorcycle: 'moto_shaft_oil', en: 'Final drive oil', fr: 'Huile de transmission finale' },
+  accessoryBelt: { car: 'drive_belt', en: 'Accessory belt', fr: 'Courroie d’accessoires' },
+  timingBeltKit: { car: 'timing_belt_kit', en: 'Timing belt kit', fr: 'Kit de distribution (courroie)' },
+  timingChainKit: { car: null, en: 'Timing chain kit', fr: 'Kit de distribution (chaîne)' },
+  frontShocks: { car: 'shock_absorbers', en: 'Front shock absorbers', fr: 'Amortisseurs avant' },
+  rearShocks: { car: null, en: 'Rear shock absorbers', fr: 'Amortisseurs arrière' },
+  frontTyre: { motorcycle: 'moto_tire_front', en: 'Front tyre', fr: 'Pneu avant' },
+  rearTyre: { motorcycle: 'moto_tire_rear', en: 'Rear tyre', fr: 'Pneu arrière' },
+  frontTyres: { car: 'tires', en: 'Front tyres', fr: 'Pneus avant' },
+  rearTyres: { car: null, en: 'Rear tyres', fr: 'Pneus arrière' },
+  wiperBlades: { car: 'wipers', en: 'Wiper blades', fr: 'Balais d’essuie-glace' },
+  battery: { car: 'battery_12v', motorcycle: 'moto_battery', en: 'Battery', fr: 'Batterie' },
+};
+
 const toVehicle = (r: Row): Vehicle => ({
   id: r.id,
-  kind: r.kind,
   name: r.name,
   make: r.make,
   model: r.model,
@@ -96,11 +154,7 @@ const toVehicle = (r: Row): Vehicle => ({
   nationalType: r.national_type,
   purchaseDate: r.purchase_date,
   overnightParking: r.overnight_parking,
-  fuel: r.fuel,
-  gearbox: r.gearbox,
-  timing: r.timing,
-  finalDrive: r.final_drive,
-  cooling: r.cooling,
+  ...buildOfRow(r),
   status: r.status,
   onGaragePage: r.on_garage_page === 1,
   soldDate: r.sold_date,
@@ -534,13 +588,58 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     );
   }
 
+  /** Whether a position had anything fitted there, so it is kept. */
+  function positionInUse(id: string): boolean {
+    return (
+      db.prepare('SELECT 1 FROM parts_used WHERE position_id = ? UNION ALL SELECT 1 FROM modifications WHERE position_id = ?').get(id, id) !==
+      undefined
+    );
+  }
+
   /**
-   * Gives a Vehicle the Standard Parts that fit its traits and it does not list yet, so each only needs its Part
-   * Spec filled in. When `before` differs from `after`, parts that stopped fitting are marked as not on the
-   * Vehicle (unless they are filled in or used, which the screens then flag) and parts that now fit are put back.
-   * A part whose fit did not change keeps whatever the user chose.
+   * Moves a Vehicle's Standard Parts and their positions from the older catalogue to the codes of the current one.
+   * One with no equivalent (or whose equivalent is already taken) is kept as a Part named by the user when it holds
+   * anything, and dropped otherwise.
    */
-  function syncStandardParts(vehicleId: string, kind: VehicleKind, after: Traits, before: Traits = after) {
+  function moveToCatalogue(vehicleId: string, kind: VehicleKind) {
+    const current = new Set<string>(templatesOf(kind).map((t) => t.code));
+    for (const table of ['part_specs', 'fitment_positions'] as const) {
+      const rows = db.prepare(`SELECT id, standard_part FROM ${table} WHERE vehicle_id = ? AND standard_part IS NOT NULL`).all(vehicleId) as Row[];
+      const taken = new Set(rows.map((r) => r.standard_part as string).filter((key) => current.has(key)));
+      for (const row of rows) {
+        if (current.has(row.standard_part)) continue;
+        const legacy = LEGACY_PARTS[row.standard_part];
+        const code = legacy?.[kind] ?? null;
+        const usable = code !== null && !taken.has(code) && (table === 'part_specs' || isFitted(code));
+        if (usable) {
+          taken.add(code);
+          if (table === 'part_specs') {
+            const unit = templatesOf(kind).find((t) => t.code === code)!.unit;
+            db.prepare('UPDATE part_specs SET standard_part = ?, name = ?, unit = ? WHERE id = ?').run(code, code, unit, row.id);
+          } else {
+            db.prepare('UPDATE fitment_positions SET standard_part = ?, name = ? WHERE id = ?').run(code, code, row.id);
+          }
+        } else if (table === 'part_specs' ? partSpecInUse(row.id) : positionInUse(row.id)) {
+          const name = legacy?.en ?? row.standard_part;
+          if (table === 'part_specs') {
+            db.prepare('UPDATE part_specs SET standard_part = NULL, not_fitted = 0, name = ?, name_fr = ? WHERE id = ?').run(name, legacy?.fr ?? null, row.id);
+          } else {
+            db.prepare('UPDATE fitment_positions SET standard_part = NULL, name = ? WHERE id = ?').run(name, row.id);
+          }
+        } else {
+          db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(row.id);
+        }
+      }
+    }
+  }
+
+  /**
+   * Gives a Vehicle the Standard Parts that fit its Build and it does not list yet, so each only needs its Part Spec
+   * filled in. When `before` differs from `after`, parts that stopped fitting are marked as not on the Vehicle
+   * (unless they are filled in or used, which the screens then flag) and parts that now fit are put back; a part
+   * whose fit did not change keeps whatever the user chose. With 'all', every part is set by whether it fits.
+   */
+  function syncStandardParts(vehicleId: string, after: Build, before: Build | 'all' = after) {
     const rows = new Map(
       (db.prepare('SELECT id, standard_part FROM part_specs WHERE vehicle_id = ? AND standard_part IS NOT NULL').all(vehicleId) as Row[]).map(
         (r) => [r.standard_part as string, r.id as string],
@@ -548,15 +647,15 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     );
     const insert = db.prepare('INSERT INTO part_specs (id, vehicle_id, standard_part, name, unit) VALUES (?, ?, ?, ?, ?)');
     const setFitted = db.prepare('UPDATE part_specs SET not_fitted = ? WHERE id = ?');
-    for (const [key, unit] of STANDARD_PARTS[kind]) {
-      const fits = partFits(kind, key, after);
-      const id = rows.get(key);
+    for (const { code, unit } of templatesOf(after.kind)) {
+      const fits = partFits(after, code);
+      const id = rows.get(code);
       if (id === undefined) {
         if (fits) {
-          insert.run(randomUUID(), vehicleId, key, key, unit);
-          rows.set(key, 'new');
+          insert.run(randomUUID(), vehicleId, code, code, unit);
+          rows.set(code, 'new');
         }
-      } else if (partFits(kind, key, before) !== fits) {
+      } else if (before === 'all' || partFits(before, code) !== fits) {
         if (fits) setFitted.run(0, id);
         else if (!partSpecInUse(id)) setFitted.run(1, id);
       }
@@ -569,16 +668,19 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     );
     const addPosition = db.prepare('INSERT INTO fitment_positions (id, vehicle_id, name, standard_part) VALUES (?, ?, ?, ?)');
     for (const key of rows.keys()) {
-      if (isFitted(kind, key as StandardPartKey) && !hasPosition.has(key)) addPosition.run(randomUUID(), vehicleId, key, key);
+      if (isFitted(key as StandardPartKey) && !hasPosition.has(key)) addPosition.run(randomUUID(), vehicleId, key, key);
     }
   }
 
-  const traitsOfRow = (r: Row): Traits => ({ fuel: r.fuel, gearbox: r.gearbox, timing: r.timing, finalDrive: r.final_drive, cooling: r.cooling });
-
-  // Vehicles added before Standard Parts existed, or after the catalogue grew, get the missing ones that fit.
+  // Vehicles added before Standard Parts existed, or after the catalogue grew, get the missing ones that fit. Those
+  // listed for the move to the current catalogue are moved, then have every part set by whether it fits.
   transaction(() => {
-    for (const v of db.prepare('SELECT * FROM vehicles WHERE garage_id = ?').all(garageId) as Row[])
-      syncStandardParts(v.id, v.kind, traitsOfRow(v));
+    const moving = new Set((db.prepare('SELECT vehicle_id FROM part_catalogue_moves').all() as Row[]).map((r) => r.vehicle_id as string));
+    for (const v of db.prepare('SELECT * FROM vehicles WHERE garage_id = ?').all(garageId) as Row[]) {
+      if (moving.has(v.id)) moveToCatalogue(v.id, v.kind);
+      syncStandardParts(v.id, buildOfRow(v), moving.has(v.id) ? 'all' : undefined);
+    }
+    db.prepare('DELETE FROM part_catalogue_moves WHERE vehicle_id IN (SELECT id FROM vehicles WHERE garage_id = ?)').run(garageId);
   });
 
   app.onError((error, c) => {
@@ -592,9 +694,6 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
   app.get('/api/snapshot', (c) => c.json(snapshot()));
 
   // --- Vehicles ---
-
-  /** The input with the traits that mean nothing for its kind and fuel cleared. */
-  const cleaned = (v: VehicleInput): VehicleInput => ({ ...v, ...cleanTraits(v.kind, v) });
 
   const vehicleValues = (v: VehicleInput) =>
     [
@@ -612,35 +711,57 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       v.purchaseDate,
       v.overnightParking,
       v.fuel,
-      v.gearbox,
-      v.timing,
-      v.finalDrive,
+      v.transmission,
+      v.drivetrain,
+      v.distribution,
       v.cooling,
+      v.finalDrive,
+      v.cylinders,
+      v.hasHydraulicClutch ? 1 : 0,
+      v.hasTurbo ? 1 : 0,
+      v.hasDirectInjection ? 1 : 0,
+      v.hasStartStop ? 1 : 0,
+      v.hasAdblue ? 1 : 0,
+      v.hasAc ? 1 : 0,
+      v.hasAirSuspension ? 1 : 0,
     ] as const;
 
+  const BUILD_COLUMNS = `fuel, transmission, drivetrain, distribution, cooling, final_drive, cylinders, has_hydraulic_clutch,
+         has_turbo, has_direct_injection, has_start_stop, has_adblue, has_ac, has_air_suspension`;
+
   app.post('/api/vehicles', async (c) => {
-    const v = cleaned(await parse(c, vehicleInput));
+    const v = await parse(c, vehicleInput);
     const id = randomUUID();
-    db.prepare(
-      `INSERT INTO vehicles (id, garage_id, kind, name, make, model, year, registration, first_registration,
-         vin, version, fiscal_power, national_type, purchase_date, overnight_parking, fuel, gearbox, timing, final_drive, cooling)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, garageId, ...vehicleValues(v));
-    syncStandardParts(id, v.kind, v);
+    transaction(() => {
+      db.prepare(
+        `INSERT INTO vehicles (id, garage_id, kind, name, make, model, year, registration, first_registration,
+           vin, version, fiscal_power, national_type, purchase_date, overnight_parking, ${BUILD_COLUMNS})
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(id, garageId, ...vehicleValues(v));
+      syncStandardParts(id, v);
+      // A new Vehicle starts with a Maintenance Task per part it has, at the catalogue's generic interval.
+      const task = db.prepare('INSERT INTO maintenance_tasks (id, vehicle_id, name, name_fr, interval_km, interval_months) VALUES (?, ?, ?, ?, ?, ?)');
+      for (const t of starterTasks(v)) task.run(randomUUID(), id, t.name, t.nameFr, t.intervalKm, t.intervalMonths);
+    });
     return c.json(toVehicle(vehicleOrThrow(id)), 201);
   });
 
   app.put('/api/vehicles/:id', async (c) => {
     const id = c.req.param('id');
-    const before = traitsOfRow(vehicleOrThrow(id));
-    const v = cleaned(await parse(c, vehicleInput));
-    db.prepare(
-      `UPDATE vehicles SET kind = ?, name = ?, make = ?, model = ?, year = ?, registration = ?, first_registration = ?,
-         vin = ?, version = ?, fiscal_power = ?, national_type = ?, purchase_date = ?, overnight_parking = ?,
-         fuel = ?, gearbox = ?, timing = ?, final_drive = ?, cooling = ?
-       WHERE id = ?`,
-    ).run(...vehicleValues(v), id);
-    syncStandardParts(id, v.kind, v, before);
+    const before = buildOfRow(vehicleOrThrow(id));
+    const v = await parse(c, vehicleInput);
+    transaction(() => {
+      db.prepare(
+        `UPDATE vehicles SET kind = ?, name = ?, make = ?, model = ?, year = ?, registration = ?, first_registration = ?,
+           vin = ?, version = ?, fiscal_power = ?, national_type = ?, purchase_date = ?, overnight_parking = ?,
+           fuel = ?, transmission = ?, drivetrain = ?, distribution = ?, cooling = ?, final_drive = ?, cylinders = ?,
+           has_hydraulic_clutch = ?, has_turbo = ?, has_direct_injection = ?, has_start_stop = ?, has_adblue = ?, has_ac = ?,
+           has_air_suspension = ?
+         WHERE id = ?`,
+      ).run(...vehicleValues(v), id);
+      // A Vehicle of another kind has a different catalogue: everything is set by whether it fits.
+      syncStandardParts(id, v, before.kind === v.kind ? before : 'all');
+    });
     return c.json(toVehicle(vehicleOrThrow(id)));
   });
 

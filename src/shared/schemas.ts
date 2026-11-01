@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { cleanSpecs, specsProblem } from './catalogue.ts';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected a date like 2026-10-24');
 const odometer = z.number().int().min(0).max(5_000_000);
@@ -13,11 +14,12 @@ const optionalText = (max: number) =>
 
 export const vehicleKind = z.enum(['car', 'motorcycle']);
 export const vehicleSpecKind = z.enum(['torque', 'other']);
-// Characteristics that decide which Standard Parts a Vehicle has.
-export const fuelType = z.enum(['petrol', 'diesel', 'hybrid', 'electric']);
-export const gearbox = z.enum(['manual', 'automatic']);
-export const timingDrive = z.enum(['belt', 'chain']);
-export const finalDrive = z.enum(['chain', 'belt', 'shaft']);
+// What a Vehicle is built with (its Build), which decides its Standard Parts.
+export const fuelType = z.enum(['petrol', 'diesel', 'hybrid', 'phev', 'electric']);
+export const transmission = z.enum(['manual', 'automatic', 'dct', 'cvt', 'e_cvt', 'single_speed']);
+export const drivetrain = z.enum(['fwd', 'rwd', 'awd']);
+export const distribution = z.enum(['belt', 'chain', 'none']);
+export const finalDrive = z.enum(['chain', 'belt', 'shaft', 'gear', 'none']);
 export const cooling = z.enum(['liquid', 'air']);
 export const inspectionResult = z.enum(['passed', 'majorDefects', 'criticalDefects']);
 export const defectSeverity = z.enum(['minor', 'major', 'critical']);
@@ -41,40 +43,72 @@ export const motorcycleLicence = z.enum(['A1', 'A2', 'A']);
 export const partUnit = z.enum(['piece', 'litre']);
 const quantity = z.number().positive().max(10_000);
 
-export const vehicleInput = z.object({
-  kind: vehicleKind,
-  name: z.string().trim().min(1).max(80),
-  make: optionalText(60),
-  model: optionalText(60),
-  year: z
-    .number()
-    .int()
-    .min(1900)
-    .max(2100)
-    .nullish()
-    .transform((v) => v ?? null),
-  registration: optionalText(20),
-  firstRegistration: isoDate.nullish().transform((v) => v ?? null),
-  // Registration certificate facts a Quote Pack asks for.
-  vin: optionalText(17),
-  version: optionalText(80),
-  fiscalPower: z
-    .number()
-    .int()
-    .min(1)
-    .max(200)
-    .nullish()
-    .transform((v) => v ?? null),
-  nationalType: optionalText(10),
-  purchaseDate: isoDate.nullish().transform((v) => v ?? null),
-  overnightParking: overnightParking.nullish().transform((v) => v ?? null),
-  // Unknown (null) is allowed: every part that could be on the Vehicle is then listed.
-  fuel: fuelType.nullish().transform((v) => v ?? null),
-  gearbox: gearbox.nullish().transform((v) => v ?? null),
-  timing: timingDrive.nullish().transform((v) => v ?? null),
-  finalDrive: finalDrive.nullish().transform((v) => v ?? null),
-  cooling: cooling.nullish().transform((v) => v ?? null),
-});
+const flag = z
+  .boolean()
+  .nullish()
+  .transform((v) => v ?? false);
+
+export const vehicleInput = z
+  .object({
+    kind: vehicleKind,
+    name: z.string().trim().min(1).max(80),
+    make: z.string().trim().min(1).max(60),
+    model: z.string().trim().min(1).max(60),
+    year: z
+      .number()
+      .int()
+      .min(1900)
+      .max(2100)
+      .nullish()
+      .transform((v) => v ?? null),
+    registration: optionalText(20),
+    firstRegistration: isoDate.nullish().transform((v) => v ?? null),
+    // Registration certificate facts a Quote Pack asks for.
+    vin: optionalText(17),
+    version: optionalText(80),
+    fiscalPower: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .nullish()
+      .transform((v) => v ?? null),
+    nationalType: optionalText(10),
+    purchaseDate: isoDate.nullish().transform((v) => v ?? null),
+    overnightParking: overnightParking.nullish().transform((v) => v ?? null),
+    // The Build: which details are required, and which go together, depends on the kind and fuel (see catalogue.ts).
+    fuel: fuelType.nullish().transform((v) => v ?? null),
+    transmission: transmission.nullish().transform((v) => v ?? null),
+    drivetrain: drivetrain.nullish().transform((v) => v ?? null),
+    distribution: distribution.nullish().transform((v) => v ?? null),
+    cooling: cooling.nullish().transform((v) => v ?? null),
+    finalDrive: finalDrive.nullish().transform((v) => v ?? null),
+    cylinders: z
+      .number()
+      .int()
+      .min(1)
+      .max(16)
+      .nullish()
+      .transform((v) => v ?? null),
+    hasHydraulicClutch: flag,
+    hasTurbo: flag,
+    hasDirectInjection: flag,
+    hasStartStop: flag,
+    hasAdblue: flag,
+    hasAc: flag,
+    hasAirSuspension: flag,
+  })
+  .transform(cleanSpecs)
+  .superRefine((v, ctx) => {
+    const problem = specsProblem(v);
+    if (problem) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [problem.field],
+        message: problem.issue === 'required' ? 'Required for this kind of vehicle' : 'Not possible with the other details',
+      });
+    }
+  });
 
 export const garagePageInput = z.object({ shown: z.boolean() });
 
@@ -335,8 +369,9 @@ export const pushEndpointInput = z.object({ endpoint: z.string().max(2000) });
 
 export type VehicleKind = z.infer<typeof vehicleKind>;
 export type FuelType = z.infer<typeof fuelType>;
-export type Gearbox = z.infer<typeof gearbox>;
-export type TimingDrive = z.infer<typeof timingDrive>;
+export type Transmission = z.infer<typeof transmission>;
+export type Drivetrain = z.infer<typeof drivetrain>;
+export type Distribution = z.infer<typeof distribution>;
 export type FinalDrive = z.infer<typeof finalDrive>;
 export type Cooling = z.infer<typeof cooling>;
 export type OvernightParking = z.infer<typeof overnightParking>;

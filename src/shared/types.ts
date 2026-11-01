@@ -1,25 +1,21 @@
 import type { IsoDate } from './dates.ts';
-import type { StandardPartKey } from './catalogue.ts';
+import type { StandardPartKey, VehicleSpecs } from './catalogue.ts';
 import type {
-  Cooling,
   CoverLevel,
   DefectSeverity,
   DocumentOwnerKind,
   DocumentType,
-  FinalDrive,
-  FuelType,
-  Gearbox,
   InspectionResult,
   MotorcycleLicence,
   OvernightParking,
   PartUnit,
   Responsibility,
-  TimingDrive,
   VehicleKind,
   VehicleSpecKind,
 } from './schemas.ts';
 
-export interface Vehicle {
+/** A car or motorcycle; what it is built with (its Build) comes from VehicleSpecs. */
+export interface Vehicle extends VehicleSpecs {
   id: string;
   kind: VehicleKind;
   name: string;
@@ -36,12 +32,6 @@ export interface Vehicle {
   nationalType: string | null;
   purchaseDate: IsoDate | null;
   overnightParking: OvernightParking | null;
-  /** What the Vehicle is built with, which decides its Standard Parts; null when unknown or not applicable to its kind. */
-  fuel: FuelType | null;
-  gearbox: Gearbox | null;
-  timing: TimingDrive | null;
-  finalDrive: FinalDrive | null;
-  cooling: Cooling | null;
   status: 'owned' | 'sold';
   /** Whether it has a card on the garage page, whatever its status; selling it hides it, and the user can change either. */
   onGaragePage: boolean;
@@ -103,7 +93,7 @@ export interface PartSpec {
   oemReference: string | null;
   partNumbers: string | null;
   unit: PartUnit;
-  /** A Standard Part this Vehicle does not have (e.g. a timing chain on a belt engine). */
+  /** A Standard Part set aside as not on this Vehicle: its Build no longer has it, or the user said so. */
   notFitted: boolean;
 }
 

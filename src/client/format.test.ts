@@ -86,7 +86,7 @@ describe('format in both languages', () => {
     expect(taskName(oil, en)).toBe('Engine oil');
     expect(taskName({ ...oil, nameFr: null }, fr)).toBe('Engine oil');
     expect(partName(part, fr)).toBe('Joint spi');
-    expect(partName({ ...part, standardPart: 'engineOil' }, fr)).toBe(fr.workshop.standardParts.engineOil);
+    expect(partName({ ...part, standardPart: 'engine_oil' }, fr)).toBe('Huile moteur');
   });
 
   it('lists the OEM reference before the acceptable part numbers', () => {

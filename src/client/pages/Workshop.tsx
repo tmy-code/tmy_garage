@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { PART_CATEGORIES, partCategory, partFits, relevantTraits } from '../../shared/catalogue.ts';
+import { PART_CATEGORIES, partCategory, partFits, specsProblem } from '../../shared/catalogue.ts';
 import { todayIso } from '../../shared/dates.ts';
 import { vehicleDue } from '../../shared/due.ts';
 import type { PartUnit, VehicleSpecKind } from '../../shared/schemas.ts';
@@ -244,10 +244,10 @@ export function SpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: S
 
 // --- Part Specs ---
 
-/** Points to the vehicle form while some of what decides the Vehicle's parts is unknown. */
+/** Points to the vehicle form while what decides its parts is incomplete (it was added before that was required). */
 function TraitsNudge({ vehicle }: { vehicle: Vehicle }) {
   const t = useT();
-  if (!relevantTraits(vehicle.kind, vehicle.fuel).some((trait) => vehicle[trait] === null)) return null;
+  if (specsProblem(vehicle) === null) return null;
   return (
     <a className="nudge" href={`#/vehicles/${vehicle.id}/edit`}>
       {t.workshop.traitsNudge}
@@ -331,7 +331,7 @@ function PartSpecEditor({ vehicle, existing, editor }: { vehicle: Vehicle; exist
 
 function PartSpecLine({ spec, vehicle }: { spec: PartSpec; vehicle: Vehicle }) {
   const t = useT();
-  const mismatch = spec.standardPart !== null && !spec.notFitted && !partFits(vehicle.kind, spec.standardPart, vehicle);
+  const mismatch = spec.standardPart !== null && !spec.notFitted && !partFits(vehicle, spec.standardPart);
   const references = partReferences(spec, t);
   const empty = !spec.characteristics && !references;
   return (

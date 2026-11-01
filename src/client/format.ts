@@ -1,3 +1,4 @@
+import { standardPartName } from '../shared/catalogue.ts';
 import { effectiveInterval, type DueInfo } from '../shared/due.ts';
 import type { PartUnit } from '../shared/schemas.ts';
 import type { FitmentPosition, MaintenanceTask, PartSpec } from '../shared/types.ts';
@@ -36,12 +37,12 @@ export function taskName(task: MaintenanceTask, m: Messages = messages()): strin
 
 /** A Standard Part is named in the interface language; another Part by the name the user gave it. */
 export function partName(spec: PartSpec, m: Messages = messages()): string {
-  return spec.standardPart ? m.workshop.standardParts[spec.standardPart] : localName(spec, m);
+  return spec.standardPart ? standardPartName(spec.standardPart, m.lang) : localName(spec, m);
 }
 
 /** A Standard Part's position is named in the interface language; an older one by the name the user gave it. */
 export function positionName(position: FitmentPosition, m: Messages = messages()): string {
-  return position.standardPart ? m.workshop.standardParts[position.standardPart] : position.name;
+  return position.standardPart ? standardPartName(position.standardPart, m.lang) : position.name;
 }
 
 /** The OEM reference then the acceptable equivalents, e.g. "OEM 15410-MFJ-D01 · HF204, KN-204"; null when neither is set. */
