@@ -64,6 +64,7 @@ function task(overrides: Partial<MaintenanceTask> = {}): MaintenanceTask {
     baselineOdometer: null,
     workshopNotes: null,
     standardPart: null,
+    category: null,
     requiredParts: [],
     tools: [],
     specIds: [],

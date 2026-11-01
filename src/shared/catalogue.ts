@@ -107,7 +107,7 @@ export function specsProblem(build: Build): { field: keyof VehicleSpecs; issue: 
 
 // --- The parts catalogue ---
 
-/** Groups for listing Part Specs, in screen order. Parts that are not Standard Parts go under 'other'. */
+/** Groups for listing Part Specs and Maintenance Tasks, in screen order. Parts that are not Standard Parts go under 'other'. */
 export const PART_CATEGORIES = [
   'engine',
   'ignition',

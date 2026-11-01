@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { todayIso } from '../../shared/dates.ts';
-import { vehicleDue } from '../../shared/due.ts';
+import { vehicleDue, type DueInfo } from '../../shared/due.ts';
 import { nextInspection, openDefects } from '../../shared/inspections.ts';
 import { currentCover, renewal } from '../../shared/insurance.ts';
-import { positionsOf } from '../../shared/workshop.ts';
-import type { PartUsed, Snapshot, Vehicle } from '../../shared/types.ts';
+import { groupByCategory, positionsOf } from '../../shared/workshop.ts';
+import type { MaintenanceTask, PartUsed, Snapshot, Vehicle } from '../../shared/types.ts';
 import { Layout, StatusChip } from '../components.tsx';
 import { describeDue, describeInterval, describeOfficialInterval, formatDate, formatKm, formatMoney, taskName } from '../format.ts';
 import { useT } from '../i18n.ts';
@@ -20,12 +20,46 @@ type HistoryEntry =
   | { kind: 'service'; id: string; date: string; odometer: number; text: string; notes: string | null; partsUsed: PartUsed[] }
   | { kind: 'reading'; id: string; date: string; odometer: number };
 
+/** Maintenance Tasks, one per line: status, name, interval, when due and when last done. */
+function TaskList({ due, tasks, owned }: { due: DueInfo[]; tasks: Map<string, MaintenanceTask>; owned: boolean }) {
+  const t = useT();
+  return (
+    <ul className="list">
+      {due.map((d) => {
+        const task = tasks.get(d.taskId)!;
+        const official = describeOfficialInterval(task, t);
+        return (
+          <li key={d.taskId}>
+            <a href={`#/tasks/${task.id}`} className="task-row">
+              <div className="task-title">
+                {owned ? <StatusChip status={d.status} /> : null}
+                <span className="due-name">{taskName(task, t)}</span>
+              </div>
+              <span className="muted">{describeInterval(task, t)}</span>
+              {official ? <span className="muted">{official}</span> : null}
+              {owned ? <span className="due-text">{describeDue(d, t)}</span> : null}
+              {d.lastDone ? (
+                <span className="muted">
+                  {t.vehicle.lastDone(formatDate(d.lastDone.date, t))}
+                  {d.lastDone.odometer !== null ? ` ${t.due.at(formatKm(d.lastDone.odometer))}` : ''}
+                  {d.lastDone.source === 'baseline' ? t.vehicle.beforeTracking : ''}
+                </span>
+              ) : null}
+            </a>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: Snapshot }) {
   const t = useT();
   const { outbox } = useStore();
   const today = todayIso();
   const { usage, due } = useMemo(() => vehicleDue(snapshot, vehicle.id, today), [snapshot, vehicle.id, today]);
   const tasks = new Map(snapshot.tasks.filter((task) => task.vehicleId === vehicle.id).map((task) => [task.id, task]));
+  const groups = groupByCategory(due, tasks);
   const pending = new Set(outbox.map((op) => op.data.id));
   const owned = vehicle.status === 'owned';
   const inspection = nextInspection(snapshot, vehicle, today);
@@ -133,32 +167,20 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
                 ) : null}
               </div>
             ) : (
-              <ul className="list list-grid">
-                {due.map((d) => {
-                  const task = tasks.get(d.taskId)!;
-                  const official = describeOfficialInterval(task, t);
-                  return (
-                    <li key={d.taskId}>
-                      <a href={`#/tasks/${task.id}`} className="task-row">
-                        <div className="task-title">
-                          {owned ? <StatusChip status={d.status} /> : null}
-                          <span className="due-name">{taskName(task, t)}</span>
-                        </div>
-                        <span className="muted">{describeInterval(task, t)}</span>
-                        {official ? <span className="muted">{official}</span> : null}
-                        {owned ? <span className="due-text">{describeDue(d, t)}</span> : null}
-                        {d.lastDone ? (
-                          <span className="muted">
-                            {t.vehicle.lastDone(formatDate(d.lastDone.date, t))}
-                            {d.lastDone.odometer !== null ? ` ${t.due.at(formatKm(d.lastDone.odometer))}` : ''}
-                            {d.lastDone.source === 'baseline' ? t.vehicle.beforeTracking : ''}
-                          </span>
-                        ) : null}
-                      </a>
-                    </li>
-                  );
-                })}
-              </ul>
+              <>
+                {groups.groups.map((g) => (
+                  <Fragment key={g.category}>
+                    <h3 className="due-group">{t.workshop.partCategories[g.category]}</h3>
+                    <TaskList due={g.due} tasks={tasks} owned={owned} />
+                  </Fragment>
+                ))}
+                {groups.paused.length > 0 ? (
+                  <details className="sold">
+                    <summary>{t.vehicle.pausedTasks(groups.paused.length)}</summary>
+                    <TaskList due={groups.paused} tasks={tasks} owned={owned} />
+                  </details>
+                ) : null}
+              </>
             )}
           </section>
         </div>

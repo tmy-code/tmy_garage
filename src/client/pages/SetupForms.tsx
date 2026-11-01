@@ -8,9 +8,11 @@ import {
   defaultInterval,
   fuelsOf,
   isStandardPartKey,
+  PART_CATEGORIES,
   partFits,
   SPEC_FLAGS,
   transmissionsOf,
+  type PartCategory,
   type SpecFlag,
 } from '../../shared/catalogue.ts';
 import { todayIso } from '../../shared/dates.ts';
@@ -379,6 +381,7 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
   const [baselineDate, setBaselineDate] = useState(existing?.baselineDate ?? '');
   const [baselineOdometer, setBaselineOdometer] = useState(String(existing?.baselineOdometer ?? ''));
   const [standardPart, setStandardPart] = useState<string>(existing?.standardPart ?? '');
+  const [category, setCategory] = useState<PartCategory>(existing?.category ?? 'other');
   // The Vehicle's Standard Parts, in catalogue order; one set aside is offered only if the Task already replaces it.
   const standardParts = partSpecsOf(snapshot, vehicle, { notFitted: true }).filter(
     (p) => p.standardPart !== null && (!p.notFitted || p.standardPart === existing?.standardPart),
@@ -407,6 +410,8 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
         baselineDate: baselineDate || null,
         baselineOdometer: optionalNumber(baselineOdometer, t.setup.odometerLabel, t),
         standardPart: standardPart || null,
+        // A Task replacing a part is listed under the part's category.
+        category: standardPart ? null : category,
       };
       if (body.intervalKm === null && body.intervalMonths === null) throw new Error(t.setup.needInterval);
       if (body.baselineOdometer !== null && body.baselineDate === null) throw new Error(t.setup.needBaselineDate);
@@ -446,6 +451,17 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
             </select>
           </Field>
         ) : null}
+        {standardPart ? null : (
+          <Field label={t.setup.taskCategory} hint={t.setup.taskCategoryHint}>
+            <select value={category} onChange={(e) => setCategory(e.target.value as PartCategory)}>
+              {PART_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {t.workshop.partCategories[c]}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
         <p className="field-label">{t.setup.interval}</p>
         <div className="row">
           <Field label={t.setup.everyKm}>

@@ -44,6 +44,7 @@ const task = (intervalKm: number | null, intervalMonths: number | null): Mainten
   baselineOdometer: null,
   workshopNotes: null,
   standardPart: null,
+  category: null,
   requiredParts: [],
   tools: [],
   specIds: [],

@@ -187,6 +187,7 @@ const toTask = (r: Row, w: Workshop = noWorkshop()): MaintenanceTask => ({
   baselineOdometer: r.baseline_odometer,
   workshopNotes: r.workshop_notes,
   standardPart: r.standard_part,
+  category: r.category,
   ...w,
 });
 
@@ -917,8 +918,8 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     db.prepare(
       `INSERT INTO maintenance_tasks
          (id, vehicle_id, name, name_fr, interval_km, interval_months, official_interval_km, official_interval_months, baseline_date,
-          baseline_odometer, standard_part, custom_interval)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          baseline_odometer, standard_part, custom_interval, category)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       id,
       vehicleId,
@@ -932,6 +933,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       t.baselineOdometer,
       standardPart,
       isCustomInterval(buildOfRow(vehicle), standardPart, t.intervalKm, t.intervalMonths) ? 1 : 0,
+      standardPart === null ? t.category : null,
     );
     return c.json(loadTask(id), 201);
   });
@@ -945,8 +947,8 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     const source = db.prepare('SELECT * FROM maintenance_tasks WHERE vehicle_id = ? ORDER BY created_at').all(fromVehicleId) as Row[];
     const insert = db.prepare(
       `INSERT INTO maintenance_tasks (id, vehicle_id, name, name_fr, interval_km, interval_months, official_interval_km, official_interval_months,
-         standard_part, custom_interval)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         standard_part, custom_interval, category)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     const scheduled = db.prepare('SELECT id FROM maintenance_tasks WHERE vehicle_id = ? AND standard_part = ? ORDER BY created_at');
     const update = db.prepare(
@@ -976,6 +978,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
             t.official_interval_months,
             standardPart,
             custom,
+            standardPart === null ? t.category : null,
           );
         }
       }
@@ -994,7 +997,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     const build = buildOfRow(vehicleOrThrow(task.vehicle_id));
     db.prepare(
       `UPDATE maintenance_tasks SET name = ?, name_fr = ?, interval_km = ?, interval_months = ?, official_interval_km = ?,
-         official_interval_months = ?, baseline_date = ?, baseline_odometer = ?, standard_part = ?, custom_interval = ?
+         official_interval_months = ?, baseline_date = ?, baseline_odometer = ?, standard_part = ?, custom_interval = ?, category = ?
        WHERE id = ?`,
     ).run(
       t.name,
@@ -1008,6 +1011,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       standardPart,
       // An Interval equal to the catalogue's for this Build is not the owner's own: it keeps following the Build.
       isCustomInterval(build, standardPart, t.intervalKm, t.intervalMonths) ? 1 : 0,
+      standardPart === null ? t.category : null,
       id,
     );
     return c.json(loadTask(id));

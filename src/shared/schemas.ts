@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { cleanSpecs, specsProblem } from './catalogue.ts';
+import { cleanSpecs, PART_CATEGORIES, specsProblem } from './catalogue.ts';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected a date like 2026-10-24');
 const odometer = z.number().int().min(0).max(5_000_000);
@@ -160,6 +160,11 @@ export const taskInput = z
     standardPart: z
       .string()
       .min(1)
+      .nullish()
+      .transform((v) => v ?? null),
+    /** Only for a Task replacing no Standard Part; one that does takes the part's category. */
+    category: z
+      .enum(PART_CATEGORIES)
       .nullish()
       .transform((v) => v ?? null),
   })

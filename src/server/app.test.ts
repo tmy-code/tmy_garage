@@ -113,6 +113,18 @@ describe('vehicles and tasks', () => {
     ]);
   });
 
+  it('stores the category picked for a Task replacing no part, and drops it once the Task replaces one', async () => {
+    const a = await createVehicle('A');
+    const b = await createVehicle('B');
+    const lube = await createTask(a.id, { name: 'Chain lube', category: 'drivetrain' });
+    expect(lube.category).toBe('drivetrain');
+    expect((await call('POST', `/api/vehicles/${a.id}/tasks`, { name: 'X', intervalKm: 1000, category: 'garden' })).status).toBe(422);
+    await call('POST', `/api/vehicles/${b.id}/copy-tasks`, { fromVehicleId: a.id });
+    expect((await snapshot()).tasks.find((t) => t.vehicleId === b.id)!.category).toBe('drivetrain');
+    await call('PUT', `/api/tasks/${lube.id}`, { name: 'Chain kit', intervalKm: 1000, standardPart: 'moto_chain', category: 'body' });
+    expect((await snapshot()).tasks.find((t) => t.id === lube.id)).toMatchObject({ standardPart: 'moto_chain', category: null });
+  });
+
   it('stores, updates and copies a Task’s French name', async () => {
     const a = await createVehicle('A');
     const b = await createVehicle('B');

@@ -407,6 +407,11 @@ const MIGRATIONS: string[] = [
   CREATE TABLE schedule_moves (vehicle_id TEXT PRIMARY KEY REFERENCES vehicles(id));
   INSERT INTO schedule_moves SELECT id FROM vehicles;
   `,
+  `
+  -- The category the owner picked for a Task replacing no Standard Part; one replacing a part takes the part's.
+  ALTER TABLE maintenance_tasks ADD COLUMN category TEXT CHECK (category IN ('engine', 'ignition', 'fuel_exhaust', 'cooling',
+    'transmission', 'drivetrain', 'brakes', 'tires_suspension', 'electrical', 'hvac', 'body', 'other'));
+  `,
 ];
 
 function schemaVersion(db: DatabaseSync): number {

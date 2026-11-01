@@ -1,5 +1,5 @@
 import type { IsoDate } from './dates.ts';
-import type { StandardPartKey, VehicleSpecs } from './catalogue.ts';
+import type { PartCategory, StandardPartKey, VehicleSpecs } from './catalogue.ts';
 import type {
   CoverLevel,
   DefectSeverity,
@@ -58,6 +58,8 @@ export interface MaintenanceTask {
   workshopNotes: string | null;
   /** The Standard Part the Task replaces, if any; the Task is paused while that part is not on the Vehicle. */
   standardPart: StandardPartKey | null;
+  /** The category the owner picked when the Task replaces no Standard Part; see taskCategory. */
+  category: PartCategory | null;
   requiredParts: RequiredPart[];
   /** Required Tools, in checklist order. */
   tools: string[];

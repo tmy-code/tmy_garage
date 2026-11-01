@@ -58,6 +58,7 @@ function task(id: string, vehicleId: string, baselineDate: string | null, interv
     baselineOdometer: null,
     workshopNotes: null,
     standardPart: null,
+    category: null,
     requiredParts: [],
     tools: [],
     specIds: [],

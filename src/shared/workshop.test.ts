@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MaintenanceTask, PartUsed, Service, Snapshot } from './types.ts';
-import { fitments, normalizeSnapshot, positionsOf, shoppingList } from './workshop.ts';
+import type { DueInfo } from './due.ts';
+import { fitments, groupByCategory, normalizeSnapshot, positionsOf, shoppingList } from './workshop.ts';
 
 function task(overrides: Partial<MaintenanceTask>): MaintenanceTask {
   return {
@@ -16,6 +17,7 @@ function task(overrides: Partial<MaintenanceTask>): MaintenanceTask {
     baselineOdometer: null,
     workshopNotes: null,
     standardPart: null,
+    category: null,
     requiredParts: [],
     tools: [],
     specIds: [],
@@ -243,11 +245,35 @@ describe('shoppingList', () => {
   });
 });
 
+describe('groupByCategory', () => {
+  it('groups Tasks by their part’s category or the one picked, in screen order, keeping their order and setting paused ones apart', () => {
+    const due = (taskId: string, status: DueInfo['status'] = 'ok') => ({ taskId, status }) as DueInfo;
+    const tasks = new Map(
+      [
+        task({ id: 'pads', standardPart: 'moto_brake_pads_front', category: 'body' }),
+        task({ id: 'lube', name: 'Chain lube', category: 'drivetrain' }),
+        task({ id: 'oil', standardPart: 'moto_engine_oil' }),
+        task({ id: 'wash', name: 'Wash' }),
+        task({ id: 'chain', standardPart: 'moto_chain' }),
+        task({ id: 'belt', standardPart: 'moto_drive_belt' }),
+      ].map((t) => [t.id, t]),
+    );
+    const groups = groupByCategory([due('chain', 'overdue'), due('wash'), due('pads'), due('belt', 'paused'), due('lube'), due('oil')], tasks);
+    expect(groups.groups.map((g) => [g.category, g.due.map((d) => d.taskId)])).toEqual([
+      ['engine', ['oil']],
+      ['drivetrain', ['chain', 'lube']],
+      ['brakes', ['pads']],
+      ['other', ['wash']],
+    ]);
+    expect(groups.paused.map((d) => d.taskId)).toEqual(['belt']);
+  });
+});
+
 describe('normalizeSnapshot', () => {
   it('fills in what an offline copy saved before workshop data lacks', () => {
     const old = { vehicles: [], tasks: [{ id: 't' }], services: [{ id: 's' }], readings: [] } as unknown as Snapshot;
     const s = normalizeSnapshot(old);
-    expect(s.tasks[0]).toMatchObject({ workshopNotes: null, standardPart: null, requiredParts: [], tools: [], specIds: [] });
+    expect(s.tasks[0]).toMatchObject({ workshopNotes: null, standardPart: null, category: null, requiredParts: [], tools: [], specIds: [] });
     expect(s.services[0]!.partsUsed).toEqual([]);
     expect([s.vehicleSpecs, s.partSpecs, s.positions]).toEqual([[], [], []]);
   });
