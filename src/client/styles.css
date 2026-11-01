@@ -804,6 +804,12 @@ body > .banner {
   background: none;
 }
 
+/* The item open in the editor beside the list. */
+.list li.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
 .part-row {
   align-items: center;
   margin-bottom: 8px;
@@ -958,6 +964,12 @@ body > .banner {
     grid-template-columns: minmax(0, 3fr) minmax(360px, 2fr);
     gap: 32px;
     align-items: start;
+  }
+
+  /* An editor beside a list stays in view while the list scrolls. */
+  .side-editor {
+    position: sticky;
+    top: 72px;
   }
 
   .columns,

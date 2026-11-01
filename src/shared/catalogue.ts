@@ -61,3 +61,41 @@ export function catalogueOrder(kind: VehicleKind, key: StandardPartKey | null): 
   const index = key === null ? -1 : STANDARD_PARTS[kind].findIndex(([k]) => k === key);
   return index === -1 ? Number.MAX_SAFE_INTEGER : index;
 }
+
+/** Groups for listing Part Specs, in screen order. Parts that are not Standard Parts go under 'other'. */
+export const PART_CATEGORIES = ['engine', 'fluids', 'brakes', 'wheels', 'electrics', 'other'] as const;
+export type PartCategory = (typeof PART_CATEGORIES)[number];
+
+const CATEGORY_OF: Record<StandardPartKey, PartCategory> = {
+  engineOil: 'engine',
+  oilFilter: 'engine',
+  airFilter: 'engine',
+  fuelFilter: 'engine',
+  sparkPlugs: 'engine',
+  accessoryBelt: 'engine',
+  timingBeltKit: 'engine',
+  timingChainKit: 'engine',
+  gearboxOil: 'fluids',
+  brakeFluid: 'fluids',
+  coolant: 'fluids',
+  acRefrigerant: 'fluids',
+  forkOil: 'fluids',
+  frontBrakePads: 'brakes',
+  rearBrakePads: 'brakes',
+  frontBrakeDiscs: 'brakes',
+  rearBrakeDiscs: 'brakes',
+  frontShocks: 'wheels',
+  rearShocks: 'wheels',
+  frontTyres: 'wheels',
+  rearTyres: 'wheels',
+  frontTyre: 'wheels',
+  rearTyre: 'wheels',
+  chainKit: 'wheels',
+  cabinFilter: 'electrics',
+  wiperBlades: 'electrics',
+  battery: 'electrics',
+};
+
+export function partCategory(key: StandardPartKey | null): PartCategory {
+  return key === null ? 'other' : CATEGORY_OF[key];
+}

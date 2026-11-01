@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import type { DueInfo } from '../shared/due.ts';
 import { confirmAction, dismissToast, useFeedback } from './feedback.ts';
 import { formatDate } from './format.ts';
@@ -6,6 +6,21 @@ import { LANGS, messages, setLang, useT } from './i18n.ts';
 import { Icon } from './icons.tsx';
 import { refreshPushSubscription } from './push.ts';
 import { dismissRejected, sync, useStore } from './store.ts';
+
+/** Matches the stylesheet's wide-screen breakpoint, where pages split into columns. */
+const WIDE = '(min-width: 1000px)';
+
+/** True on a wide screen; follows the window as it is resized. */
+export function useWide(): boolean {
+  return useSyncExternalStore(
+    (listener) => {
+      const query = matchMedia(WIDE);
+      query.addEventListener('change', listener);
+      return () => query.removeEventListener('change', listener);
+    },
+    () => matchMedia(WIDE).matches,
+  );
+}
 
 export function Layout({ title, back, actions, children }: { title: string; back?: string; actions?: ReactNode; children: ReactNode }) {
   const t = useT();

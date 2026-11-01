@@ -1,10 +1,11 @@
 import { Fragment, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { PART_CATEGORIES, partCategory } from '../../shared/catalogue.ts';
 import { todayIso } from '../../shared/dates.ts';
 import { vehicleDue } from '../../shared/due.ts';
 import type { PartUnit, VehicleSpecKind } from '../../shared/schemas.ts';
 import type { FitmentPosition, MaintenanceTask, PartSpec, PartUsed, Snapshot, Vehicle, VehicleSpec } from '../../shared/types.ts';
 import { fitments, lastUsed, partSpecsOf, SHOPPING_HORIZON_DAYS, shoppingList, type FittedItem } from '../../shared/workshop.ts';
-import { confirmDelete, Field, FormError, Layout, NeedsConnection, StatusChip } from '../components.tsx';
+import { confirmDelete, Field, FormError, Layout, NeedsConnection, StatusChip, useWide } from '../components.tsx';
 import {
   describeDue,
   describeInterval,
@@ -329,16 +330,32 @@ function PartSpecLine({ spec }: { spec: PartSpec }) {
   );
 }
 
-function PartSpecList({ vehicle, specs, editor }: { vehicle: Vehicle; specs: PartSpec[]; editor: ReturnType<typeof useEditor> }) {
+/** Edited in place on a phone; on a wide screen the editor sits beside the list and the row is highlighted. */
+function PartSpecList({
+  vehicle,
+  specs,
+  editor,
+  inline,
+}: {
+  vehicle: Vehicle;
+  specs: PartSpec[];
+  editor: ReturnType<typeof useEditor>;
+  inline: boolean;
+}) {
   return (
     <ul className="list list-grid">
       {specs.map((spec) =>
-        editor.editing === spec.id ? (
+        inline && editor.editing === spec.id ? (
           <li key={spec.id} className="editing">
             <PartSpecEditor vehicle={vehicle} existing={spec} editor={editor} />
           </li>
         ) : (
-          <li key={spec.id} className={!spec.characteristics && !partReferences(spec) ? 'unset' : undefined}>
+          <li
+            key={spec.id}
+            className={[!spec.characteristics && !partReferences(spec) ? 'unset' : '', editor.editing === spec.id ? 'selected' : '']
+              .filter(Boolean)
+              .join(' ') || undefined}
+          >
             <button type="button" className="item-row" onClick={() => editor.setEditing(spec.id)}>
               <PartSpecLine spec={spec} />
             </button>
@@ -352,8 +369,39 @@ function PartSpecList({ vehicle, specs, editor }: { vehicle: Vehicle; specs: Par
 export function PartSpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: Snapshot }) {
   const t = useT();
   const editor = useEditor();
+  const wide = useWide();
   const all = partSpecsOf(snapshot, vehicle, { notFitted: true });
+  const fitted = all.filter((s) => !s.notFitted);
   const notFitted = all.filter((s) => s.notFitted);
+  const editing = editor.editing === 'new' ? null : all.find((s) => s.id === editor.editing);
+  const side =
+    wide && editor.editing === 'new' ? (
+      <PartSpecEditor key="new" vehicle={vehicle} editor={editor} />
+    ) : wide && editing ? (
+      <PartSpecEditor key={editing.id} vehicle={vehicle} existing={editing} editor={editor} />
+    ) : null;
+
+  const lists = (
+    <>
+      {!wide && editor.editing === 'new' ? <PartSpecEditor vehicle={vehicle} editor={editor} /> : null}
+      {PART_CATEGORIES.map((category) => {
+        const specs = fitted.filter((s) => partCategory(s.standardPart) === category);
+        return specs.length > 0 ? (
+          <section key={category}>
+            <h2>{t.workshop.partCategories[category]}</h2>
+            <PartSpecList vehicle={vehicle} specs={specs} editor={editor} inline={!wide} />
+          </section>
+        ) : null;
+      })}
+      {notFitted.length > 0 ? (
+        <details className="sold">
+          <summary>{t.workshop.notFittedSection(notFitted.length)}</summary>
+          <PartSpecList vehicle={vehicle} specs={notFitted} editor={editor} inline={!wide} />
+        </details>
+      ) : null}
+    </>
+  );
+
   return (
     <Layout
       title={t.workshop.partsTitle(vehicle.name)}
@@ -362,14 +410,14 @@ export function PartSpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapsho
     >
       <NeedsConnection />
       <p className="muted">{t.workshop.partsIntro}</p>
-      {editor.editing === 'new' ? <PartSpecEditor vehicle={vehicle} editor={editor} /> : null}
-      <PartSpecList vehicle={vehicle} specs={all.filter((s) => !s.notFitted)} editor={editor} />
-      {notFitted.length > 0 ? (
-        <details className="sold">
-          <summary>{t.workshop.notFittedSection(notFitted.length)}</summary>
-          <PartSpecList vehicle={vehicle} specs={notFitted} editor={editor} />
-        </details>
-      ) : null}
+      {side ? (
+        <div className="split">
+          <div>{lists}</div>
+          <aside className="side-editor">{side}</aside>
+        </div>
+      ) : (
+        lists
+      )}
     </Layout>
   );
 }
