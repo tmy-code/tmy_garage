@@ -680,7 +680,7 @@ export function WorkshopForm({ task, vehicle, snapshot }: { task: MaintenanceTas
   const vehicleSpecs = snapshot.vehicleSpecs.filter((s) => s.vehicleId === vehicle.id);
   const [notes, setNotes] = useState(task.workshopNotes ?? '');
   const [tools, setTools] = useState(task.tools.join('\n'));
-  const [parts, setParts] = useState(task.requiredParts.map((r) => ({ partSpecId: r.partSpecId, quantity: String(r.quantity) })));
+  const [parts, setParts] = useState(task.requiredParts.map((r) => ({ partSpecId: r.partSpecId, quantity: String(r.quantity ?? '') })));
   const [specIds, setSpecIds] = useState<Set<string>>(new Set(task.specIds));
   const { error, disabled, run } = useSubmit();
   const back = `/tasks/${task.id}`;
@@ -700,7 +700,8 @@ export function WorkshopForm({ task, vehicle, snapshot }: { task: MaintenanceTas
     event.preventDefault();
     void run(async () => {
       const requiredParts = parts.map((p) => ({ partSpecId: p.partSpecId, quantity: parseNumber(p.quantity) }));
-      if (requiredParts.some((p) => p.quantity === null || Number.isNaN(p.quantity) || p.quantity <= 0))
+      // An empty quantity is left to fill in later.
+      if (requiredParts.some((p) => p.quantity !== null && (Number.isNaN(p.quantity) || p.quantity <= 0)))
         throw new Error(t.workshop.quantityError);
       if (new Set(requiredParts.map((p) => p.partSpecId)).size !== requiredParts.length) throw new Error(t.workshop.duplicatePart);
       await online('PUT', `/api/tasks/${task.id}/workshop`, {
@@ -768,6 +769,7 @@ export function WorkshopForm({ task, vehicle, snapshot }: { task: MaintenanceTas
               {t.workshop.managePartSpecs}
             </a>
           </div>
+          {parts.length > 0 ? <p className="muted">{t.workshop.quantityHint}</p> : null}
         </fieldset>
 
         <Field label={t.workshop.toolsLabel} hint={t.workshop.toolsHint}>

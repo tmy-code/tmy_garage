@@ -130,7 +130,8 @@ export function ServiceForm({
         positionId: last?.positionId ?? positions.find((p) => p.standardPart !== null && p.standardPart === spec.standardPart)?.id ?? null,
         description: last?.description ?? [partName(spec, t), spec.characteristics].filter(Boolean).join(' '),
         partNumber: last?.partNumber ?? '',
-        quantity: String(r.quantity),
+        // A quantity not given yet is taken from last time, if any.
+        quantity: String(r.quantity ?? last?.quantity ?? ''),
         unit: spec.unit,
         price: '',
         supplier: last?.supplier ?? '',

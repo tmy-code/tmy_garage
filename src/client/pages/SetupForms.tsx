@@ -11,11 +11,12 @@ import {
   type SpecFlag,
 } from '../../shared/catalogue.ts';
 import { todayIso } from '../../shared/dates.ts';
+import { partSpecsOf } from '../../shared/workshop.ts';
 import type { Cooling, Distribution, Drivetrain, FinalDrive, FuelType, OvernightParking, Transmission } from '../../shared/schemas.ts';
 import type { MaintenanceTask, Snapshot, Vehicle } from '../../shared/types.ts';
 import { confirmDelete, Field, FormError, Layout, NeedsConnection } from '../components.tsx';
 import { showToast } from '../feedback.ts';
-import { parseNumber, taskName } from '../format.ts';
+import { parseNumber, partName, taskName } from '../format.ts';
 import { messages, useT, type Messages } from '../i18n.ts';
 import { KNOWN_MAKES } from '../brands.tsx';
 import { Icon } from '../icons.tsx';
@@ -364,7 +365,7 @@ export function SellForm({ vehicle }: { vehicle: Vehicle }) {
   );
 }
 
-export function TaskForm({ vehicle, existing }: { vehicle: Vehicle; existing?: MaintenanceTask }) {
+export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; snapshot: Snapshot; existing?: MaintenanceTask }) {
   const t = useT();
   const [name, setName] = useState(existing?.name ?? '');
   const [nameFr, setNameFr] = useState(existing?.nameFr ?? '');
@@ -374,6 +375,11 @@ export function TaskForm({ vehicle, existing }: { vehicle: Vehicle; existing?: M
   const [officialMonths, setOfficialMonths] = useState(String(existing?.officialIntervalMonths ?? ''));
   const [baselineDate, setBaselineDate] = useState(existing?.baselineDate ?? '');
   const [baselineOdometer, setBaselineOdometer] = useState(String(existing?.baselineOdometer ?? ''));
+  const [standardPart, setStandardPart] = useState<string>(existing?.standardPart ?? '');
+  // The Vehicle's Standard Parts, in catalogue order; one set aside is offered only if the Task already replaces it.
+  const standardParts = partSpecsOf(snapshot, vehicle, { notFitted: true }).filter(
+    (p) => p.standardPart !== null && (!p.notFitted || p.standardPart === existing?.standardPart),
+  );
   const { error, disabled, run } = useSubmit();
   const back = `/vehicles/${vehicle.id}`;
 
@@ -389,6 +395,7 @@ export function TaskForm({ vehicle, existing }: { vehicle: Vehicle; existing?: M
         officialIntervalMonths: optionalNumber(officialMonths, t.setup.monthsLabel, t),
         baselineDate: baselineDate || null,
         baselineOdometer: optionalNumber(baselineOdometer, t.setup.odometerLabel, t),
+        standardPart: standardPart || null,
       };
       if (body.intervalKm === null && body.intervalMonths === null) throw new Error(t.setup.needInterval);
       if (body.baselineOdometer !== null && body.baselineDate === null) throw new Error(t.setup.needBaselineDate);
@@ -416,6 +423,18 @@ export function TaskForm({ vehicle, existing }: { vehicle: Vehicle; existing?: M
         <Field label={t.setup.taskFr} hint={t.setup.taskFrHint}>
           <input value={nameFr} onChange={(e) => setNameFr(e.target.value)} maxLength={120} lang="fr" />
         </Field>
+        {standardParts.length > 0 ? (
+          <Field label={t.setup.taskPart} hint={t.setup.taskPartHint}>
+            <select value={standardPart} onChange={(e) => setStandardPart(e.target.value)}>
+              <option value="">{t.setup.noTaskPart}</option>
+              {standardParts.map((p) => (
+                <option key={p.id} value={p.standardPart!}>
+                  {partName(p, t)}
+                </option>
+              ))}
+            </select>
+          </Field>
+        ) : null}
         <p className="field-label">{t.setup.interval}</p>
         <div className="row">
           <Field label={t.setup.everyKm}>

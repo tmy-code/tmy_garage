@@ -382,6 +382,22 @@ const MIGRATIONS: string[] = [
   CREATE TABLE part_catalogue_moves (vehicle_id TEXT PRIMARY KEY REFERENCES vehicles(id));
   INSERT INTO part_catalogue_moves SELECT id FROM vehicles;
   `,
+  `
+  -- The Standard Part a Maintenance Task replaces, if any: the Task pauses while that part is not on the Vehicle.
+  ALTER TABLE maintenance_tasks ADD COLUMN standard_part TEXT;
+
+  -- A Required Part's quantity may be left to fill in (a new Vehicle's tasks list their parts, not how much).
+  CREATE TABLE required_parts_new (
+    task_id TEXT NOT NULL REFERENCES maintenance_tasks(id) ON DELETE CASCADE,
+    part_spec_id TEXT NOT NULL REFERENCES part_specs(id) ON DELETE CASCADE,
+    quantity REAL CHECK (quantity > 0),
+    sort INTEGER NOT NULL,
+    PRIMARY KEY (task_id, part_spec_id)
+  );
+  INSERT INTO required_parts_new SELECT task_id, part_spec_id, quantity, sort FROM required_parts;
+  DROP TABLE required_parts;
+  ALTER TABLE required_parts_new RENAME TO required_parts;
+  `,
 ];
 
 function schemaVersion(db: DatabaseSync): number {

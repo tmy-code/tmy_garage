@@ -147,7 +147,9 @@ interface PartTemplate {
   /** A shorter distance interval when the engine has a turbo. */
   turboIntervalKm?: number;
   /** The Maintenance Task's name when it differs from the part's, e.g. oil and filter changed together. */
-  task?: { en: string; fr: string } | false;
+  task?: { en: string; fr: string };
+  /** The part whose Maintenance Task also replaces this one (the oil filter goes with the oil), instead of its own. */
+  goesWith?: string;
 }
 
 const COMBUSTION: Rule = ['combustion', '=', true];
@@ -172,7 +174,7 @@ export const PART_TEMPLATES = [
   { code: 'battery_12v', kind: 'car', en: '12 V battery', fr: 'Batterie 12 V', unit: 'piece', category: 'electrical', intervalKm: null, intervalMonths: 60, when: [['hasStartStop', '=', false]] },
   { code: 'battery_12v_agm', kind: 'car', en: '12 V battery (AGM/EFB, start-stop)', fr: 'Batterie 12 V (AGM/EFB, start-stop)', unit: 'piece', category: 'electrical', intervalKm: null, intervalMonths: 48, when: [['hasStartStop', '=', true]] },
   { code: 'engine_oil', kind: 'car', en: 'Engine oil', fr: 'Huile moteur', unit: 'litre', category: 'engine', intervalKm: 15_000, intervalMonths: 12, turboIntervalKm: 10_000, when: [COMBUSTION], task: { en: 'Engine oil and filter', fr: 'Huile moteur et filtre' } },
-  { code: 'oil_filter', kind: 'car', en: 'Oil filter', fr: 'Filtre à huile', unit: 'piece', category: 'engine', intervalKm: 15_000, intervalMonths: 12, when: [COMBUSTION], task: false },
+  { code: 'oil_filter', kind: 'car', en: 'Oil filter', fr: 'Filtre à huile', unit: 'piece', category: 'engine', intervalKm: 15_000, intervalMonths: 12, when: [COMBUSTION], goesWith: 'engine_oil' },
   { code: 'air_filter', kind: 'car', en: 'Air filter', fr: 'Filtre à air', unit: 'piece', category: 'engine', intervalKm: 30_000, intervalMonths: 24, when: [COMBUSTION] },
   { code: 'drive_belt', kind: 'car', en: 'Accessory belt and tensioner', fr: 'Courroie d’accessoires et galet', unit: 'piece', category: 'engine', intervalKm: 100_000, intervalMonths: 72, when: [COMBUSTION] },
   { code: 'coolant', kind: 'car', en: 'Coolant', fr: 'Liquide de refroidissement', unit: 'litre', category: 'cooling', intervalKm: 60_000, intervalMonths: 60, when: [COMBUSTION] },
@@ -206,7 +208,7 @@ export const PART_TEMPLATES = [
   { code: 'moto_fork_oil_seals', kind: 'motorcycle', en: 'Fork oil and seals', fr: 'Huile et joints de fourche', unit: 'litre', category: 'tires_suspension', intervalKm: 30_000, intervalMonths: 36 },
   { code: 'moto_battery', kind: 'motorcycle', en: 'Battery', fr: 'Batterie', unit: 'piece', category: 'electrical', intervalKm: null, intervalMonths: 48 },
   { code: 'moto_engine_oil', kind: 'motorcycle', en: 'Engine oil', fr: 'Huile moteur', unit: 'litre', category: 'engine', intervalKm: 8_000, intervalMonths: 12, when: [COMBUSTION], task: { en: 'Engine oil and filter', fr: 'Huile moteur et filtre' } },
-  { code: 'moto_oil_filter', kind: 'motorcycle', en: 'Oil filter', fr: 'Filtre à huile', unit: 'piece', category: 'engine', intervalKm: 8_000, intervalMonths: 12, when: [COMBUSTION], task: false },
+  { code: 'moto_oil_filter', kind: 'motorcycle', en: 'Oil filter', fr: 'Filtre à huile', unit: 'piece', category: 'engine', intervalKm: 8_000, intervalMonths: 12, when: [COMBUSTION], goesWith: 'moto_engine_oil' },
   { code: 'moto_air_filter', kind: 'motorcycle', en: 'Air filter', fr: 'Filtre à air', unit: 'piece', category: 'engine', intervalKm: 15_000, intervalMonths: 24, when: [COMBUSTION] },
   { code: 'moto_spark_plugs', kind: 'motorcycle', en: 'Spark plugs', fr: 'Bougies', unit: 'piece', category: 'ignition', intervalKm: 20_000, intervalMonths: 48, when: [COMBUSTION] },
   { code: 'moto_coolant', kind: 'motorcycle', en: 'Coolant', fr: 'Liquide de refroidissement', unit: 'litre', category: 'cooling', intervalKm: null, intervalMonths: 36, when: [COMBUSTION, ['cooling', '=', 'liquid']] },
@@ -283,15 +285,22 @@ export interface StarterTask {
   nameFr: string;
   intervalKm: number | null;
   intervalMonths: number | null;
+  /** The part the Task replaces. */
+  standardPart: StandardPartKey;
+  /** Its Required Parts: the part itself, then those that go with it. */
+  parts: StandardPartKey[];
 }
 
 export function starterTasks(build: Build): StarterTask[] {
-  return templatesOf(build.kind)
-    .filter((t) => t.task !== false && partFits(build, t.code))
+  const fitting = templatesOf(build.kind).filter((t) => partFits(build, t.code));
+  return fitting
+    .filter((t) => t.goesWith === undefined)
     .map((t) => ({
       name: t.task ? t.task.en : t.en,
       nameFr: t.task ? t.task.fr : t.fr,
       intervalKm: build.hasTurbo && t.turboIntervalKm ? t.turboIntervalKm : t.intervalKm,
       intervalMonths: t.intervalMonths,
+      standardPart: t.code,
+      parts: [t.code, ...fitting.filter((other) => other.goesWith === t.code).map((other) => other.code)],
     }));
 }

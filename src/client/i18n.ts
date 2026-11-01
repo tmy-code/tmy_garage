@@ -28,7 +28,7 @@ const en = {
     reading: (date: string) => `Odometer reading of ${date}`,
     dismiss: 'Dismiss',
   },
-  status: { overdue: 'Overdue', dueSoon: 'Due soon', ok: 'OK', unknown: 'No record' },
+  status: { overdue: 'Overdue', dueSoon: 'Due soon', ok: 'OK', unknown: 'No record', paused: 'Paused' },
   needsConnection: 'This needs a connection to the garage server. Services and odometer readings work offline.',
   notFound: {
     title: 'Not found',
@@ -82,6 +82,7 @@ const en = {
   },
   due: {
     noOdometer: 'Needs an odometer value for when it was last done',
+    paused: 'Not due: its part is not on this vehicle',
     never: 'Never recorded: log a Service or set when it was last done',
     wasDue: 'Was due',
     due: 'Due',
@@ -250,6 +251,8 @@ const en = {
     notesHint: 'Steps, warnings, links to videos or manual pages.',
     duplicatePart: 'Each Part Spec can only be listed once.',
     quantityError: 'Quantities must be positive numbers.',
+    quantityHint: 'Leave a quantity empty until you know it.',
+    quantityToCheck: 'quantity to check',
     shoppingIntro: (days: number) => `Parts for tasks overdue, due soon or due in the next ${days} days. Check the shelf before buying.`,
     nothingToBuy: 'Nothing needed soon.',
     forTasks: (names: string) => `For: ${names}`,
@@ -620,6 +623,9 @@ const en = {
     taskHint: 'e.g. “Engine oil and filter change”.',
     taskFr: 'Task name in French',
     taskFrHint: 'Shown when the app is in French, e.g. “Vidange huile moteur et filtre”.',
+    taskPart: 'Part it replaces',
+    taskPartHint: 'While that part is not on the vehicle, the task is paused: no Due Date or reminder.',
+    noTaskPart: 'None',
     interval: 'Interval: whichever comes first',
     everyKm: 'Every (km)',
     everyMonths: 'or every (months)',
@@ -668,7 +674,7 @@ const fr: Messages = {
     reading: (date) => `Relevé kilométrique du ${date}`,
     dismiss: 'Fermer',
   },
-  status: { overdue: 'En retard', dueSoon: 'Bientôt', ok: 'OK', unknown: 'Aucun historique' },
+  status: { overdue: 'En retard', dueSoon: 'Bientôt', ok: 'OK', unknown: 'Aucun historique', paused: 'En pause' },
   needsConnection:
     'Cette action nécessite une connexion au serveur du garage. Les entretiens et relevés kilométriques fonctionnent hors ligne.',
   notFound: {
@@ -723,6 +729,7 @@ const fr: Messages = {
   },
   due: {
     noOdometer: 'Indiquez le kilométrage de la dernière fois',
+    paused: 'Pas d’échéance : sa pièce n’est pas sur ce véhicule',
     never: 'Jamais enregistré : ajoutez un entretien ou indiquez la dernière fois',
     wasDue: 'Échéance',
     due: 'Échéance',
@@ -892,6 +899,8 @@ const fr: Messages = {
     notesHint: 'Étapes, mises en garde, liens vers des vidéos ou pages du manuel.',
     duplicatePart: 'Chaque spécification de pièce ne peut figurer qu’une fois.',
     quantityError: 'Les quantités doivent être des nombres positifs.',
+    quantityHint: 'Laissez une quantité vide tant que vous ne la connaissez pas.',
+    quantityToCheck: 'quantité à vérifier',
     shoppingIntro: (days) =>
       `Pièces pour les tâches en retard, bientôt dues ou dues dans les ${days} prochains jours. Vérifiez l’étagère avant d’acheter.`,
     nothingToBuy: 'Rien à prévoir prochainement.',
@@ -1252,6 +1261,9 @@ const fr: Messages = {
     taskHint: 'ex. « Engine oil and filter change ».',
     taskFr: 'Nom de la tâche en français',
     taskFrHint: 'Affiché quand l’application est en français, ex. « Vidange huile moteur et filtre ».',
+    taskPart: 'Pièce qu’elle remplace',
+    taskPartHint: 'Tant que cette pièce n’est pas sur le véhicule, la tâche est en pause : ni échéance ni rappel.',
+    noTaskPart: 'Aucune',
     interval: 'Intervalle : le premier atteint',
     everyKm: 'Tous les (km)',
     everyMonths: 'ou tous les (mois)',

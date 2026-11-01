@@ -454,7 +454,8 @@ section {
   background: var(--ok-bg);
 }
 
-.chip-unknown {
+.chip-unknown,
+.chip-paused {
   color: var(--unknown);
   background: var(--unknown-bg);
 }

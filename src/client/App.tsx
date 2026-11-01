@@ -108,7 +108,7 @@ export function App() {
         if (subId === 'new') return <QuoteForm vehicle={vehicle} snapshot={snapshot} />;
         break;
       case 'tasks':
-        if (subId === 'new') return <TaskForm vehicle={vehicle} />;
+        if (subId === 'new') return <TaskForm vehicle={vehicle} snapshot={snapshot} />;
     }
   }
   if (section === 'tasks') {
@@ -116,7 +116,7 @@ export function App() {
     const owner = task && snapshot.vehicles.find((v) => v.id === task.vehicleId);
     if (!task || !owner) return <NotFound what="task" />;
     if (sub === undefined) return <TaskPage key={task.id} task={task} vehicle={owner} snapshot={snapshot} />;
-    if (sub === 'edit') return <TaskForm key={task.id} vehicle={owner} existing={task} />;
+    if (sub === 'edit') return <TaskForm key={task.id} vehicle={owner} snapshot={snapshot} existing={task} />;
     if (sub === 'workshop') return <WorkshopForm key={task.id} task={task} vehicle={owner} snapshot={snapshot} />;
   }
   if (section === 'readings' && sub === 'edit') {

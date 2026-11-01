@@ -19,7 +19,7 @@ The app speaks English and French. French screens use: Vehicle → véhicule, Ma
 ## Maintenance
 
 **Maintenance Task**:
-A recurring job defined for one Vehicle (e.g. "engine oil and filter change"), with an Interval saying how often it must be done.
+A recurring job defined for one Vehicle (e.g. "engine oil and filter change"), with an Interval saying how often it must be done. A Task may say which Standard Part it replaces; while that part is not on the Vehicle (set aside after a Build change, or marked by the user), the Task is paused: it has no Due Date, sends no Reminder and adds nothing to the Shopping List.
 _Avoid_: Job, service item, schedule entry
 
 **Interval**:
@@ -85,7 +85,7 @@ What a Vehicle is built with, as far as its parts go: fuel (petrol, diesel, hybr
 _Avoid_: Specification, configuration, trim
 
 **Standard Part**:
-A part to replace that a Vehicle of one kind might have, from the vehicle parts catalogue (e.g. engine oil, oil filter, chain, sprockets for a motorcycle; cabin filter, timing belt kit, automatic gearbox fluid for a car), with the conditions on the Build under which it is there and a generic default Interval. Checks and services (wheel alignment, valve clearance, chain lubrication) are not Standard Parts. A Vehicle lists the Standard Parts that fit its Build (a petrol automatic car with a timing chain gets no timing belt kit, fuel filter or clutch kit); what varies between Vehicles is only their Part Spec. A new Vehicle also starts with a Maintenance Task per Standard Part it has, at that default Interval (the oil filter goes with the engine oil). When the Build changes, Standard Parts that no longer fit are set aside as not on the Vehicle, unless the user has filled in their Part Spec or used them, in which case they are kept and flagged. A Standard Part can also be marked by the user as not on a Vehicle. A Part outside this list is named by the user.
+A part to replace that a Vehicle of one kind might have, from the vehicle parts catalogue (e.g. engine oil, oil filter, chain, sprockets for a motorcycle; cabin filter, timing belt kit, automatic gearbox fluid for a car), with the conditions on the Build under which it is there and a generic default Interval. Checks and services (wheel alignment, valve clearance, chain lubrication) are not Standard Parts. A Vehicle lists the Standard Parts that fit its Build (a petrol automatic car with a timing chain gets no timing belt kit, fuel filter or clutch kit); what varies between Vehicles is only their Part Spec. A new Vehicle also starts with a Maintenance Task per Standard Part it has, at that default Interval, replacing that part and needing it as a Required Part whose quantity is left to fill in (the oil filter goes with the engine oil). When the Build changes, Standard Parts that no longer fit are set aside as not on the Vehicle, unless the user has filled in their Part Spec, given a quantity for it in a Task, or used them, in which case they are kept and flagged. A Standard Part can also be marked by the user as not on a Vehicle. A Part outside this list is named by the user.
 _Avoid_: Part type, category, catalogue entry
 
 **Part Spec**:
@@ -97,7 +97,7 @@ The vehicle manufacturer's own part number for a Part on one Vehicle (e.g. a Hon
 _Avoid_: Genuine part number, original reference
 
 **Required Part**:
-A Part Spec and the quantity of it a Maintenance Task needs (e.g. "engine oil 10W-40 JASO MA2, 3.2 L").
+A Part Spec and the quantity of it a Maintenance Task needs (e.g. "engine oil 10W-40 JASO MA2, 3.2 L"). The quantity may be left to fill in; the Shopping List then says to check it.
 _Avoid_: Part list, bill of materials
 
 **Part Used**:

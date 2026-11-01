@@ -52,7 +52,8 @@ export function partReferences(spec: PartSpec, m: Messages = messages()): string
 }
 
 /** A Part quantity in its unit, e.g. "3.2 L" or "2 pcs" ("3,2 L", "2 pièces" in French). */
-export function formatQuantity(quantity: number, unit: PartUnit, m: Messages = messages()): string {
+export function formatQuantity(quantity: number | null, unit: PartUnit, m: Messages = messages()): string {
+  if (quantity === null) return m.workshop.quantityToCheck;
   const n = new Intl.NumberFormat(m.locale, { maximumFractionDigits: 2 }).format(quantity);
   return `${n} ${m.workshop.units[unit](quantity)}`;
 }
@@ -79,6 +80,7 @@ export function describeOfficialInterval(task: MaintenanceTask, m: Messages = me
 
 /** One line saying when the task is due, e.g. "Due 14 Mar 2027 (in 141 days) · at 24 000 km (1 200 km left)". */
 export function describeDue(due: DueInfo, m: Messages = messages()): string {
+  if (due.status === 'paused') return m.due.paused;
   if (due.status === 'unknown') return due.lastDone ? m.due.noOdometer : m.due.never;
   const parts: string[] = [];
   if (due.dueDate !== null && due.daysRemaining !== null) {

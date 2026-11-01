@@ -15,6 +15,7 @@ function task(overrides: Partial<MaintenanceTask>): MaintenanceTask {
     baselineDate: null,
     baselineOdometer: null,
     workshopNotes: null,
+    standardPart: null,
     requiredParts: [],
     tools: [],
     specIds: [],
@@ -231,13 +232,22 @@ describe('shoppingList', () => {
     const sold = { ...withHistory, vehicles: [{ ...base.vehicles[0]!, status: 'sold' as const }] };
     expect(shoppingList(sold, '2026-10-01')).toEqual([]);
   });
+
+  it('leaves the total to check when a Task does not say how much, and skips paused Tasks', () => {
+    const unsure = task({ id: 'top-up', standardPart: 'moto_engine_oil', requiredParts: [{ partSpecId: 'oil-spec', quantity: null }] });
+    const snapshot: Snapshot = { ...base, tasks: [oilChange, unsure], services: [service('s1', '2025-11-01', 15_000, ['oil', 'top-up'], [])] };
+    expect(shoppingList(snapshot, '2026-10-01')[0]!.items[0]).toMatchObject({ partSpec: { id: 'oil-spec' }, quantity: null });
+    // With its part set aside, the Task is paused and needs nothing.
+    const setAside = { ...snapshot, tasks: [unsure], partSpecs: base.partSpecs.map((p) => ({ ...p, notFitted: true })) };
+    expect(shoppingList(setAside, '2026-10-01')).toEqual([]);
+  });
 });
 
 describe('normalizeSnapshot', () => {
   it('fills in what an offline copy saved before workshop data lacks', () => {
     const old = { vehicles: [], tasks: [{ id: 't' }], services: [{ id: 's' }], readings: [] } as unknown as Snapshot;
     const s = normalizeSnapshot(old);
-    expect(s.tasks[0]).toMatchObject({ workshopNotes: null, requiredParts: [], tools: [], specIds: [] });
+    expect(s.tasks[0]).toMatchObject({ workshopNotes: null, standardPart: null, requiredParts: [], tools: [], specIds: [] });
     expect(s.services[0]!.partsUsed).toEqual([]);
     expect([s.vehicleSpecs, s.partSpecs, s.positions]).toEqual([[], [], []]);
   });

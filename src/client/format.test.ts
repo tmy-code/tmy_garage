@@ -43,6 +43,7 @@ const task = (intervalKm: number | null, intervalMonths: number | null): Mainten
   baselineDate: null,
   baselineOdometer: null,
   workshopNotes: null,
+  standardPart: null,
   requiredParts: [],
   tools: [],
   specIds: [],
@@ -101,6 +102,7 @@ describe('format in both languages', () => {
     expect(formatQuantity(3.2, 'litre', fr)).toBe('3,2 L');
     expect(formatQuantity(1, 'piece', en)).toBe('1 pc');
     expect(formatQuantity(2, 'piece', fr)).toBe('2 pièces');
+    expect(formatQuantity(null, 'litre', en)).toBe('quantity to check');
   });
 
   it('describes a projected Due Date', () => {

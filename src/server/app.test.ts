@@ -21,6 +21,7 @@ import type {
   VehicleSpec,
 } from '../shared/types.ts';
 import { partFits, templatesOf, type Build } from '../shared/catalogue.ts';
+import { vehicleDue } from '../shared/due.ts';
 import { createApp } from './app.ts';
 import { openDatabase } from './db.ts';
 
@@ -359,6 +360,43 @@ describe('workshop data', () => {
     // Editing a vehicle leaves its Tasks to the user.
     await call('PUT', `/api/vehicles/${car.id}`, { ...CAR, name: 'Test vehicle', drivetrain: 'awd' });
     expect((await snapshot()).tasks.filter((t) => t.vehicleId === car.id)).toHaveLength(tasks.length);
+  });
+
+  it('links each starter task to its part, needing it and what goes with it, quantity to fill in', async () => {
+    const car = await create(CAR);
+    const s = await snapshot();
+    const spec = (key: string) => s.partSpecs.find((p) => p.vehicleId === car.id && p.standardPart === key)!.id;
+    const oil = s.tasks.find((t) => t.vehicleId === car.id && t.standardPart === 'engine_oil')!;
+    expect(oil.requiredParts).toEqual([
+      { partSpecId: spec('engine_oil'), quantity: null },
+      { partSpecId: spec('oil_filter'), quantity: null },
+    ]);
+    expect(s.tasks.find((t) => t.standardPart === 'brake_fluid')!.requiredParts).toEqual([{ partSpecId: spec('brake_fluid'), quantity: null }]);
+  });
+
+  it('pauses a task while its part is not on the vehicle', async () => {
+    const car = await create(CAR);
+    const clutch = (await snapshot()).tasks.find((t) => t.vehicleId === car.id && t.standardPart === 'clutch_kit')!;
+    const status = async () => vehicleDue(await snapshot(), car.id, '2026-11-01').due.find((d) => d.taskId === clutch.id)!.status;
+    expect(await status()).not.toBe('paused');
+    // A starter task's Required Part, with no quantity, does not keep the part on the vehicle.
+    await call('PUT', `/api/vehicles/${car.id}`, { ...CAR, name: 'Test vehicle', transmission: 'automatic' });
+    expect(await status()).toBe('paused');
+    await call('PUT', `/api/vehicles/${car.id}`, { ...CAR, name: 'Test vehicle' });
+    expect(await status()).not.toBe('paused');
+  });
+
+  it('links a task only to one of its vehicle’s Standard Parts, and copies the link where the other vehicle has it', async () => {
+    const bike = await createVehicle('Bike');
+    expect((await call('POST', `/api/vehicles/${bike.id}/tasks`, { name: 'Pads', intervalKm: 20000, standardPart: 'brake_pads_front' })).status).toBe(422);
+    const chain = await createTask(bike.id, { name: 'Chain kit', standardPart: 'moto_chain' });
+    expect(chain.standardPart).toBe('moto_chain');
+    const other = await createVehicle('Other bike');
+    db.prepare(`DELETE FROM part_specs WHERE vehicle_id = ? AND standard_part = 'moto_chain'`).run(other.id);
+    await call('POST', `/api/vehicles/${other.id}/copy-tasks`, { fromVehicleId: bike.id });
+    expect((await snapshot()).tasks.find((t) => t.vehicleId === other.id)!.standardPart).toBeNull();
+    await call('PUT', `/api/tasks/${chain.id}`, { name: 'Chain kit', intervalKm: 20000, standardPart: null });
+    expect((await snapshot()).tasks.find((t) => t.id === chain.id)!.standardPart).toBeNull();
   });
 
   it('updates the parts when the build changes, keeping filled-in parts and the user’s own choices', async () => {
@@ -906,6 +944,22 @@ describe('migrations', () => {
     expect(position('rear')).toMatchObject({ standardPart: null, name: 'Rear tyres' });
     expect(position('belt')).toBeUndefined();
     expect(migrated.prepare('SELECT COUNT(*) AS n FROM part_catalogue_moves').get()).toEqual({ n: 0 });
+    migrated.close();
+  });
+
+  it('keeps Required Parts and leaves Tasks unlinked when Tasks get their part', () => {
+    const path = join(dir, 'garage.sqlite');
+    const old = openDatabase(path, undefined, 12);
+    old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v1', 'default', 'car', 'Old car')`);
+    old.exec(`INSERT INTO maintenance_tasks (id, vehicle_id, name, interval_km) VALUES ('t1', 'v1', 'Oil', 10000)`);
+    old.exec(`INSERT INTO part_specs (id, vehicle_id, name, unit) VALUES ('p1', 'v1', 'Oil', 'litre')`);
+    old.exec(`INSERT INTO required_parts (task_id, part_spec_id, quantity, sort) VALUES ('t1', 'p1', 4.5, 0)`);
+    old.close();
+    const migrated = openDatabase(path);
+    expect(migrated.prepare('SELECT standard_part FROM maintenance_tasks').get()).toEqual({ standard_part: null });
+    expect(migrated.prepare('SELECT task_id, part_spec_id, quantity FROM required_parts').all()).toEqual([
+      { task_id: 't1', part_spec_id: 'p1', quantity: 4.5 },
+    ]);
     migrated.close();
   });
 

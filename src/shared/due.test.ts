@@ -16,6 +16,7 @@ function task(overrides: Partial<MaintenanceTask> = {}): MaintenanceTask {
     baselineDate: null,
     baselineOdometer: null,
     workshopNotes: null,
+    standardPart: null,
     requiredParts: [],
     tools: [],
     specIds: [],
@@ -254,5 +255,44 @@ describe('vehicleDue', () => {
       ['brake-fluid', 'ok'],
       ['new', 'unknown'],
     ]);
+  });
+
+  it('pauses a Task whose part is not on the vehicle, last of all, keeping when it was last done', () => {
+    const spec = (id: string, notFitted: boolean) => ({
+      id,
+      vehicleId: 'bike',
+      standardPart: id === 'oil-spec' ? ('moto_engine_oil' as const) : ('moto_chain' as const),
+      notFitted,
+      name: id,
+      nameFr: null,
+      characteristics: null,
+      oemReference: null,
+      partNumbers: null,
+      unit: 'piece' as const,
+    });
+    const snapshot: Snapshot = {
+      vehicles: [],
+      tasks: [task({ id: 'oil', standardPart: 'moto_engine_oil' }), task({ id: 'chain', standardPart: 'moto_chain' }), task({ id: 'belt', standardPart: 'moto_drive_belt' })],
+      services: [service('2025-09-01', 15_000, ['oil', 'chain'])],
+      readings: [],
+      vehicleSpecs: [],
+      partSpecs: [spec('oil-spec', false), spec('chain-spec', true)],
+      positions: [],
+      inspections: [],
+      modifications: [],
+      documents: [],
+      drivers: [],
+      policies: [],
+      claims: [],
+      quotes: [],
+    };
+    const { due } = vehicleDue(snapshot, 'bike', '2026-10-01');
+    // The chain is set aside; the vehicle does not list a drive belt at all.
+    expect(due.map((d) => [d.taskId, d.status])).toEqual([
+      ['oil', 'overdue'],
+      ['chain', 'paused'],
+      ['belt', 'paused'],
+    ]);
+    expect(due[1]).toMatchObject({ lastDone: { date: '2025-09-01' }, dueDate: null });
   });
 });

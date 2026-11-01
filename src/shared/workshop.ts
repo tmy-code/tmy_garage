@@ -97,8 +97,8 @@ export const SHOPPING_HORIZON_DAYS = 60;
 
 export interface ShoppingItem {
   partSpec: PartSpec;
-  /** Total needed across the upcoming Tasks. */
-  quantity: number;
+  /** Total needed across the upcoming Tasks; null while one of them does not say how much. */
+  quantity: number | null;
   tasks: { task: MaintenanceTask; due: DueInfo }[];
   lastUsed: PartUsage | null;
 }
@@ -131,7 +131,7 @@ export function shoppingList(snapshot: Snapshot, today: IsoDate): VehicleShoppin
         for (const r of required) {
           const item = items.get(r.partSpecId);
           if (item) {
-            item.quantity += r.quantity;
+            item.quantity = item.quantity === null || r.quantity === null ? null : item.quantity + r.quantity;
             item.tasks.push({ task, due });
           } else {
             const partSpec = partSpecs.get(r.partSpecId)!;
@@ -155,6 +155,7 @@ export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
       ...t,
       nameFr: t.nameFr ?? null,
       workshopNotes: t.workshopNotes ?? null,
+      standardPart: t.standardPart ?? null,
       requiredParts: t.requiredParts ?? [],
       tools: t.tools ?? [],
       specIds: t.specIds ?? [],

@@ -157,6 +157,11 @@ export const taskInput = z
       .transform((v) => v ?? null),
     baselineDate: isoDate.nullish().transform((v) => v ?? null),
     baselineOdometer: odometer.nullish().transform((v) => v ?? null),
+    standardPart: z
+      .string()
+      .min(1)
+      .nullish()
+      .transform((v) => v ?? null),
   })
   .refine((t) => t.intervalKm !== null || t.intervalMonths !== null, {
     message: 'An Interval needs a distance, a duration, or both',
@@ -167,7 +172,7 @@ export const copyTasksInput = z.object({ fromVehicleId: z.string().min(1) });
 
 export const workshopInput = z.object({
   workshopNotes: optionalText(20_000),
-  requiredParts: z.array(z.object({ partSpecId: z.string().min(1), quantity })).max(50),
+  requiredParts: z.array(z.object({ partSpecId: z.string().min(1), quantity: quantity.nullish().transform((v) => v ?? null) })).max(50),
   tools: z.array(z.string().trim().min(1).max(120)).max(50),
   specIds: z.array(z.string().min(1)).max(100),
 });

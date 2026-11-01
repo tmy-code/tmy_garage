@@ -177,6 +177,7 @@ const toTask = (r: Row, w: Workshop = noWorkshop()): MaintenanceTask => ({
   baselineDate: r.baseline_date,
   baselineOdometer: r.baseline_odometer,
   workshopNotes: r.workshop_notes,
+  standardPart: r.standard_part,
   ...w,
 });
 
@@ -574,14 +575,17 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     if (uploadsDir) for (const d of docs) rmSync(join(uploadsDir, d.id), { force: true });
   }
 
-  /** Whether a Part Spec holds anything the user filled in or relies on, so it is not quietly set aside. */
+  /**
+   * Whether a Part Spec holds anything the user filled in or relies on, so it is not quietly set aside. A Required
+   * Part with no quantity is only what a new Vehicle's tasks start with, not something the user filled in.
+   */
   function partSpecInUse(id: string): boolean {
     return (
       db
         .prepare(
           `SELECT 1 FROM part_specs
              WHERE id = ? AND (coalesce(characteristics, '') <> '' OR coalesce(oem_reference, '') <> '' OR coalesce(part_numbers, '') <> '')
-           UNION ALL SELECT 1 FROM required_parts WHERE part_spec_id = ?
+           UNION ALL SELECT 1 FROM required_parts WHERE part_spec_id = ? AND quantity IS NOT NULL
            UNION ALL SELECT 1 FROM parts_used WHERE part_spec_id = ?`,
         )
         .get(id, id, id) !== undefined
@@ -739,9 +743,20 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(id, garageId, ...vehicleValues(v));
       syncStandardParts(id, v);
-      // A new Vehicle starts with a Maintenance Task per part it has, at the catalogue's generic interval.
-      const task = db.prepare('INSERT INTO maintenance_tasks (id, vehicle_id, name, name_fr, interval_km, interval_months) VALUES (?, ?, ?, ?, ?, ?)');
-      for (const t of starterTasks(v)) task.run(randomUUID(), id, t.name, t.nameFr, t.intervalKm, t.intervalMonths);
+      // A new Vehicle starts with a Maintenance Task per part it has, at the catalogue's generic interval, needing
+      // that part (and the oil filter with the oil); how much is left for the user to fill in.
+      const task = db.prepare(
+        'INSERT INTO maintenance_tasks (id, vehicle_id, name, name_fr, interval_km, interval_months, standard_part) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      );
+      const required = db.prepare(
+        `INSERT INTO required_parts (task_id, part_spec_id, quantity, sort)
+         SELECT ?, id, NULL, ? FROM part_specs WHERE vehicle_id = ? AND standard_part = ?`,
+      );
+      for (const t of starterTasks(v)) {
+        const taskId = randomUUID();
+        task.run(taskId, id, t.name, t.nameFr, t.intervalKm, t.intervalMonths, t.standardPart);
+        t.parts.forEach((code, i) => required.run(taskId, i, id, code));
+      }
     });
     return c.json(toVehicle(vehicleOrThrow(id)), 201);
   });
@@ -798,6 +813,16 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
 
   // --- Maintenance Tasks ---
 
+  /** Whether the Vehicle lists this Standard Part (even set aside), so a Task can say it replaces it. */
+  function hasStandardPart(vehicleId: string, code: string): boolean {
+    return db.prepare('SELECT 1 FROM part_specs WHERE vehicle_id = ? AND standard_part = ?').get(vehicleId, code) !== undefined;
+  }
+
+  function standardPartOrThrow(vehicleId: string, code: string | null): string | null {
+    if (code !== null && !hasStandardPart(vehicleId, code)) throw new HttpError(422, 'The part is not one of this vehicle’s Standard Parts');
+    return code;
+  }
+
   app.post('/api/vehicles/:id/tasks', async (c) => {
     const vehicleId = c.req.param('id');
     vehicleOrThrow(vehicleId);
@@ -805,8 +830,9 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     const id = randomUUID();
     db.prepare(
       `INSERT INTO maintenance_tasks
-         (id, vehicle_id, name, name_fr, interval_km, interval_months, official_interval_km, official_interval_months, baseline_date, baseline_odometer)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, vehicle_id, name, name_fr, interval_km, interval_months, official_interval_km, official_interval_months, baseline_date,
+          baseline_odometer, standard_part)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       id,
       vehicleId,
@@ -818,6 +844,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       t.officialIntervalMonths,
       t.baselineDate,
       t.baselineOdometer,
+      standardPartOrThrow(vehicleId, t.standardPart),
     );
     return c.json(loadTask(id), 201);
   });
@@ -830,10 +857,12 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     if (fromVehicleId === vehicleId) throw new HttpError(422, 'Cannot copy a Vehicle onto itself');
     const source = db.prepare('SELECT * FROM maintenance_tasks WHERE vehicle_id = ? ORDER BY created_at').all(fromVehicleId) as Row[];
     const insert = db.prepare(
-      `INSERT INTO maintenance_tasks (id, vehicle_id, name, name_fr, interval_km, interval_months, official_interval_km, official_interval_months)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO maintenance_tasks (id, vehicle_id, name, name_fr, interval_km, interval_months, official_interval_km, official_interval_months,
+         standard_part)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
-    // History is not copied: the copies start with no baseline, since they were never done on this Vehicle.
+    // History is not copied: the copies start with no baseline, since they were never done on this Vehicle. A copy
+    // replaces the same Standard Part only if this Vehicle lists it too.
     transaction(() => {
       for (const t of source) {
         insert.run(
@@ -845,6 +874,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
           t.interval_months,
           t.official_interval_km,
           t.official_interval_months,
+          t.standard_part && hasStandardPart(vehicleId, t.standard_part) ? t.standard_part : null,
         );
       }
     });
@@ -853,11 +883,11 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
 
   app.put('/api/tasks/:id', async (c) => {
     const id = c.req.param('id');
-    taskOrThrow(id);
+    const task = taskOrThrow(id);
     const t = await parse(c, taskInput);
     db.prepare(
       `UPDATE maintenance_tasks SET name = ?, name_fr = ?, interval_km = ?, interval_months = ?, official_interval_km = ?,
-         official_interval_months = ?, baseline_date = ?, baseline_odometer = ?
+         official_interval_months = ?, baseline_date = ?, baseline_odometer = ?, standard_part = ?
        WHERE id = ?`,
     ).run(
       t.name,
@@ -868,6 +898,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       t.officialIntervalMonths,
       t.baselineDate,
       t.baselineOdometer,
+      standardPartOrThrow(task.vehicle_id, t.standardPart),
       id,
     );
     return c.json(loadTask(id));

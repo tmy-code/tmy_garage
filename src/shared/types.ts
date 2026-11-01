@@ -56,6 +56,8 @@ export interface MaintenanceTask {
   baselineOdometer: number | null;
   /** Free-text steps, warnings and links for doing the job. */
   workshopNotes: string | null;
+  /** The Standard Part the Task replaces, if any; the Task is paused while that part is not on the Vehicle. */
+  standardPart: StandardPartKey | null;
   requiredParts: RequiredPart[];
   /** Required Tools, in checklist order. */
   tools: string[];
@@ -66,7 +68,8 @@ export interface MaintenanceTask {
 /** A Part Spec and the quantity of it a Maintenance Task needs. */
 export interface RequiredPart {
   partSpecId: string;
-  quantity: number;
+  /** Null until the user says how much. */
+  quantity: number | null;
 }
 
 /** Technical reference data about a Vehicle; a Torque Spec when kind is 'torque'. */

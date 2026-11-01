@@ -18,7 +18,8 @@ export interface Usage {
   estimatedOdometer: number | null;
 }
 
-export type DueStatus = 'overdue' | 'dueSoon' | 'ok' | 'unknown';
+/** 'paused': the Task replaces a Standard Part that is not on the Vehicle, so it is not due at all. */
+export type DueStatus = 'overdue' | 'dueSoon' | 'ok' | 'unknown' | 'paused';
 
 export interface DueInfo {
   taskId: string;
@@ -138,7 +139,27 @@ export function computeDue(task: MaintenanceTask, services: Service[], usage: Us
   return { taskId: task.id, status, lastDone, timeDueDate, dueOdometer, distanceDueDate, dueDate, kmRemaining, daysRemaining };
 }
 
-const STATUS_ORDER: Record<DueStatus, number> = { overdue: 0, dueSoon: 1, ok: 2, unknown: 3 };
+/** Whether a Task replaces a Standard Part its Vehicle does not have (set aside, or never on its Build). */
+export function isPaused(snapshot: Snapshot, task: MaintenanceTask): boolean {
+  if (task.standardPart === null) return false;
+  return !snapshot.partSpecs.some((p) => p.vehicleId === task.vehicleId && p.standardPart === task.standardPart && !p.notFitted);
+}
+
+function pausedDue(task: MaintenanceTask, services: Service[]): DueInfo {
+  return {
+    taskId: task.id,
+    status: 'paused',
+    lastDone: lastDoneOf(task, services),
+    timeDueDate: null,
+    dueOdometer: null,
+    distanceDueDate: null,
+    dueDate: null,
+    kmRemaining: null,
+    daysRemaining: null,
+  };
+}
+
+const STATUS_ORDER: Record<DueStatus, number> = { overdue: 0, dueSoon: 1, ok: 2, unknown: 3, paused: 4 };
 
 export function compareDue(a: DueInfo, b: DueInfo): number {
   const byStatus = STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
@@ -149,13 +170,13 @@ export function compareDue(a: DueInfo, b: DueInfo): number {
   return a.dueDate < b.dueDate ? -1 : 1;
 }
 
-/** Due information for every Maintenance Task of a Vehicle, most urgent first. */
+/** Due information for every Maintenance Task of a Vehicle, most urgent first; paused Tasks come last. */
 export function vehicleDue(snapshot: Snapshot, vehicleId: string, today: IsoDate): { usage: Usage; due: DueInfo[] } {
   const usage = usageOf(snapshot, vehicleId, today);
   const services = snapshot.services.filter((s) => s.vehicleId === vehicleId);
   const due = snapshot.tasks
     .filter((t) => t.vehicleId === vehicleId)
-    .map((t) => computeDue(t, services, usage, today))
+    .map((t) => (isPaused(snapshot, t) ? pausedDue(t, services) : computeDue(t, services, usage, today)))
     .sort(compareDue);
   return { usage, due };
 }
