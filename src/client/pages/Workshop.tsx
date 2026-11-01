@@ -4,7 +4,7 @@ import { todayIso } from '../../shared/dates.ts';
 import { vehicleDue } from '../../shared/due.ts';
 import type { PartUnit, VehicleSpecKind } from '../../shared/schemas.ts';
 import type { FitmentPosition, MaintenanceTask, PartSpec, PartUsed, Snapshot, Vehicle, VehicleSpec } from '../../shared/types.ts';
-import { fitments, lastUsed, partSpecsOf, SHOPPING_HORIZON_DAYS, shoppingList, type FittedItem } from '../../shared/workshop.ts';
+import { fitments, lastUsed, partSpecsOf, positionsOf, SHOPPING_HORIZON_DAYS, shoppingList, type FittedItem } from '../../shared/workshop.ts';
 import { confirmDelete, Field, FormError, Layout, NeedsConnection, StatusChip, useWide } from '../components.tsx';
 import {
   describeDue,
@@ -16,6 +16,7 @@ import {
   parseNumber,
   partName,
   partReferences,
+  positionName,
   taskName,
 } from '../format.ts';
 import { VehicleIcon } from '../brands.tsx';
@@ -243,6 +244,17 @@ export function SpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: S
 
 // --- Part Specs ---
 
+/** Points to the vehicle form while some of what decides the Vehicle's parts is unknown. */
+function TraitsNudge({ vehicle }: { vehicle: Vehicle }) {
+  const t = useT();
+  if (!relevantTraits(vehicle.kind, vehicle.fuel).some((trait) => vehicle[trait] === null)) return null;
+  return (
+    <a className="nudge" href={`#/vehicles/${vehicle.id}/edit`}>
+      {t.workshop.traitsNudge}
+    </a>
+  );
+}
+
 function PartSpecEditor({ vehicle, existing, editor }: { vehicle: Vehicle; existing?: PartSpec; editor: ReturnType<typeof useEditor> }) {
   const t = useT();
   const [name, setName] = useState(existing?.name ?? '');
@@ -413,11 +425,7 @@ export function PartSpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapsho
     >
       <NeedsConnection />
       <p className="muted">{t.workshop.partsIntro}</p>
-      {relevantTraits(vehicle.kind, vehicle.fuel).some((trait) => vehicle[trait] === null) ? (
-        <a className="nudge" href={`#/vehicles/${vehicle.id}/edit`}>
-          {t.workshop.traitsNudge}
-        </a>
-      ) : null}
+      <TraitsNudge vehicle={vehicle} />
       {side ? (
         <div className="split">
           <div>{lists}</div>
@@ -432,28 +440,15 @@ export function PartSpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapsho
 
 // --- Fitment Positions and what is fitted ---
 
-function PositionEditor({
-  vehicle,
-  existing,
-  editor,
-}: {
-  vehicle: Vehicle;
-  existing?: FitmentPosition;
-  editor: ReturnType<typeof useEditor>;
-}) {
+/** Only an older, free-named position can be renamed or deleted: the others are the Vehicle's Standard Parts. */
+function PositionEditor({ existing, editor }: { existing: FitmentPosition; editor: ReturnType<typeof useEditor> }) {
   const t = useT();
-  const [name, setName] = useState(existing?.name ?? '');
+  const [name, setName] = useState(existing.name);
   return (
     <InlineEditor
-      onSubmit={() =>
-        editor.save(() =>
-          existing
-            ? online('PUT', `/api/positions/${existing.id}`, { name })
-            : online('POST', `/api/vehicles/${vehicle.id}/positions`, { name }),
-        )
-      }
+      onSubmit={() => editor.save(() => online('PUT', `/api/positions/${existing.id}`, { name }))}
       onCancel={() => editor.setEditing(null)}
-      onDelete={existing ? () => editor.remove(existing.name, () => online('DELETE', `/api/positions/${existing.id}`)) : undefined}
+      onDelete={() => editor.remove(existing.name, () => online('DELETE', `/api/positions/${existing.id}`))}
       disabled={editor.disabled}
       error={editor.error}
     >
@@ -490,65 +485,61 @@ export function FittedPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: 
   const editor = useEditor();
   const today = todayIso();
   const { usage } = useMemo(() => vehicleDue(snapshot, vehicle.id, today), [snapshot, vehicle.id, today]);
-  const list = fitments(snapshot, vehicle.id);
-
-  function addCommon() {
-    editor.save(async () => {
-      for (const name of t.workshop.common[vehicle.kind]) await online('POST', `/api/vehicles/${vehicle.id}/positions`, { name });
-    });
-  }
+  const list = fitments(snapshot, vehicle);
 
   return (
-    <Layout title={t.workshop.fittedTitle(vehicle.name)} back={`/vehicles/${vehicle.id}`} actions={<AddButton editor={editor} />}>
+    <Layout title={t.workshop.fittedTitle(vehicle.name)} back={`/vehicles/${vehicle.id}`}>
       <NeedsConnection />
       <p className="muted">{t.workshop.fittedIntro}</p>
-      {editor.editing === 'new' ? <PositionEditor vehicle={vehicle} editor={editor} /> : null}
-      {list.length === 0 && editor.editing !== 'new' ? (
-        <div className="empty">
-          <p>{t.workshop.noPositions}</p>
-          <button type="button" className="button" onClick={addCommon} disabled={editor.disabled}>
-            {t.workshop.addCommon}
-          </button>
-          <FormError error={editor.error} />
-        </div>
-      ) : null}
-      <ul className="list list-grid">
-        {list.map(({ position, current, previous }) =>
-          editor.editing === position.id ? (
-            <li key={position.id} className="editing">
-              <PositionEditor vehicle={vehicle} existing={position} editor={editor} />
-            </li>
-          ) : (
-            <li key={position.id}>
-              <div className="history-row">
-                <div className="section-head">
-                  <strong>{position.name}</strong>
-                  <button type="button" className="button button-small" onClick={() => editor.setEditing(position.id)}>
-                    {t.workshop.edit}
-                  </button>
-                </div>
-                {current ? (
-                  <FittedLine item={current} estimatedOdometer={usage.estimatedOdometer} t={t} />
+      <TraitsNudge vehicle={vehicle} />
+      {list.length === 0 ? <p className="empty">{t.workshop.noPositions}</p> : null}
+      {PART_CATEGORIES.map((category) => {
+        const items = list.filter(({ position }) => partCategory(position.standardPart) === category);
+        return items.length > 0 ? (
+          <section key={category}>
+            <h2>{t.workshop.partCategories[category]}</h2>
+            <ul className="list list-grid">
+              {items.map(({ position, current, previous }) =>
+                editor.editing === position.id ? (
+                  <li key={position.id} className="editing">
+                    <PositionEditor existing={position} editor={editor} />
+                  </li>
                 ) : (
-                  <span className="muted">{t.workshop.nothingFitted}</span>
-                )}
-                {previous.length > 0 ? (
-                  <details>
-                    <summary className="muted">
-                      {t.workshop.previously} {t.workshop.count(previous.length)}
-                    </summary>
-                    {previous.map((p, i) => (
-                      <p key={i} className="history-row">
-                        <FittedLine item={p} estimatedOdometer={null} t={t} />
-                      </p>
-                    ))}
-                  </details>
-                ) : null}
-              </div>
-            </li>
-          ),
-        )}
-      </ul>
+                  <li key={position.id}>
+                    <div className="history-row">
+                      <div className="section-head">
+                        <strong>{positionName(position, t)}</strong>
+                        {position.standardPart ? null : (
+                          <button type="button" className="button button-small" onClick={() => editor.setEditing(position.id)}>
+                            {t.workshop.edit}
+                          </button>
+                        )}
+                      </div>
+                      {current ? (
+                        <FittedLine item={current} estimatedOdometer={usage.estimatedOdometer} t={t} />
+                      ) : (
+                        <span className="muted">{t.workshop.nothingFitted}</span>
+                      )}
+                      {previous.length > 0 ? (
+                        <details>
+                          <summary className="muted">
+                            {t.workshop.previously} {t.workshop.count(previous.length)}
+                          </summary>
+                          {previous.map((p, i) => (
+                            <p key={i} className="history-row">
+                              <FittedLine item={p} estimatedOdometer={null} t={t} />
+                            </p>
+                          ))}
+                        </details>
+                      ) : null}
+                    </div>
+                  </li>
+                ),
+              )}
+            </ul>
+          </section>
+        ) : null;
+      })}
     </Layout>
   );
 }
@@ -834,7 +825,7 @@ export function WorkshopPage({ snapshot }: { snapshot: Snapshot }) {
               </li>
               <li>
                 <a href={`#/vehicles/${v.id}/fitted`}>
-                  {t.workshop.fitted} <span className="muted">{count(snapshot.positions, v.id)}</span>
+                  {t.workshop.fitted} <span className="muted">{t.workshop.count(positionsOf(snapshot, v).length)}</span>
                 </a>
               </li>
               <li>

@@ -3,10 +3,10 @@ import { todayIso } from '../../shared/dates.ts';
 import { vehicleDue } from '../../shared/due.ts';
 import type { PartUnit } from '../../shared/schemas.ts';
 import type { OdometerReading, PartUsed, Service, Snapshot, Vehicle } from '../../shared/types.ts';
-import { lastUsed, partSpecsOf } from '../../shared/workshop.ts';
+import { lastUsed, partSpecsOf, positionsOf } from '../../shared/workshop.ts';
 import { newId } from '../api.ts';
 import { confirmDelete, Field, FormError, Layout, StatusChip } from '../components.tsx';
-import { formatKm, parseNumber, partName, taskName } from '../format.ts';
+import { formatKm, parseNumber, partName, positionName, taskName } from '../format.ts';
 import { showToast } from '../feedback.ts';
 import { useT, type Messages } from '../i18n.ts';
 import { navigate } from '../router.ts';
@@ -89,7 +89,7 @@ export function ServiceForm({
   const [notes, setNotes] = useState(existing?.notes ?? '');
   const [parts, setParts] = useState<PartDraft[]>(() => (existing?.partsUsed ?? []).map(toDraft));
   const partSpecs = partSpecsOf(snapshot, vehicle, { keep: (existing?.partsUsed ?? []).map((p) => p.partSpecId) });
-  const positions = snapshot.positions.filter((p) => p.vehicleId === vehicle.id);
+  const positions = positionsOf(snapshot, vehicle);
   const missingParts = [...selected]
     .flatMap((id) => tasks.get(id)?.requiredParts ?? [])
     .filter((r) => partSpecs.some((s) => s.id === r.partSpecId) && !parts.some((p) => p.partSpecId === r.partSpecId));
@@ -127,7 +127,7 @@ export function ServiceForm({
       added.push({
         key: nextKey++,
         partSpecId: spec.id,
-        positionId: last?.positionId ?? null,
+        positionId: last?.positionId ?? positions.find((p) => p.standardPart !== null && p.standardPart === spec.standardPart)?.id ?? null,
         description: last?.description ?? [partName(spec, t), spec.characteristics].filter(Boolean).join(' '),
         partNumber: last?.partNumber ?? '',
         quantity: String(r.quantity),
@@ -295,7 +295,7 @@ export function ServiceForm({
                         <option value="">{t.workshop.noPosition}</option>
                         {positions.map((p) => (
                           <option key={p.id} value={p.id}>
-                            {p.name}
+                            {positionName(p, t)}
                           </option>
                         ))}
                       </select>

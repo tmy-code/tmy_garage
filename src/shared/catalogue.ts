@@ -130,6 +130,12 @@ export function catalogueOrder(kind: VehicleKind, key: StandardPartKey | null): 
   return index === -1 ? Number.MAX_SAFE_INTEGER : index;
 }
 
+/** Whether a Standard Part is fitted at a position, rather than a fluid or gas that is topped up or drained. */
+export function isFitted(kind: VehicleKind, key: StandardPartKey): boolean {
+  if (key === 'acRefrigerant') return false;
+  return STANDARD_PARTS[kind].some(([k, unit]) => k === key && unit === 'piece');
+}
+
 /** Groups for listing Part Specs, in screen order. Parts that are not Standard Parts go under 'other'. */
 export const PART_CATEGORIES = ['engine', 'fluids', 'brakes', 'wheels', 'electrics', 'other'] as const;
 export type PartCategory = (typeof PART_CATEGORIES)[number];

@@ -109,7 +109,7 @@ A change that takes a Vehicle away from its factory configuration (e.g. aftermar
 _Avoid_: Mod, upgrade, customisation
 
 **Fitment Position**:
-A named location on a Vehicle that holds one Part at a time (e.g. front tyre, rear tyre, battery, chain kit). What is currently fitted there is the most recent Part Used or Modification at that position.
+A location on a Vehicle that holds one Part at a time (e.g. front tyre, rear tyre, battery, chain kit). Each Standard Part that fits the Vehicle's Build and is fitted rather than topped up (not oils, fluids or gas) is a Fitment Position; the user never adds one by hand, so a motorcycle with a chain drive has a chain kit position and one with a belt drive has a drive belt position instead. Older positions the user named before this are kept. What is currently fitted there is the most recent Part Used or Modification at that position; a Part Used for a Standard Part's Part Spec goes at that Standard Part's position.
 _Avoid_: Slot, component, location
 
 **Shopping List**:

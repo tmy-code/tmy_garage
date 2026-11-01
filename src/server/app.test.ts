@@ -225,7 +225,6 @@ describe('workshop data', () => {
       characteristics: '10W-40 JASO MA2',
       unit: 'litre',
     });
-    await created(`/api/vehicles/${bike.id}/positions`, { name: 'Rear tyre' });
     const s = await snapshot();
     expect(s.vehicleSpecs).toEqual([
       { id: torque.id, vehicleId: bike.id, kind: 'torque', name: 'Drain plug', value: '30 Nm', notes: 'New washer' },
@@ -237,7 +236,40 @@ describe('workshop data', () => {
       partNumbers: null,
       unit: 'litre',
     });
-    expect(s.positions[0]).toMatchObject({ name: 'Rear tyre' });
+    // Positions are the vehicle's fitted Standard Parts: a tyre is fitted, engine oil is not.
+    const positions = s.positions.filter((p) => p.vehicleId === bike.id).map((p) => p.standardPart);
+    expect(positions).toEqual(expect.arrayContaining(['rearTyre', 'chainKit', 'battery']));
+    expect(positions).not.toContain('engineOil');
+  });
+
+  it('gives positions only from the Standard Parts, which cannot be added, renamed or deleted by hand', async () => {
+    const bike = await createVehicle();
+    const rear = (await snapshot()).positions.find((p) => p.vehicleId === bike.id && p.standardPart === 'rearTyre')!;
+    expect((await call('POST', `/api/vehicles/${bike.id}/positions`, { name: 'Top box' })).status).toBe(404);
+    expect((await call('PUT', `/api/positions/${rear.id}`, { name: 'Renamed' })).status).toBe(409);
+    expect((await call('DELETE', `/api/positions/${rear.id}`)).status).toBe(409);
+    // An older, free-named position is kept and can still be renamed or deleted.
+    db.exec(`INSERT INTO fitment_positions (id, vehicle_id, name) VALUES ('old', '${bike.id}', 'Top box')`);
+    expect((await call('PUT', '/api/positions/old', { name: 'Top case' })).status).toBe(200);
+    expect((await snapshot()).positions.find((p) => p.id === 'old')).toMatchObject({ standardPart: null, name: 'Top case' });
+    expect((await call('DELETE', '/api/positions/old')).status).toBe(204);
+  });
+
+  it('gives a motorcycle with a belt drive a drive belt position and no chain kit one', async () => {
+    const res = await call('POST', '/api/vehicles', { kind: 'motorcycle', name: 'Belt bike', finalDrive: 'belt' });
+    const bike = (await res.json()) as Vehicle;
+    const positions = (await snapshot()).positions.filter((p) => p.vehicleId === bike.id).map((p) => p.standardPart);
+    expect(positions).toContain('finalDriveBelt');
+    expect(positions).not.toContain('chainKit');
+  });
+
+  it('adds the positions to vehicles created before positions came from the Standard Parts', async () => {
+    db.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('old', 'default', 'motorcycle', 'Old bike')`);
+    const later = createApp(db);
+    const s = (await (await later.request('/api/snapshot')).json()) as Snapshot;
+    expect(s.positions.filter((p) => p.vehicleId === 'old').map((p) => p.standardPart)).toEqual(
+      expect.arrayContaining(['frontTyre', 'rearTyre', 'chainKit']),
+    );
   });
 
   /** The Standard Parts a vehicle lists, minus those marked as not on it. */
@@ -411,7 +443,7 @@ describe('workshop data', () => {
       characteristics: '180/55 ZR17',
       unit: 'piece',
     });
-    const rear = await created<FitmentPosition>(`/api/vehicles/${bike.id}/positions`, { name: 'Rear tyre' });
+    const rear = (await snapshot()).positions.find((p) => p.vehicleId === bike.id && p.standardPart === 'rearTyre')!;
     const part = {
       partSpecId: tyre.id,
       positionId: rear.id,
@@ -435,9 +467,25 @@ describe('workshop data', () => {
     await call('PUT', '/api/services/svc-00001', body);
     expect((await snapshot()).services[0]!.partsUsed).toEqual([part]);
 
-    expect((await call('DELETE', `/api/positions/${rear.id}`)).status).toBe(409);
     await call('DELETE', `/api/part-specs/${tyre.id}`);
     expect((await snapshot()).services[0]!.partsUsed).toEqual([{ ...part, partSpecId: null }]);
+  });
+
+  it('fits a Part Used for a Standard Part at that part’s position when none was chosen', async () => {
+    const bike = await createVehicle();
+    const task = await createTask(bike.id);
+    const s = await snapshot();
+    const chainSpec = s.partSpecs.find((p) => p.vehicleId === bike.id && p.standardPart === 'chainKit')!;
+    const chain = s.positions.find((p) => p.vehicleId === bike.id && p.standardPart === 'chainKit')!;
+    await call('PUT', '/api/services/svc-00001', {
+      id: 'svc-00001',
+      vehicleId: bike.id,
+      date: '2026-10-01',
+      odometer: 18000,
+      taskIds: [task.id],
+      partsUsed: [{ partSpecId: chainSpec.id, positionId: null, description: 'DID 520 kit', quantity: 1, unit: 'piece' }],
+    });
+    expect((await snapshot()).services[0]!.partsUsed[0]).toMatchObject({ partSpecId: chainSpec.id, positionId: chain.id });
   });
 
   it('accepts a Service queued before Parts Used existed, and drops links to deleted data', async () => {
@@ -506,7 +554,9 @@ describe('technical inspections and modifications', () => {
 
   it('stores Modifications, and keeps a position in use from being deleted', async () => {
     const bike = await createVehicle();
-    const position = (await (await call('POST', `/api/vehicles/${bike.id}/positions`, { name: 'Exhaust' })).json()) as FitmentPosition;
+    // An older, free-named position: those of Standard Parts can never be deleted anyway.
+    db.exec(`INSERT INTO fitment_positions (id, vehicle_id, name) VALUES ('exhaust', '${bike.id}', 'Exhaust')`);
+    const position = { id: 'exhaust' };
     const body = {
       name: 'Slip-on exhaust',
       fittedDate: '2026-05-01',

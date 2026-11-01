@@ -3,6 +3,7 @@ import { todayIso } from '../../shared/dates.ts';
 import { vehicleDue } from '../../shared/due.ts';
 import { nextInspection, openDefects } from '../../shared/inspections.ts';
 import { currentCover, renewal } from '../../shared/insurance.ts';
+import { positionsOf } from '../../shared/workshop.ts';
 import type { PartUsed, Snapshot, Vehicle } from '../../shared/types.ts';
 import { Layout, StatusChip } from '../components.tsx';
 import { describeDue, describeInterval, describeOfficialInterval, formatDate, formatKm, formatMoney, taskName } from '../format.ts';
@@ -31,7 +32,7 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
   const defects = openDefects(snapshot, vehicle).length;
   const documentCount = snapshot.documents.filter((d) => d.vehicleId === vehicle.id).length;
   const modificationCount = snapshot.modifications.filter((m) => m.vehicleId === vehicle.id).length;
-  const positionCount = snapshot.positions.filter((p) => p.vehicleId === vehicle.id).length;
+  const positionCount = positionsOf(snapshot, vehicle).length;
   const partSpecCount = snapshot.partSpecs.filter((p) => p.vehicleId === vehicle.id).length;
   const specCount = snapshot.vehicleSpecs.filter((s) => s.vehicleId === vehicle.id).length;
   const cover = currentCover(snapshot, vehicle.id, today);

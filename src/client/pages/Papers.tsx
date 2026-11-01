@@ -4,7 +4,8 @@ import { nextInspection, openDefects } from '../../shared/inspections.ts';
 import type { DefectSeverity, DocumentOwnerKind, DocumentType, InspectionResult } from '../../shared/schemas.ts';
 import type { GarageDocument, Modification, Snapshot, TechnicalInspection, Vehicle } from '../../shared/types.ts';
 import { confirmDelete, Field, FormError, Layout, NeedsConnection } from '../components.tsx';
-import { formatDate, formatKm, parseNumber } from '../format.ts';
+import { formatDate, formatKm, parseNumber, positionName } from '../format.ts';
+import { positionsOf } from '../../shared/workshop.ts';
 import { messages, useT, type Messages } from '../i18n.ts';
 import { Icon } from '../icons.tsx';
 import { navigate } from '../router.ts';
@@ -442,7 +443,7 @@ export function InspectionForm({ vehicle, snapshot, existing }: { vehicle: Vehic
 export function ModificationsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: Snapshot }) {
   const t = useT();
   const mods = snapshot.modifications.filter((m) => m.vehicleId === vehicle.id).sort((a, b) => (a.fittedDate < b.fittedDate ? 1 : -1));
-  const positions = new Map(snapshot.positions.map((p) => [p.id, p.name]));
+  const positions = new Map(snapshot.positions.map((p) => [p.id, positionName(p, t)]));
   return (
     <Layout
       title={t.papers.modificationsTitle(vehicle.name)}
@@ -479,7 +480,7 @@ export function ModificationsPage({ vehicle, snapshot }: { vehicle: Vehicle; sna
 
 export function ModificationForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; snapshot: Snapshot; existing?: Modification }) {
   const t = useT();
-  const positions = snapshot.positions.filter((p) => p.vehicleId === vehicle.id);
+  const positions = positionsOf(snapshot, vehicle);
   const [name, setName] = useState(existing?.name ?? '');
   const [fittedDate, setFittedDate] = useState(existing?.fittedDate ?? todayIso());
   const [fittedOdometer, setFittedOdometer] = useState(existing?.fittedOdometer != null ? String(existing.fittedOdometer) : '');
@@ -538,7 +539,7 @@ export function ModificationForm({ vehicle, snapshot, existing }: { vehicle: Veh
                 <option value="">{t.papers.noPosition}</option>
                 {positions.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name}
+                    {positionName(p, t)}
                   </option>
                 ))}
               </select>

@@ -53,9 +53,26 @@ export interface Fitment {
   previous: FittedItem[];
 }
 
-export function fitments(snapshot: Snapshot, vehicleId: string): Fitment[] {
+/**
+ * A Vehicle's Fitment Positions in catalogue order: those of its fitted Standard Parts, then older free-named ones.
+ * A Standard Part marked as not on the Vehicle hides its position, unless something was already fitted there.
+ */
+export function positionsOf(snapshot: Snapshot, vehicle: Vehicle): FitmentPosition[] {
+  const notFitted = new Set(
+    snapshot.partSpecs.filter((p) => p.vehicleId === vehicle.id && p.notFitted && p.standardPart).map((p) => p.standardPart),
+  );
+  const used = new Set([
+    ...snapshot.services.filter((s) => s.vehicleId === vehicle.id).flatMap((s) => s.partsUsed.map((p) => p.positionId)),
+    ...snapshot.modifications.filter((m) => m.vehicleId === vehicle.id).map((m) => m.positionId),
+  ]);
   return snapshot.positions
-    .filter((p) => p.vehicleId === vehicleId)
+    .filter((p) => p.vehicleId === vehicle.id && (!p.standardPart || !notFitted.has(p.standardPart) || used.has(p.id)))
+    .sort((a, b) => catalogueOrder(vehicle.kind, a.standardPart) - catalogueOrder(vehicle.kind, b.standardPart));
+}
+
+export function fitments(snapshot: Snapshot, vehicle: Vehicle): Fitment[] {
+  const vehicleId = vehicle.id;
+  return positionsOf(snapshot, vehicle)
     .map((position) => {
       const items: FittedItem[] = [
         ...usages(snapshot, vehicleId, (p) => p.positionId === position.id).map((u) => ({
@@ -151,7 +168,7 @@ export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
       standardPart: p.standardPart ?? null,
       notFitted: p.notFitted ?? false,
     })),
-    positions: snapshot.positions ?? [],
+    positions: (snapshot.positions ?? []).map((p) => ({ ...p, standardPart: p.standardPart ?? null })),
     vehicles: snapshot.vehicles.map((v) => ({
       ...v,
       firstRegistration: v.firstRegistration ?? null,

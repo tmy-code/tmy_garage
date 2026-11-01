@@ -340,6 +340,11 @@ const MIGRATIONS: string[] = [
   ALTER TABLE vehicles ADD COLUMN final_drive TEXT CHECK (final_drive IN ('chain', 'belt', 'shaft'));
   ALTER TABLE vehicles ADD COLUMN cooling TEXT CHECK (cooling IN ('liquid', 'air'));
   `,
+  `
+  -- A Fitment Position is now one of the Vehicle's fitted Standard Parts; older free-named ones keep a null here.
+  ALTER TABLE fitment_positions ADD COLUMN standard_part TEXT;
+  CREATE UNIQUE INDEX fitment_positions_standard ON fitment_positions (vehicle_id, standard_part) WHERE standard_part IS NOT NULL;
+  `,
 ];
 
 function schemaVersion(db: DatabaseSync): number {

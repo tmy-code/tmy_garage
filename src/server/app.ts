@@ -49,7 +49,7 @@ import type {
   Vehicle,
   VehicleSpec,
 } from '../shared/types.ts';
-import { cleanTraits, partFits, STANDARD_PARTS, type Traits } from '../shared/catalogue.ts';
+import { cleanTraits, isFitted, partFits, STANDARD_PARTS, type StandardPartKey, type Traits } from '../shared/catalogue.ts';
 import type { ClaimInput, TermInput, VehicleInput, VehicleKind } from '../shared/schemas.ts';
 import { todayIso } from '../shared/dates.ts';
 import { DEFAULT_GARAGE_ID } from './db.ts';
@@ -148,7 +148,7 @@ const toPartSpec = (r: Row): PartSpec => ({
   notFitted: r.not_fitted === 1,
 });
 
-const toPosition = (r: Row): FitmentPosition => ({ id: r.id, vehicleId: r.vehicle_id, name: r.name });
+const toPosition = (r: Row): FitmentPosition => ({ id: r.id, vehicleId: r.vehicle_id, standardPart: r.standard_part, name: r.name });
 
 const toModification = (r: Row): Modification => ({
   id: r.id,
@@ -550,11 +550,24 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       const fits = partFits(kind, key, after);
       const id = rows.get(key);
       if (id === undefined) {
-        if (fits) insert.run(randomUUID(), vehicleId, key, key, unit);
+        if (fits) {
+          insert.run(randomUUID(), vehicleId, key, key, unit);
+          rows.set(key, 'new');
+        }
       } else if (partFits(kind, key, before) !== fits) {
         if (fits) setFitted.run(0, id);
         else if (!partSpecInUse(id)) setFitted.run(1, id);
       }
+    }
+    // Each fitted Standard Part also has a position; the screens hide it while the part is marked as not on the Vehicle.
+    const hasPosition = new Set(
+      (db.prepare('SELECT standard_part FROM fitment_positions WHERE vehicle_id = ? AND standard_part IS NOT NULL').all(vehicleId) as Row[]).map(
+        (r) => r.standard_part as string,
+      ),
+    );
+    const addPosition = db.prepare('INSERT INTO fitment_positions (id, vehicle_id, name, standard_part) VALUES (?, ?, ?, ?)');
+    for (const key of rows.keys()) {
+      if (isFitted(kind, key as StandardPartKey) && !hasPosition.has(key)) addPosition.run(randomUUID(), vehicleId, key, key);
     }
   }
 
@@ -842,18 +855,11 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     return c.body(null, 204);
   });
 
-  app.post('/api/vehicles/:id/positions', async (c) => {
-    const vehicleId = c.req.param('id');
-    vehicleOrThrow(vehicleId);
-    const p = await parse(c, positionInput);
-    const id = randomUUID();
-    db.prepare('INSERT INTO fitment_positions (id, vehicle_id, name) VALUES (?, ?, ?)').run(id, vehicleId, p.name);
-    return c.json(toPosition(ownedRowOrThrow('fitment_positions', id, 'Fitment Position')), 201);
-  });
-
+  // Positions come from the Vehicle's Standard Parts, so none is added by hand; only older free-named ones can be renamed or deleted.
   app.put('/api/positions/:id', async (c) => {
     const id = c.req.param('id');
-    ownedRowOrThrow('fitment_positions', id, 'Fitment Position');
+    const row = ownedRowOrThrow('fitment_positions', id, 'Fitment Position');
+    if (row.standard_part) throw new HttpError(409, 'The position of a Standard Part cannot be renamed');
     const p = await parse(c, positionInput);
     db.prepare('UPDATE fitment_positions SET name = ? WHERE id = ?').run(p.name, id);
     return c.json(toPosition(ownedRowOrThrow('fitment_positions', id, 'Fitment Position')));
@@ -861,7 +867,8 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
 
   app.delete('/api/positions/:id', (c) => {
     const id = c.req.param('id');
-    ownedRowOrThrow('fitment_positions', id, 'Fitment Position');
+    const row = ownedRowOrThrow('fitment_positions', id, 'Fitment Position');
+    if (row.standard_part) throw new HttpError(409, 'The position of a Standard Part cannot be deleted');
     const used = db
       .prepare(
         'SELECT (SELECT COUNT(*) FROM parts_used WHERE position_id = ?) + (SELECT COUNT(*) FROM modifications WHERE position_id = ?) AS n',
@@ -1348,11 +1355,22 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     // A Service logged offline may refer to a Part Spec or position deleted since: keep the Part Used, drop the link.
     const belongs = (table: string, id: string | null) =>
       id !== null && db.prepare(`SELECT 1 FROM ${table} WHERE id = ? AND vehicle_id = ?`).get(id, s.vehicleId) !== undefined;
-    const partsUsed = s.partsUsed.map((p) => ({
-      ...p,
-      partSpecId: belongs('part_specs', p.partSpecId) ? p.partSpecId : null,
-      positionId: belongs('fitment_positions', p.positionId) ? p.positionId : null,
-    }));
+    // A Part Used for a Standard Part's Part Spec goes at that Standard Part's position unless another one was chosen.
+    const positionOfSpec = (partSpecId: string) =>
+      (
+        db
+          .prepare(
+            `SELECT pos.id FROM part_specs ps
+               JOIN fitment_positions pos ON pos.vehicle_id = ps.vehicle_id AND pos.standard_part = ps.standard_part
+             WHERE ps.id = ?`,
+          )
+          .get(partSpecId) as Row | undefined
+      )?.id ?? null;
+    const partsUsed = s.partsUsed.map((p) => {
+      const partSpecId = belongs('part_specs', p.partSpecId) ? p.partSpecId : null;
+      const chosen = belongs('fitment_positions', p.positionId) ? p.positionId : null;
+      return { ...p, partSpecId, positionId: chosen ?? (partSpecId ? positionOfSpec(partSpecId) : null) };
+    });
     transaction(() => {
       db.prepare(
         `INSERT INTO services (id, vehicle_id, date, odometer, notes) VALUES (?, ?, ?, ?, ?)

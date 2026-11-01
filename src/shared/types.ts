@@ -105,10 +105,13 @@ export interface PartSpec {
   notFitted: boolean;
 }
 
-/** A named location on a Vehicle that holds one Part at a time. */
+/** A location on a Vehicle that holds one Part at a time: one of its Standard Parts, or an older free-named one. */
 export interface FitmentPosition {
   id: string;
   vehicleId: string;
+  /** Which Standard Part this is; null for a position named by the user before positions came from the catalogue. */
+  standardPart: StandardPartKey | null;
+  /** Only meaningful when standardPart is null: a Standard Part is named by the interface language. */
   name: string;
 }
 

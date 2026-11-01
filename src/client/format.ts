@@ -1,6 +1,6 @@
 import { effectiveInterval, type DueInfo } from '../shared/due.ts';
 import type { PartUnit } from '../shared/schemas.ts';
-import type { MaintenanceTask, PartSpec } from '../shared/types.ts';
+import type { FitmentPosition, MaintenanceTask, PartSpec } from '../shared/types.ts';
 import { messages, type Messages } from './i18n.ts';
 
 // Distances use French digit grouping ("24 000 km") in both languages.
@@ -37,6 +37,11 @@ export function taskName(task: MaintenanceTask, m: Messages = messages()): strin
 /** A Standard Part is named in the interface language; another Part by the name the user gave it. */
 export function partName(spec: PartSpec, m: Messages = messages()): string {
   return spec.standardPart ? m.workshop.standardParts[spec.standardPart] : localName(spec, m);
+}
+
+/** A Standard Part's position is named in the interface language; an older one by the name the user gave it. */
+export function positionName(position: FitmentPosition, m: Messages = messages()): string {
+  return position.standardPart ? m.workshop.standardParts[position.standardPart] : position.name;
 }
 
 /** The OEM reference then the acceptable equivalents, e.g. "OEM 15410-MFJ-D01 · HF204, KN-204"; null when neither is set. */
