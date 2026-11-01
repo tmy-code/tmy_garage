@@ -79,7 +79,7 @@ export function App() {
       case 'sell':
         return <SellForm vehicle={vehicle} />;
       case 'service':
-        return <ServiceForm vehicle={vehicle} snapshot={snapshot} />;
+        return <ServiceForm key={subId} vehicle={vehicle} snapshot={snapshot} preselect={subId} />;
       case 'reading':
         return <ReadingForm vehicle={vehicle} snapshot={snapshot} />;
       case 'copy-tasks':

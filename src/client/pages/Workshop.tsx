@@ -536,7 +536,7 @@ export function TaskPage({ task, vehicle, snapshot }: { task: MaintenanceTask; v
           </p>
         ) : null}
         {owned ? (
-          <a className="button button-primary button-block" href={`#/vehicles/${vehicle.id}/service`}>
+          <a className="button button-primary button-block" href={`#/vehicles/${vehicle.id}/service/${task.id}`}>
             {t.vehicle.logService}
           </a>
         ) : null}

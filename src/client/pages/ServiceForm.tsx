@@ -60,8 +60,21 @@ function fromDraft(d: PartDraft, t: Messages): PartUsed {
   };
 }
 
-/** Log or edit a Service. Works offline: the Service is queued and sent when back in range. */
-export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; snapshot: Snapshot; existing?: Service }) {
+/**
+ * Log or edit a Service. Works offline: the Service is queued and sent when back in range.
+ * Opened from a Task's card, that Task (`preselect`) starts ticked.
+ */
+export function ServiceForm({
+  vehicle,
+  snapshot,
+  existing,
+  preselect,
+}: {
+  vehicle: Vehicle;
+  snapshot: Snapshot;
+  existing?: Service;
+  preselect?: string;
+}) {
   const t = useT();
   const { outbox, reachable } = useStore();
   const today = todayIso();
@@ -70,7 +83,9 @@ export function ServiceForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
 
   const [date, setDate] = useState(existing?.date ?? today);
   const [odometerText, setOdometerText] = useState(existing ? String(existing.odometer) : '');
-  const [selected, setSelected] = useState<Set<string>>(new Set(existing?.taskIds ?? []));
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(existing?.taskIds ?? due.filter((d) => d.taskId === preselect).map((d) => d.taskId)),
+  );
   const [notes, setNotes] = useState(existing?.notes ?? '');
   const [parts, setParts] = useState<PartDraft[]>(() => (existing?.partsUsed ?? []).map(toDraft));
   const partSpecs = partSpecsOf(snapshot, vehicle, { keep: (existing?.partsUsed ?? []).map((p) => p.partSpecId) });
