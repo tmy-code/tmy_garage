@@ -291,13 +291,19 @@ export function PartsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: S
   );
 }
 
-/** A Vehicle's spec lines, by category in screen order (what is in none is under Other), in the order they were entered. */
-export function specCategoriesOf(snapshot: Snapshot, vehicleId: string): [PartCategory, SpecLine[]][] {
+/**
+ * A Vehicle's spec lines by group (fluids, parts, torque, other), then by category in screen order (what is in none is
+ * under Other), in the order they were entered. Empty groups and categories are left out.
+ */
+export function specGroupsOf(snapshot: Snapshot, vehicleId: string): [SpecGroup, [PartCategory, SpecLine[]][]][] {
   const lines = snapshot.specLines.filter((s) => s.vehicleId === vehicleId);
-  return PART_CATEGORIES.map(
-    (c) =>
-      [c, lines.filter((s) => (s.category ?? 'other') === c).sort((a, b) => GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group) || a.sort - b.sort)] as [PartCategory, SpecLine[]],
-  ).filter(([, items]) => items.length > 0);
+  return GROUPS.map((g) => {
+    const inGroup = lines.filter((s) => s.group === g);
+    const categories = PART_CATEGORIES.map(
+      (c) => [c, inGroup.filter((s) => (s.category ?? 'other') === c).sort((a, b) => a.sort - b.sort)] as [PartCategory, SpecLine[]],
+    ).filter(([, items]) => items.length > 0);
+    return [g, categories] as [SpecGroup, [PartCategory, SpecLine[]][]];
+  }).filter(([, categories]) => categories.length > 0);
 }
 
 function SpecText({ spec }: { spec: SpecLine }) {
@@ -306,7 +312,6 @@ function SpecText({ spec }: { spec: SpecLine }) {
     <>
       <strong>{spec.label}</strong>
       <span>{spec.value || <span className="muted">{t.workshop.specToFill}</span>}</span>
-      <span className="muted">{t.workshop.specGroups[spec.group]}</span>
     </>
   );
 }
@@ -315,7 +320,7 @@ export function SpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: S
   const t = useT();
   const editor = useEditor();
   const wide = useWide();
-  const groups = specCategoriesOf(snapshot, vehicle.id);
+  const groups = specGroupsOf(snapshot, vehicle.id);
   const editing = snapshot.specLines.find((l) => l.id === editor.editing);
   async function addStandard() {
     try {
@@ -336,24 +341,29 @@ export function SpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: S
           </button>
           {!wide && editor.editing === 'new' ? <SpecEditor vehicle={vehicle} editor={editor} /> : null}
           {groups.length === 0 && editor.editing !== 'new' ? <p className="empty">{t.workshop.noSpecs}</p> : null}
-          {groups.map(([group, items]) => (
+          {groups.map(([group, categories]) => (
             <section key={group}>
-              <h2>{t.workshop.partCategories[group]}</h2>
-              <ul className="list list-plain">
-                {items.map((spec) =>
-                  !wide && editor.editing === spec.id ? (
-                    <li key={spec.id} className="editing">
-                      <SpecEditor vehicle={vehicle} existing={spec} editor={editor} />
-                    </li>
-                  ) : (
-                    <li key={spec.id}>
-                      <button type="button" className={`item-row spec-row ${editor.editing === spec.id ? 'item-selected' : ''}`} onClick={() => editor.setEditing(spec.id)}>
-                        <SpecText spec={spec} />
-                      </button>
-                    </li>
-                  ),
-                )}
-              </ul>
+              <h2>{t.workshop.specGroups[group]}</h2>
+              {categories.map(([category, items]) => (
+                <Fragment key={category}>
+                  <h3 className="due-group">{t.workshop.partCategories[category]}</h3>
+                  <ul className="list list-plain">
+                    {items.map((spec) =>
+                      !wide && editor.editing === spec.id ? (
+                        <li key={spec.id} className="editing">
+                          <SpecEditor vehicle={vehicle} existing={spec} editor={editor} />
+                        </li>
+                      ) : (
+                        <li key={spec.id}>
+                          <button type="button" className={`item-row spec-row ${editor.editing === spec.id ? 'item-selected' : ''}`} onClick={() => editor.setEditing(spec.id)}>
+                            <SpecText spec={spec} />
+                          </button>
+                        </li>
+                      ),
+                    )}
+                  </ul>
+                </Fragment>
+              ))}
             </section>
           ))}
         </div>
@@ -475,7 +485,7 @@ export function WorkshopPage({ snapshot }: { snapshot: Snapshot }) {
       ) : null}
       <div className="card-grid">
         {shown.map((v) => {
-          const groups = specCategoriesOf(snapshot, v.id);
+          const groups = specGroupsOf(snapshot, v.id);
           return (
             <section key={v.id}>
               <div className="heading-row">
@@ -487,18 +497,23 @@ export function WorkshopPage({ snapshot }: { snapshot: Snapshot }) {
                 </a>
               </div>
               {groups.length === 0 ? <p className="muted">{t.workshop.noSpecs}</p> : null}
-              {groups.map(([group, items]) => (
+              {groups.map(([group, categories]) => (
                 <Fragment key={group}>
-                  <h3 className="due-group">{t.workshop.partCategories[group]}</h3>
-                  <ul className="list list-plain">
-                    {items.map((spec) => (
-                      <li key={spec.id}>
-                        <div className="spec-row">
-                          <SpecText spec={spec} />
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
+                  <h3 className="due-group">{t.workshop.specGroups[group]}</h3>
+                  {categories.map(([category, items]) => (
+                    <Fragment key={category}>
+                      <h4 className="muted">{t.workshop.partCategories[category]}</h4>
+                      <ul className="list list-plain">
+                        {items.map((spec) => (
+                          <li key={spec.id}>
+                            <div className="spec-row">
+                              <SpecText spec={spec} />
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </Fragment>
+                  ))}
                 </Fragment>
               ))}
             </section>
