@@ -21,6 +21,16 @@ type HistoryEntry =
   | { kind: 'service'; id: string; date: string; odometer: number | null; text: string; notes: string | null; partsUsed: PartUsed[] }
   | { kind: 'reading'; id: string; date: string; odometer: number };
 
+/** Says a History entry can be changed: the whole row opens its edit form. */
+function EditHint() {
+  const t = useT();
+  return (
+    <span className="edit-hint">
+      <Icon name="pencil" /> {t.vehicle.editShort}
+    </span>
+  );
+}
+
 /** Maintenance Tasks, one per line: status, name, interval, when due and when last done. */
 function TaskList({ due, tasks, owned }: { due: DueInfo[]; tasks: Map<string, MaintenanceTask>; owned: boolean }) {
   const t = useT();
@@ -250,10 +260,13 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
                 <li key={`${h.kind}-${h.id}`}>
                   {h.kind === 'service' ? (
                     <a href={`#/services/${h.id}/edit`} className="history-row">
-                      <span>
-                        <strong>{formatDate(h.date, t)}</strong>
-                        {h.odometer !== null ? ` · ${formatKm(h.odometer)}` : ''}
-                        {pending.has(h.id) ? <span className="chip chip-pending">{t.vehicle.waitingToSync}</span> : null}
+                      <span className="history-head">
+                        <span>
+                          <strong>{formatDate(h.date, t)}</strong>
+                          {h.odometer !== null ? ` · ${formatKm(h.odometer)}` : ''}
+                          {pending.has(h.id) ? <span className="chip chip-pending">{t.vehicle.waitingToSync}</span> : null}
+                        </span>
+                        <EditHint />
                       </span>
                       <span className="with-icon">
                         <Icon name="wrench" /> {h.text}
@@ -267,9 +280,12 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
                     </a>
                   ) : (
                     <a href={`#/readings/${h.id}/edit`} className="history-row">
-                      <span>
-                        <strong>{formatDate(h.date, t)}</strong> · {formatKm(h.odometer)}
-                        {pending.has(h.id) ? <span className="chip chip-pending">{t.vehicle.waitingToSync}</span> : null}
+                      <span className="history-head">
+                        <span>
+                          <strong>{formatDate(h.date, t)}</strong> · {formatKm(h.odometer)}
+                          {pending.has(h.id) ? <span className="chip chip-pending">{t.vehicle.waitingToSync}</span> : null}
+                        </span>
+                        <EditHint />
                       </span>
                       <span className="muted">{t.vehicle.readingEntry}</span>
                     </a>

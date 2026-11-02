@@ -459,6 +459,22 @@ section {
 }
 
 .task-row .muted,
+.history-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.edit-hint {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: var(--accent);
+}
+
 .history-row .muted {
   font-size: 0.9rem;
 }
