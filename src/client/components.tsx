@@ -1,4 +1,4 @@
-import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import type { DueInfo } from '../shared/due.ts';
 import { confirmAction, dismissToast, useFeedback } from './feedback.ts';
 import { formatDate } from './format.ts';
@@ -255,6 +255,61 @@ export function FormError({ error }: { error: string | null }) {
 export function StatusChip({ status }: { status: DueInfo['status'] }) {
   const t = useT();
   return <span className={`chip chip-${status}`}>{t.status[status]}</span>;
+}
+
+type IntervalMode = 'distance' | 'time' | 'both';
+
+/** An Interval as one of three choices: a distance, a duration, or both, due at whichever is reached first. */
+export function IntervalFields({
+  km,
+  months,
+  onKm,
+  onMonths,
+  kmPlaceholder,
+  monthsPlaceholder,
+}: {
+  km: string;
+  months: string;
+  onKm: (value: string) => void;
+  onMonths: (value: string) => void;
+  kmPlaceholder?: string;
+  monthsPlaceholder?: string;
+}) {
+  const t = useT();
+  const [chosen, setChosen] = useState<IntervalMode>(km !== '' && months === '' ? 'distance' : km === '' && months !== '' ? 'time' : 'both');
+  // A value set from outside (the default Interval) shows its field even when the choice would hide it.
+  const mode: IntervalMode = (chosen === 'distance' && months !== '') || (chosen === 'time' && km !== '') ? 'both' : chosen;
+
+  function choose(next: IntervalMode) {
+    setChosen(next);
+    // What the choice leaves out is not part of the Interval.
+    if (next === 'distance') onMonths('');
+    if (next === 'time') onKm('');
+  }
+
+  return (
+    <>
+      <div className="segmented" role="radiogroup" aria-label={t.setup.interval}>
+        {(['distance', 'time', 'both'] as const).map((m) => (
+          <button type="button" key={m} role="radio" aria-checked={mode === m} className={mode === m ? 'on' : ''} onClick={() => choose(m)}>
+            {t.setup.intervalModes[m]}
+          </button>
+        ))}
+      </div>
+      <div className="row">
+        {mode === 'time' ? null : (
+          <Field label={t.setup.everyKm}>
+            <input inputMode="numeric" value={km} onChange={(e) => onKm(e.target.value)} placeholder={kmPlaceholder} />
+          </Field>
+        )}
+        {mode === 'distance' ? null : (
+          <Field label={mode === 'both' ? t.setup.everyMonths : t.setup.everyMonthsOnly}>
+            <input inputMode="numeric" value={months} onChange={(e) => onMonths(e.target.value)} placeholder={monthsPlaceholder} />
+          </Field>
+        )}
+      </div>
+    </>
+  );
 }
 
 export function Field({ label, hint, error, children }: { label: string; hint?: ReactNode; error?: string | null; children: ReactNode }) {

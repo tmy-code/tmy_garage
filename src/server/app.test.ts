@@ -1174,43 +1174,18 @@ describe('the maintenance task list in Settings', () => {
     expect((await call('PUT', '/api/catalogue/cabin_filter', { conditions: {}, intervalKm: null, intervalMonths: null })).status).toBe(422);
   });
 
-  it('applies the first Interval rule a build matches, else the default', async () => {
+  it('keeps the turbo’s shorter engine oil distance whatever the default, and drops the owner’s change with the built-in version', async () => {
     const petrol = await createCar();
-    const diesel = await createCar({ fuel: 'diesel' });
     const turbo = await createCar({ hasTurbo: true });
-    // The built-in rule: a turbo shortens the engine oil's distance.
     expect(await taskOf(petrol.id, 'engine_oil')).toMatchObject({ intervalKm: 15000 });
     expect(await taskOf(turbo.id, 'engine_oil')).toMatchObject({ intervalKm: 10000 });
-    expect(BUILT_IN_CATALOGUE.known('engine_oil')!.rules).toMatchObject([{ conditions: { hasTurbo: ['true'] }, intervalKm: 10000 }]);
 
-    const rules = [
-      { conditions: { fuel: ['diesel'] }, intervalKm: 12000, intervalMonths: 12 },
-      { conditions: { hasTurbo: ['true'] }, intervalKm: 9000, intervalMonths: 12 },
-    ];
-    expect((await call('PUT', '/api/catalogue/engine_oil', { conditions: { fuel: FUELS }, rules })).status).toBe(200);
-    expect(await taskOf(diesel.id, 'engine_oil')).toMatchObject({ intervalKm: 12000 });
-    expect(await taskOf(turbo.id, 'engine_oil')).toMatchObject({ intervalKm: 9000 });
-    expect(await taskOf(petrol.id, 'engine_oil')).toMatchObject({ intervalKm: 15000 });
+    await call('PUT', '/api/catalogue/engine_oil', { conditions: { fuel: FUELS }, intervalKm: 12000, intervalMonths: 12 });
+    expect(await taskOf(petrol.id, 'engine_oil')).toMatchObject({ intervalKm: 12000 });
+    expect(await taskOf(turbo.id, 'engine_oil')).toMatchObject({ intervalKm: 10000 });
 
-    // Taking the rules away, the turbo included, leaves the default for everyone.
-    await call('PUT', '/api/catalogue/engine_oil', { conditions: { fuel: FUELS }, rules: [] });
-    expect(await taskOf(turbo.id, 'engine_oil')).toMatchObject({ intervalKm: 15000 });
-    // A change that leaves the rules out keeps the ones the owner set.
-    await call('PUT', '/api/catalogue/engine_oil', { conditions: { fuel: FUELS }, characteristics: '5W-30' });
-    expect(await taskOf(turbo.id, 'engine_oil')).toMatchObject({ intervalKm: 15000 });
     await call('DELETE', '/api/catalogue/engine_oil');
-    expect(await taskOf(turbo.id, 'engine_oil')).toMatchObject({ intervalKm: 10000 });
-    expect((await snapshot()).catalogue).toEqual([]);
-  });
-
-  it('refuses a rule without a condition or without an Interval', async () => {
-    const noCondition = [{ conditions: {}, intervalKm: 5000, intervalMonths: null }];
-    const noInterval = [{ conditions: { fuel: ['diesel'] }, intervalKm: null, intervalMonths: null }];
-    // Every value ticked says nothing: it would only repeat the default.
-    const everything = [{ conditions: { fuel: FUELS.concat('electric') }, intervalKm: 5000, intervalMonths: null }];
-    for (const rules of [noCondition, noInterval, everything]) {
-      expect((await call('PUT', '/api/catalogue/cabin_filter', { conditions: {}, rules })).status).toBe(422);
-    }
+    expect(await taskOf(petrol.id, 'engine_oil')).toMatchObject({ intervalKm: 15000 });
   });
 
   it('adds a check of the owner’s to matching vehicles as a Task with no part, and pauses it when the build no longer matches', async () => {
@@ -1467,7 +1442,7 @@ describe('migrations', () => {
     migrated.close();
   });
 
-  it('adds interval rules and switched-off tasks without touching what is kept', () => {
+  it('adds the catalogue’s own intervals and switched-off tasks, and keeps no rules by build', () => {
     const path = join(dir, 'garage.sqlite');
     const old = openDatabase(path, undefined, 18);
     old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v1', 'default', 'car', 'Old car')`);
@@ -1476,9 +1451,18 @@ describe('migrations', () => {
     old.close();
     const migrated = openDatabase(path);
     expect(migrated.prepare('SELECT switched_off FROM maintenance_tasks').all()).toEqual([{ switched_off: 0 }]);
-    expect(migrated.prepare('SELECT code, removed, interval_set, interval_rules FROM catalogue_parts').all()).toEqual([
-      { code: 'wipers', removed: 1, interval_set: 0, interval_rules: null },
-    ]);
+    expect(migrated.prepare('SELECT code, removed, interval_set FROM catalogue_parts').all()).toEqual([{ code: 'wipers', removed: 1, interval_set: 0 }]);
+    expect(migrated.prepare(`SELECT name FROM pragma_table_info('catalogue_parts') WHERE name = 'interval_rules'`).all()).toEqual([]);
+    migrated.close();
+  });
+
+  it('drops the rules by build a database may already hold', () => {
+    const path = join(dir, 'garage.sqlite');
+    const old = openDatabase(path, undefined, 19);
+    old.exec(`INSERT INTO catalogue_parts (garage_id, code, conditions, removed) VALUES ('default', 'wipers', '{}', 1)`);
+    old.close();
+    const migrated = openDatabase(path);
+    expect(migrated.prepare('SELECT code FROM catalogue_parts').all()).toEqual([{ code: 'wipers' }]);
     migrated.close();
   });
 });

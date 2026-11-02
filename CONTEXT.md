@@ -85,12 +85,8 @@ What a Vehicle is built with, as far as its parts go: fuel (petrol, flex-fuel E8
 _Avoid_: Specification, configuration, trim
 
 **Parts Catalogue**:
-The list of Standard Parts and Checks, with the conditions on the Build under which a Vehicle gets each and the Interval of its Maintenance Task: a built-in list, plus what the owner changes in Settings. For a built-in part the owner can change its conditions, Interval and Interval rules, and its default details, or take it off the list, and can go back to the built-in version; the owner can also add parts and Checks of their own, with a name, category, type and Interval. A change applies to every Vehicle right away, under the same rules as a Build change. Default details fill a Part Spec only where nothing else was written, and do not count as the owner having filled it in.
+The list of Standard Parts and Checks, with the conditions on the Build under which a Vehicle gets each and the Interval of its Maintenance Task: a built-in list, plus what the owner changes in Settings. For a built-in part the owner can change its conditions, Interval and default details, or take it off the list, and can go back to the built-in version; the owner can also add parts and Checks of their own, with a name, category, type and Interval. A change applies to every Vehicle right away, under the same rules as a Build change. Default details fill a Part Spec only where nothing else was written, and do not count as the owner having filled it in.
 _Avoid_: Part types, template, master list
-
-**Interval rule**:
-An Interval a Parts Catalogue entry gives to the Builds matching some conditions (e.g. 10 000 km with a turbo, 12 000 km for a diesel). A Vehicle's Task takes the Interval of the first rule its Build matches, otherwise the entry's default Interval. A rule always has a condition: one that fits every Build would only repeat the default.
-_Avoid_: Variant, override, exception
 
 **Check**:
 A Maintenance Task from the Parts Catalogue that replaces no part, such as chain lubrication, valve clearance or wheel alignment. It has conditions on the Build and an Interval like a Standard Part, but no Part Spec, no Fitment Position and nothing on the Shopping List. A Vehicle whose Build no longer fits it keeps its Task, paused; the owner can also switch it off on one Vehicle.

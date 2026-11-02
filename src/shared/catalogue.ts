@@ -261,11 +261,6 @@ export function conditionChoices(kind: VehicleKind): { key: ConditionKey; values
       ];
 }
 
-/** Interval rules as they are kept: each one's conditions tidied. */
-export function tidyRules(kind: VehicleKind, rules: readonly IntervalRule[]): IntervalRule[] {
-  return rules.map((rule) => ({ ...rule, conditions: tidyConditions(kind, rule.conditions) }));
-}
-
 /** Conditions as they are kept: details of the kind only, known values only, and a detail taking any value left out. */
 export function tidyConditions(kind: VehicleKind, conditions: Conditions): Conditions {
   const tidy: Conditions = {};
@@ -314,11 +309,6 @@ export interface Interval {
   intervalMonths: number | null;
 }
 
-/** An Interval for the Vehicles whose Build matches the conditions; the first matching rule of a part applies. */
-export interface IntervalRule extends Interval {
-  conditions: Conditions;
-}
-
 /** A part the owner added to the catalogue: a part to replace, or (no unit) a check or service replacing no part. */
 export interface OwnPart extends Interval {
   kind: VehicleKind;
@@ -341,8 +331,6 @@ export interface CatalogueEntry {
   removed: boolean;
   /** The owner's own default Interval for a built-in part; null keeps the built-in one. */
   interval: Interval | null;
-  /** The owner's Interval rules for the part; null keeps the built-in ones (the turbo one, for engine oil). */
-  rules: IntervalRule[] | null;
 }
 
 /** A part of the catalogue as it stands, built-in or the owner's own. */
@@ -354,10 +342,10 @@ export interface CataloguePart {
   /** Null for a check or service: it has a Task but no Part Spec or Fitment Position. */
   unit: PartUnit | null;
   category: PartCategory;
-  /** The default Interval, when no rule matches. */
   intervalKm: number | null;
   intervalMonths: number | null;
-  rules: IntervalRule[];
+  /** A shorter distance interval when the engine has a turbo. */
+  turboIntervalKm?: number;
   task?: { en: string; fr: string };
   goesWith?: string;
   conditions: Conditions;
@@ -382,11 +370,6 @@ export interface StarterTask {
 
 const BUILT_IN_CODES = new Set<string>(PART_TEMPLATES.map((t) => t.code));
 
-/** A built-in part's own Interval rules: a turbo shortens the distance. */
-function builtInRules(t: PartTemplate): IntervalRule[] {
-  return t.turboIntervalKm ? [{ conditions: { hasTurbo: ['true'] }, intervalKm: t.turboIntervalKm, intervalMonths: t.intervalMonths }] : [];
-}
-
 export function isBuiltInPart(code: string): boolean {
   return BUILT_IN_CODES.has(code);
 }
@@ -408,7 +391,6 @@ export class Catalogue {
         ...t,
         intervalKm: change?.interval ? change.interval.intervalKm : t.intervalKm,
         intervalMonths: change?.interval ? change.interval.intervalMonths : t.intervalMonths,
-        rules: change?.rules ?? builtInRules(t),
         conditions: change?.conditions ?? conditionsOf(t.kind, t.when ?? []),
         characteristics: change?.characteristics ?? null,
         builtIn: true,
@@ -428,7 +410,6 @@ export class Catalogue {
           category: e.own!.category,
           intervalKm: e.own!.intervalKm,
           intervalMonths: e.own!.intervalMonths,
-          rules: e.rules ?? [],
           conditions: e.conditions ?? {},
           characteristics: e.characteristics,
           builtIn: false,
@@ -497,12 +478,11 @@ export class Catalogue {
     return part.goesWith !== undefined && this.fits(build, part.goesWith);
   }
 
-  /** The catalogue's Interval for the Task replacing a Standard Part on a Vehicle with this Build: the first rule it matches, else the default. */
+  /** The catalogue's Interval for the Task replacing a Standard Part on a Vehicle with this Build (shorter with a turbo). */
   defaultInterval(build: Build, code: StandardPartKey): Interval | null {
     const part = this.part(code);
     if (!part || part.kind !== build.kind || this.bundled(build, part)) return null;
-    const { intervalKm, intervalMonths } = part.rules.find((rule) => matches(build, rule.conditions)) ?? part;
-    return { intervalKm, intervalMonths };
+    return { intervalKm: build.hasTurbo && part.turboIntervalKm ? part.turboIntervalKm : part.intervalKm, intervalMonths: part.intervalMonths };
   }
 
   /** The Vehicle's maintenance schedule: a Task per Standard Part that fits its Build (the oil filter goes with the oil). */

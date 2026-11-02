@@ -195,16 +195,7 @@ const intervalMonths = z
   .nullish()
   .transform((v) => v ?? null);
 
-/** An Interval for the Vehicles whose Build matches: it needs a condition (else it would be the default) and a distance, a duration or both. */
-const intervalRule = z
-  .object({ conditions, intervalKm, intervalMonths })
-  .refine((r) => r.intervalKm !== null || r.intervalMonths !== null, {
-    message: 'An Interval needs a distance, a duration, or both',
-    path: ['intervalKm'],
-  });
-const intervalRules = z.array(intervalRule).max(20);
-
-/** A change to a built-in part. Without an Interval or rules the built-in ones stay; with them, they are the owner's. */
+/** A change to a built-in part. Without an Interval the built-in one stays; with one, it is the owner's. */
 export const catalogueChangeInput = z
   .object({
     conditions,
@@ -212,7 +203,6 @@ export const catalogueChangeInput = z
     removed: z.boolean().default(false),
     intervalKm: z.number().int().positive().max(1_000_000).nullish(),
     intervalMonths: z.number().int().positive().max(600).nullish(),
-    rules: intervalRules.optional(),
   })
   .refine((p) => (p.intervalKm === undefined && p.intervalMonths === undefined) || (p.intervalKm ?? null) !== null || (p.intervalMonths ?? null) !== null, {
     message: 'An Interval needs a distance, a duration, or both',
@@ -229,7 +219,6 @@ export const ownPartInput = z
     category: z.enum(PART_CATEGORIES),
     intervalKm,
     intervalMonths,
-    rules: intervalRules.default([]),
     conditions,
     characteristics: optionalText(500),
   })

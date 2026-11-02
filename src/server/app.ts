@@ -57,11 +57,9 @@ import {
   Catalogue,
   isBuiltInPart,
   tidyConditions,
-  tidyRules,
   type Build,
   type CatalogueEntry,
   type Conditions,
-  type IntervalRule,
   type StandardPartKey,
 } from '../shared/catalogue.ts';
 import type { ClaimInput, TermInput, VehicleInput, VehicleKind } from '../shared/schemas.ts';
@@ -347,7 +345,6 @@ function catalogueEntries(db: DatabaseSync, garageId: string): CatalogueEntry[] 
     characteristics: r.characteristics,
     removed: r.removed === 1,
     interval: r.interval_set === 1 ? { intervalKm: r.interval_km, intervalMonths: r.interval_months } : null,
-    rules: r.interval_rules ? (JSON.parse(r.interval_rules) as IntervalRule[]) : null,
   }));
 }
 
@@ -1122,25 +1119,14 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     return tidy;
   }
 
-  /** Interval rules as they are kept: each needs a condition, or it would only repeat the default. */
-  function tidyRulesOrThrow(kind: VehicleKind, rules: IntervalRule[]): IntervalRule[] {
-    const tidy = tidyRules(kind, rules);
-    for (const rule of tidy) {
-      if (Object.keys(rule.conditions).length === 0) throw new HttpError(422, 'An Interval rule needs a condition: untick at least one value');
-      if (Object.values(rule.conditions).some((values) => !values || values.length === 0)) throw new HttpError(422, 'Tick at least one value for each detail');
-    }
-    return tidy;
-  }
-
   app.post('/api/catalogue', async (c) => {
     const p = await parse(c, ownPartInput);
     const code = `own_${randomUUID()}`;
-    const rules = JSON.stringify(tidyRulesOrThrow(p.kind, p.rules));
     transaction(() => {
       db.prepare(
-        `INSERT INTO catalogue_parts (garage_id, code, kind, name, name_fr, unit, category, interval_km, interval_months, conditions, characteristics, interval_rules)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(garageId, code, p.kind, p.name, p.nameFr, p.unit, p.category, p.intervalKm, p.intervalMonths, JSON.stringify(tidyOrThrow(p.kind, p.conditions)), p.characteristics, rules);
+        `INSERT INTO catalogue_parts (garage_id, code, kind, name, name_fr, unit, category, interval_km, interval_months, conditions, characteristics)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(garageId, code, p.kind, p.name, p.nameFr, p.unit, p.category, p.intervalKm, p.intervalMonths, JSON.stringify(tidyOrThrow(p.kind, p.conditions)), p.characteristics);
       catalogueChanged();
     });
     return c.json({ code }, 201);
@@ -1156,24 +1142,22 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       const builtIn = BUILT_IN_CATALOGUE.known(code)!;
       const original = tidyConditions(part.kind, builtIn.conditions);
       const kept = JSON.stringify(conditions) === JSON.stringify(original) ? null : JSON.stringify(conditions);
-      // What is left out of the request stays as it is: the owner's rules and Interval if they set them, else the built-in ones.
-      const rules = JSON.stringify(tidyRulesOrThrow(part.kind, p.rules ?? part.rules));
-      const keptRules = rules === JSON.stringify(tidyRules(part.kind, builtIn.rules)) ? null : rules;
+      // What is left out of the request stays as it is: the owner's Interval if they set one, else the built-in one.
       const intervalKm = p.intervalKm === undefined && p.intervalMonths === undefined ? part.intervalKm : (p.intervalKm ?? null);
       const intervalMonths = p.intervalKm === undefined && p.intervalMonths === undefined ? part.intervalMonths : (p.intervalMonths ?? null);
       const sameInterval = intervalKm === builtIn.intervalKm && intervalMonths === builtIn.intervalMonths;
       transaction(() => {
         spreadDetails(code, part.characteristics, p.characteristics);
         // A part set just as it is built in is no change at all.
-        if (kept === null && p.characteristics === null && !p.removed && sameInterval && keptRules === null) {
+        if (kept === null && p.characteristics === null && !p.removed && sameInterval) {
           db.prepare('DELETE FROM catalogue_parts WHERE garage_id = ? AND code = ?').run(garageId, code);
         } else {
           db.prepare(
-            `INSERT INTO catalogue_parts (garage_id, code, conditions, characteristics, removed, interval_set, interval_km, interval_months, interval_rules)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `INSERT INTO catalogue_parts (garage_id, code, conditions, characteristics, removed, interval_set, interval_km, interval_months)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT (garage_id, code) DO UPDATE SET conditions = excluded.conditions, characteristics = excluded.characteristics,
                removed = excluded.removed, interval_set = excluded.interval_set, interval_km = excluded.interval_km,
-               interval_months = excluded.interval_months, interval_rules = excluded.interval_rules`,
+               interval_months = excluded.interval_months`,
           ).run(
             garageId,
             code,
@@ -1183,7 +1167,6 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
             sameInterval ? 0 : 1,
             sameInterval ? null : intervalKm,
             sameInterval ? null : intervalMonths,
-            keptRules,
           );
         }
         catalogueChanged();
@@ -1193,15 +1176,13 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       const fr = p.nameFr ?? p.name;
       // A check has no Part Specs to turn into parts, nor a part into a check.
       if ((p.unit === null) !== (part.unit === null)) throw new HttpError(422, 'A check cannot become a part, nor a part a check');
-      const rules = JSON.stringify(tidyRulesOrThrow(part.kind, p.rules));
       transaction(() => {
         spreadDetails(code, part.characteristics, p.characteristics);
         // Its kind stays: a Vehicle's list is made of parts of its own kind.
         db.prepare(
-          `UPDATE catalogue_parts SET name = ?, name_fr = ?, unit = ?, category = ?, interval_km = ?, interval_months = ?, conditions = ?, characteristics = ?,
-             interval_rules = ?
+          `UPDATE catalogue_parts SET name = ?, name_fr = ?, unit = ?, category = ?, interval_km = ?, interval_months = ?, conditions = ?, characteristics = ?
            WHERE garage_id = ? AND code = ?`,
-        ).run(p.name, p.nameFr, p.unit, p.category, p.intervalKm, p.intervalMonths, JSON.stringify(tidyOrThrow(part.kind, p.conditions)), p.characteristics, rules, garageId, code);
+        ).run(p.name, p.nameFr, p.unit, p.category, p.intervalKm, p.intervalMonths, JSON.stringify(tidyOrThrow(part.kind, p.conditions)), p.characteristics, garageId, code);
         const ofGarage = 'vehicle_id IN (SELECT id FROM vehicles WHERE garage_id = ?)';
         if (p.unit !== null) {
           db.prepare(`UPDATE part_specs SET name = ?, name_fr = ?, unit = ? WHERE standard_part = ? AND ${ofGarage}`).run(p.name, fr, p.unit, code, garageId);

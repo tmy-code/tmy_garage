@@ -303,12 +303,12 @@ A location holding one Part at a time. A fitted Standard Part gets one automatic
 
 The catalogue is two lists merged by the `Catalogue` class in [`catalogue.ts`](../src/shared/catalogue.ts):
 
-1. **Built-in parts**, in `PART_TEMPLATES` in the code, each with a code, names, unit, category, default interval, conditions on the Build and, for engine oil, a shorter distance with a turbo.
+1. **Built-in parts**, in `PART_TEMPLATES` in the code, each with a code, names, unit, category, default interval, conditions on the Build and, for engine oil, a shorter distance with a turbo (not editable).
 2. **The owner's changes**, in the `catalogue_parts` table: one row per changed or added entry, for each Garage. An entry is a part to replace, or a **check or service** with a Task but no part (chain lubrication, valve clearance).
 
 An entry with no row is used exactly as built in, so a Garage with no changes has an empty table. Standard Part codes are not foreign keys, because most of them point at the code rather than at a table.
 
-**Intervals.** Each entry has a default interval and any number of **interval rules**: an interval for the Builds matching some conditions. For a Vehicle, the first rule its Build matches is the interval of its Task, otherwise the default. A built-in entry's own rules and default are the ones in the code until the owner sets theirs; the turbo rule of engine oil is an ordinary rule they can change or remove.
+**Intervals.** Each entry has one default interval, which is the code's for a built-in entry until the owner sets theirs. It is a distance, a duration, or both. A Task on a Vehicle follows it until the owner sets that Vehicle's own interval on the Task; the only difference by Build is the turbo's shorter engine oil distance.
 
 ### `catalogue_parts`
 
@@ -326,12 +326,11 @@ The key is `garage_id` and `code`. This table has no `id`.
 | `interval_km` | The default distance interval: for an own entry always, for a built-in one only when `interval_set` is 1. |
 | `interval_months` | The same, for time. |
 | `interval_set` | Required, yes/no. A built-in entry whose default interval is the owner's. |
-| `interval_rules` | JSON list of rules, each with `conditions`, `intervalKm` and `intervalMonths`. For a built-in entry, empty keeps the built-in rules; an own entry has its own list. |
 | `conditions` | JSON: for each detail of the Build, the values allowed. Empty keeps a built-in part's own conditions. |
 | `characteristics` | Default details for matching Vehicles' Part Specs. Parts only. |
 | `removed` | Required, yes/no. A built-in entry taken off the list. |
 
-For example, conditions of `{"fuel":["diesel"],"hasTurbo":["true"]}` mean a Vehicle has the part only if it runs on diesel and has a turbo. A detail that isn't listed doesn't matter. A rule's conditions work the same way, and a rule without any condition is refused, since it would only repeat the default.
+For example, conditions of `{"fuel":["diesel"],"hasTurbo":["true"]}` mean a Vehicle has the part only if it runs on diesel and has a turbo. A detail that isn't listed doesn't matter.
 
 ### What follows from the Build and the catalogue
 
@@ -345,7 +344,7 @@ When a Vehicle is added, its Build changes or the catalogue changes, the server 
 | A part's fit did not change | The owner's own "not on this vehicle" choice is left alone. |
 | A check now fits | An owned Vehicle gets its Task, and no Part Spec. |
 | A check no longer fits | Its Task stays and is paused, since the Task is kept for its history. |
-| The catalogue's interval or rules change | Every Task of an owned Vehicle whose `custom_interval` is no takes the interval its Build now calls for. Intervals the owner set stay. |
+| The catalogue's interval changes | Every Task of an owned Vehicle whose `custom_interval` is no takes the interval its Build now calls for. Intervals the owner set stay. |
 | The owner switches a check off on a Vehicle | Its Task is paused (`switched_off`), and no change in the catalogue brings it back. |
 
 A part is **in use** when its Part Spec has been filled in, a Task gives a quantity for it, or a Part Used refers to it. Default details and required parts with no quantity don't count.

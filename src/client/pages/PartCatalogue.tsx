@@ -8,13 +8,12 @@ import {
   type CataloguePart,
   type ConditionKey,
   type Conditions,
-  type IntervalRule,
   type PartCategory,
   type SpecFlag,
 } from '../../shared/catalogue.ts';
 import type { PartUnit, VehicleKind } from '../../shared/schemas.ts';
 import type { Snapshot } from '../../shared/types.ts';
-import { confirmDelete, Field, FormError, Layout, NeedsConnection } from '../components.tsx';
+import { confirmDelete, Field, FormError, IntervalFields, Layout, NeedsConnection } from '../components.tsx';
 import { describeEvery } from '../format.ts';
 import { messages, useT, type Messages } from '../i18n.ts';
 import { navigate } from '../router.ts';
@@ -72,12 +71,7 @@ function PartRow({ part, t }: { part: CataloguePart; t: Messages }) {
           {part.builtIn ? null : <span className="chip chip-unknown">{t.settings.ownPart}</span>}
           {part.changed && !part.removed ? <span className="chip chip-unknown">{t.settings.changed}</span> : null}
         </span>
-        {interval ? (
-          <span className="muted">
-            {interval}
-            {part.rules.length > 0 ? ` · ${t.settings.rulesCount(part.rules.length)}` : ''}
-          </span>
-        ) : null}
+        {interval ? <span className="muted">{interval}</span> : null}
         <span className="muted">{conditions ?? t.settings.allOfKind[part.kind]}</span>
         {part.characteristics ? <span className="muted">{part.characteristics}</span> : null}
       </a>
@@ -147,12 +141,6 @@ function optionalNumber(text: string, label: string): number | null {
   return n;
 }
 
-/** A typed number for a summary line: nothing while it is empty or not a number yet. */
-function numberOrNull(text: string): number | null {
-  const n = Number(text.replace(/\s/g, ''));
-  return text.trim() !== '' && Number.isInteger(n) && n > 0 ? n : null;
-}
-
 /** What a task is for: a fitted part, a fluid, or a check or service with nothing to buy. */
 type TaskType = PartUnit | 'check';
 
@@ -190,22 +178,7 @@ function allTicked(kind: VehicleKind, conditions: Conditions): Conditions {
   return Object.fromEntries(conditionChoices(kind).map(({ key, values }) => [key, conditions[key] ?? values]));
 }
 
-/** An Interval rule being edited: what is ticked, and the distance and months as typed. */
-interface RuleDraft {
-  key: number;
-  ticked: Conditions;
-  km: string;
-  months: string;
-  fresh: boolean;
-}
-
-let nextRuleKey = 1;
-
-function toDraft(kind: VehicleKind, rule: IntervalRule): RuleDraft {
-  return { key: nextRuleKey++, ticked: allTicked(kind, rule.conditions), km: String(rule.intervalKm ?? ''), months: String(rule.intervalMonths ?? ''), fresh: false };
-}
-
-/** One built-in task's interval, rules, conditions and default details, or all of a task of the owner's. */
+/** One built-in task's interval, conditions and default details, or all of a task of the owner's. */
 export function PartForm({ part, kind }: { part?: CataloguePart; kind: VehicleKind }) {
   const t = useT();
   const own = part === undefined || !part.builtIn;
@@ -216,16 +189,11 @@ export function PartForm({ part, kind }: { part?: CataloguePart; kind: VehicleKi
   const [type, setType] = useState<TaskType>(part ? (part.unit ?? 'check') : 'piece');
   const [intervalKm, setIntervalKm] = useState(String(part?.intervalKm ?? ''));
   const [intervalMonths, setIntervalMonths] = useState(String(part?.intervalMonths ?? ''));
-  const [rules, setRules] = useState<RuleDraft[]>(() => (part?.rules ?? []).map((rule) => toDraft(kind, rule)));
   const [characteristics, setCharacteristics] = useState(part?.characteristics ?? '');
   const [ticked, setTicked] = useState<Conditions>(() => allTicked(kind, part?.conditions ?? {}));
   const { error, disabled, run } = useSubmit();
   // The oil filter is replaced with the oil, on the oil's task: it has no interval of its own.
   const together = part?.goesWith ? BUILT_IN_CATALOGUE.known(part.goesWith) : undefined;
-
-  function setRule(key: number, patch: Partial<RuleDraft>) {
-    setRules(rules.map((r) => (r.key === key ? { ...r, ...patch } : r)));
-  }
 
   function save(removed: boolean) {
     void run(async () => {
@@ -233,14 +201,6 @@ export function PartForm({ part, kind }: { part?: CataloguePart; kind: VehicleKi
       const intervals = {
         intervalKm: optionalNumber(intervalKm, t.setup.distanceLabel),
         intervalMonths: optionalNumber(intervalMonths, t.setup.monthsLabel),
-        rules: rules.map((r) => {
-          if (choices.some(({ key }) => (r.ticked[key] ?? []).length === 0)) throw new Error(t.settings.tickOne);
-          // A rule that every build matches would only repeat the default interval.
-          if (choices.every(({ key, values }) => (r.ticked[key] ?? []).length === values.length)) throw new Error(t.settings.ruleNeedsCondition);
-          const rule = { conditions: r.ticked, intervalKm: optionalNumber(r.km, t.setup.distanceLabel), intervalMonths: optionalNumber(r.months, t.setup.monthsLabel) };
-          if (rule.intervalKm === null && rule.intervalMonths === null) throw new Error(t.setup.needInterval);
-          return rule;
-        }),
       };
       if (!together && intervals.intervalKm === null && intervals.intervalMonths === null) throw new Error(t.setup.needInterval);
       const shared = { conditions: ticked, characteristics: type === 'check' ? '' : characteristics, ...(together ? {} : intervals) };
@@ -315,42 +275,8 @@ export function PartForm({ part, kind }: { part?: CataloguePart; kind: VehicleKi
           <>
             <p className="field-label">{t.setup.interval}</p>
             <p className="muted">{t.settings.intervalHint}</p>
-            <div className="row">
-              <Field label={t.setup.everyKm}>
-                <input inputMode="numeric" value={intervalKm} onChange={(e) => setIntervalKm(e.target.value)} />
-              </Field>
-              <Field label={t.setup.everyMonths}>
-                <input inputMode="numeric" value={intervalMonths} onChange={(e) => setIntervalMonths(e.target.value)} />
-              </Field>
-            </div>
-            <p className="field-label">{t.settings.rulesTitle}</p>
-            <p className="muted">{t.settings.rulesHint}</p>
-            {rules.map((rule) => (
-              <details key={rule.key} className="part-details" open={rule.fresh}>
-                <summary>
-                  {describeConditions(kind, rule.ticked, t) ?? t.settings.ruleEvery} · {describeEvery(numberOrNull(rule.km), numberOrNull(rule.months), t)}
-                </summary>
-                <ConditionGrid kind={kind} ticked={rule.ticked} onChange={(next) => setRule(rule.key, { ticked: next })} />
-                <div className="row">
-                  <Field label={t.setup.everyKm}>
-                    <input inputMode="numeric" value={rule.km} onChange={(e) => setRule(rule.key, { km: e.target.value })} />
-                  </Field>
-                  <Field label={t.setup.everyMonths}>
-                    <input inputMode="numeric" value={rule.months} onChange={(e) => setRule(rule.key, { months: e.target.value })} />
-                  </Field>
-                </div>
-                <button type="button" className="button button-small button-danger" onClick={() => setRules(rules.filter((r) => r.key !== rule.key))}>
-                  {t.settings.removeRule}
-                </button>
-              </details>
-            ))}
-            <button
-              type="button"
-              className="button button-small"
-              onClick={() => setRules([...rules, { key: nextRuleKey++, ticked: allTicked(kind, {}), km: '', months: '', fresh: true }])}
-            >
-              {t.settings.addRule}
-            </button>
+            <IntervalFields km={intervalKm} months={intervalMonths} onKm={setIntervalKm} onMonths={setIntervalMonths} />
+            {part?.turboIntervalKm ? <p className="muted">{t.settings.turboNote(describeEvery(part.turboIntervalKm, part.intervalMonths, t))}</p> : null}
           </>
         )}
         {type === 'check' ? null : (

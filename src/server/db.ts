@@ -455,6 +455,10 @@ const MIGRATIONS: string[] = [
   ALTER TABLE catalogue_parts ADD COLUMN interval_set INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE maintenance_tasks ADD COLUMN switched_off INTEGER NOT NULL DEFAULT 0;
   `,
+  `
+  -- Interval rules by build were dropped again: an Interval is customised on the Vehicle instead.
+  ALTER TABLE catalogue_parts DROP COLUMN interval_rules;
+  `,
 ];
 
 function schemaVersion(db: DatabaseSync): number {

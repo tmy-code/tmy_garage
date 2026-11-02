@@ -17,7 +17,7 @@ import { todayIso } from '../../shared/dates.ts';
 import { partSpecsOf } from '../../shared/workshop.ts';
 import type { Cooling, Distribution, Drivetrain, FinalDrive, FuelType, OvernightParking, Transmission } from '../../shared/schemas.ts';
 import type { MaintenanceTask, Snapshot, Vehicle } from '../../shared/types.ts';
-import { confirmDelete, Field, FormError, Layout, NeedsConnection } from '../components.tsx';
+import { confirmDelete, Field, FormError, IntervalFields, Layout, NeedsConnection } from '../components.tsx';
 import { showToast } from '../feedback.ts';
 import { describeEvery, parseNumber, partName, taskName } from '../format.ts';
 import { messages, useT, type Messages } from '../i18n.ts';
@@ -467,14 +467,14 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
           </Field>
         )}
         <p className="field-label">{t.setup.interval}</p>
-        <div className="row">
-          <Field label={t.setup.everyKm}>
-            <input inputMode="numeric" value={intervalKm} onChange={(e) => setIntervalKm(e.target.value)} placeholder="6000" />
-          </Field>
-          <Field label={t.setup.everyMonths}>
-            <input inputMode="numeric" value={intervalMonths} onChange={(e) => setIntervalMonths(e.target.value)} placeholder="12" />
-          </Field>
-        </div>
+        <IntervalFields
+          km={intervalKm}
+          months={intervalMonths}
+          onKm={setIntervalKm}
+          onMonths={setIntervalMonths}
+          kmPlaceholder="6000"
+          monthsPlaceholder="12"
+        />
         {fallback ? (
           <div className="actions">
             <p className="muted">
