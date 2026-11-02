@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { Fragment, useMemo, useState, useSyncExternalStore, type FormEvent, type ReactNode } from 'react';
 import { PART_CATEGORIES, type PartCategory } from '../../shared/catalogue.ts';
 import { todayIso } from '../../shared/dates.ts';
 import { vehicleDue } from '../../shared/due.ts';
@@ -112,6 +112,20 @@ function useEditor() {
 
 // --- Spec lines of a Vehicle Profile ---
 
+const WIDE = '(min-width: 1000px)';
+
+/** Whether the screen is wide enough for an editor beside its list (the same width the page layout switches at). */
+function useWide(): boolean {
+  return useSyncExternalStore(
+    (listener) => {
+      const query = window.matchMedia(WIDE);
+      query.addEventListener('change', listener);
+      return () => query.removeEventListener('change', listener);
+    },
+    () => window.matchMedia(WIDE).matches,
+  );
+}
+
 function SpecEditor({ vehicle, existing, editor }: { vehicle: Vehicle; existing?: SpecLine; editor: ReturnType<typeof useEditor> }) {
   const t = useT();
   const [group, setGroup] = useState<SpecGroup>(existing?.group ?? 'fluids');
@@ -180,7 +194,9 @@ function SpecText({ spec }: { spec: SpecLine }) {
 export function SpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: Snapshot }) {
   const t = useT();
   const editor = useEditor();
+  const wide = useWide();
   const groups = specCategoriesOf(snapshot, vehicle.id);
+  const editing = snapshot.specLines.find((l) => l.id === editor.editing);
   async function addStandard() {
     try {
       const { added } = await online<{ added: number }>('POST', `/api/vehicles/${vehicle.id}/add-standard-specs`, { lang: getLang() });
@@ -193,31 +209,40 @@ export function SpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: S
     <Layout title={t.workshop.specsTitle(vehicle.name)} back={`/vehicles/${vehicle.id}`} titleAction={<AddButton editor={editor} />}>
       <NeedsConnection />
       <p className="muted">{t.workshop.specsIntro}</p>
-      <button type="button" className="button button-block" onClick={addStandard}>
-        {t.workshop.addStandardSpecs}
-      </button>
-      {editor.editing === 'new' ? <SpecEditor vehicle={vehicle} editor={editor} /> : null}
-      {groups.length === 0 && editor.editing !== 'new' ? <p className="empty">{t.workshop.noSpecs}</p> : null}
-      {groups.map(([group, items]) => (
-        <section key={group}>
-          <h2>{t.workshop.partCategories[group]}</h2>
-          <ul className="list">
-            {items.map((spec) =>
-              editor.editing === spec.id ? (
-                <li key={spec.id} className="editing">
-                  <SpecEditor vehicle={vehicle} existing={spec} editor={editor} />
-                </li>
-              ) : (
-                <li key={spec.id}>
-                  <button type="button" className="item-row" onClick={() => editor.setEditing(spec.id)}>
-                    <SpecText spec={spec} />
-                  </button>
-                </li>
-              ),
-            )}
-          </ul>
-        </section>
-      ))}
+      <div className={wide ? 'split' : undefined}>
+        <div className="split-main">
+          <button type="button" className="button button-block" onClick={addStandard}>
+            {t.workshop.addStandardSpecs}
+          </button>
+          {!wide && editor.editing === 'new' ? <SpecEditor vehicle={vehicle} editor={editor} /> : null}
+          {groups.length === 0 && editor.editing !== 'new' ? <p className="empty">{t.workshop.noSpecs}</p> : null}
+          {groups.map(([group, items]) => (
+            <section key={group}>
+              <h2>{t.workshop.partCategories[group]}</h2>
+              <ul className="list">
+                {items.map((spec) =>
+                  !wide && editor.editing === spec.id ? (
+                    <li key={spec.id} className="editing">
+                      <SpecEditor vehicle={vehicle} existing={spec} editor={editor} />
+                    </li>
+                  ) : (
+                    <li key={spec.id}>
+                      <button type="button" className={`item-row ${editor.editing === spec.id ? 'item-selected' : ''}`} onClick={() => editor.setEditing(spec.id)}>
+                        <SpecText spec={spec} />
+                      </button>
+                    </li>
+                  ),
+                )}
+              </ul>
+            </section>
+          ))}
+        </div>
+        {wide && editor.editing ? (
+          <div className="side-editor">
+            <SpecEditor key={editor.editing} vehicle={vehicle} existing={editing} editor={editor} />
+          </div>
+        ) : null}
+      </div>
     </Layout>
   );
 }

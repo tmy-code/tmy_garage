@@ -860,6 +860,11 @@ body > .banner {
   font-weight: 600;
 }
 
+.item-selected {
+  outline: 2px solid var(--accent, currentColor);
+  outline-offset: -2px;
+}
+
 .item-row {
   display: flex;
   flex-direction: column;
