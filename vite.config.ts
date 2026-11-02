@@ -15,8 +15,8 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'TMY Garage',
-        short_name: 'Garage',
+        name: 'tmy_garage',
+        short_name: 'tmy_garage',
         description: 'Maintenance logbook for your cars and motorcycles',
         theme_color: '#1f2937',
         background_color: '#000000',

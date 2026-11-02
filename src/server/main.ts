@@ -32,7 +32,7 @@ if (existsSync(clientDir)) {
 }
 
 serve({ fetch: app.fetch, port }, () => {
-  console.log(`TMY Garage listening on port ${port}, data in ${dataDir}`);
+  console.log(`tmy_garage listening on port ${port}, data in ${dataDir}`);
 });
 
 async function checkReminders() {

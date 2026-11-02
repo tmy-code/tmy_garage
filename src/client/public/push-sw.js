@@ -2,7 +2,7 @@
 self.addEventListener('push', (event) => {
   const message = event.data ? event.data.json() : {};
   event.waitUntil(
-    self.registration.showNotification(message.title || 'TMY Garage', {
+    self.registration.showNotification(message.title || 'tmy_garage', {
       body: message.body || '',
       icon: '/icon.svg',
       // A newer Reminder replaces the previous one instead of piling up.
