@@ -135,7 +135,7 @@ export function VehicleForm({ existing, returnTo }: { existing?: Vehicle; return
         name,
         make,
         model,
-        year: optionalNumber(year, t.setup.year, t),
+        year: firstRegistrationDate ? Number(firstRegistrationDate.slice(0, 4)) : optionalNumber(year, t.setup.year, t),
         vin,
         firstRegistrationDate: firstRegistrationDate || null,
         purchaseDate: purchaseDate || null,
@@ -187,15 +187,17 @@ export function VehicleForm({ existing, returnTo }: { existing?: Vehicle; return
         <Field label={t.setup.model}>
           <input value={model} onChange={(e) => setModel(e.target.value)} required maxLength={60} />
         </Field>
-        <Field label={t.setup.year}>
-          <input inputMode="numeric" value={year} onChange={(e) => setYear(e.target.value)} maxLength={4} />
-        </Field>
         <Field label={t.setup.vin}>
           <input value={vin} onChange={(e) => setVin(e.target.value.toUpperCase())} maxLength={17} />
         </Field>
         <Field label={t.setup.firstRegistrationDate}>
           <input type="date" value={firstRegistrationDate} onChange={(e) => setFirstRegistrationDate(e.target.value)} />
         </Field>
+        {firstRegistrationDate ? null : (
+          <Field label={t.setup.year} hint={t.setup.yearHint}>
+            <input inputMode="numeric" value={year} onChange={(e) => setYear(e.target.value)} maxLength={4} />
+          </Field>
+        )}
         <Field label={t.setup.purchaseDate}>
           <input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} />
         </Field>

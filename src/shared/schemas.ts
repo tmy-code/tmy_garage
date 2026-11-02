@@ -81,6 +81,11 @@ export const vehicleInput = z
     hasAc: flag,
     hasAirSuspension: flag,
   })
+  // The year is the one of the first registration date when there is one.
+  .transform((v) => {
+    const fromDate = v.firstRegistrationDate ? Number(v.firstRegistrationDate.slice(0, 4)) : null;
+    return fromDate !== null && fromDate >= 1900 && fromDate <= 2100 ? { ...v, year: fromDate } : v;
+  })
   .transform(cleanSpecs)
   .superRefine((v, ctx) => {
     const problem = specsProblem(v);

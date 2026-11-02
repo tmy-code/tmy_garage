@@ -89,7 +89,7 @@ A Vehicle is never deleted from the database. It is sold, hidden from the garage
 | `name` | Required. The owner's name for it. |
 | `make` | Brand. |
 | `model` | Model. |
-| `year` | Year. |
+| `year` | Year. Always the year of `first_registration_date` when that is set; typed by hand only when it is not. |
 | `vin` | Vehicle identification number. |
 | `first_registration_date` | Optional date (`YYYY-MM-DD`): when the Vehicle first went on the road (the "date de mise en circulation"). |
 | `purchase_date` | Optional date (`YYYY-MM-DD`): when the owner bought it. |
