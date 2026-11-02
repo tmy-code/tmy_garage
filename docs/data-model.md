@@ -118,15 +118,23 @@ A new Vehicle must give its whole Build, and the server refuses impossible combi
 
 ### `spec_lines`
 
-A Vehicle's factory specs, one labelled value per row (for example "Engine oil: 10W-40, 3.2 L", "Front tyre: 120/70 ZR17, 2.5 bar", "Drain plug: 30 Nm"). Tasks do not link to them: a Task names what it needs in its Notes.
+A Vehicle's factory specs, one labelled value per row (for example "Engine oil: 10W-40, 3.2 L", "Front tyre: 120/70 ZR17, 2.5 bar", "Drain plug: 30 Nm"). They are reference data for the owner at the workshop: Tasks do not link to them, and a Task names what it needs in its Notes. A spec line has no dates, history or unit of its own; the value is free text.
 
 | Column | Meaning |
 | --- | --- |
 | `vehicle_id` | Required. → `vehicles`. |
-| `label` | Required. What it is. Each label appears once per Vehicle. |
-| `value` | Required. The figure or reference. |
-| `spec_group` | Required. `fluids`, `parts`, `torque` or `other`. |
-| `sort` | Required. Position within its group. |
+| `label` | Required, up to 80 characters. What it is. Unique per Vehicle: saving a second line with the same label is refused (409). |
+| `value` | Required, up to 200 characters. The figure or reference, written as the owner likes ("10W-40, 3.2 L"). |
+| `spec_group` | Required. What kind of figure it is: `fluids`, `parts`, `torque` or `other`. |
+| `category` | Which part of the Vehicle it concerns: the same seven categories as Tasks (`engine`, `transmission`, `brakes`, `chassis`, `electrical`, `cooling_climate`, `other`). Empty counts as `other`. |
+| `sort` | Required. Position within its group, in the order entered. A new line goes last in its group; changing a line's group moves it to the end of the new one. |
+
+How the screens use them:
+- The Specs page lists a Vehicle's lines under their **category** headings (in the same order as the Task list), and inside a category by **group** (fluids, parts, torque, other), then by `sort`. The group is shown next to each value.
+- Adding, editing and deleting a line needs a connection to the server, like the other desk work; the lines travel in the offline snapshot so they can be read in the garage.
+- A Vehicle keeps its lines when it is sold. "Copy tasks from…" copies Tasks only, never spec lines.
+
+History: spec lines replaced the earlier Part Specs and Vehicle Specs (see the migration table below). Lines migrated from those were given a category by matching words in the label ("brake", "huile", "tyre"…); anything unmatched, and every torque line, has none and shows under Other.
 
 ## 2. Maintenance Plan
 
