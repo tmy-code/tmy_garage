@@ -459,6 +459,18 @@ const MIGRATIONS: string[] = [
   -- Interval rules by build were dropped again: an Interval is customised on the Vehicle instead.
   ALTER TABLE catalogue_parts DROP COLUMN interval_rules;
   `,
+  `
+  -- Six categories (engine, transmission, braking system, chassis, electrical, cooling and climate) plus 'other'
+  -- replace the twelve: ignition, fuel and exhaust join the engine, the drivetrain the transmission, tyres, suspension
+  -- and body the chassis, heating and A/C the cooling. A Task's category may now be set on any Task, so the column is
+  -- recreated with the new check.
+  ALTER TABLE maintenance_tasks ADD COLUMN category_new TEXT CHECK (category_new IN
+    ('engine', 'transmission', 'brakes', 'chassis', 'electrical', 'cooling_climate', 'other'));
+  UPDATE maintenance_tasks SET category_new = CASE category WHEN 'engine' THEN 'engine' WHEN 'ignition' THEN 'engine' WHEN 'fuel_exhaust' THEN 'engine' WHEN 'transmission' THEN 'transmission' WHEN 'drivetrain' THEN 'transmission' WHEN 'brakes' THEN 'brakes' WHEN 'tires_suspension' THEN 'chassis' WHEN 'body' THEN 'chassis' WHEN 'electrical' THEN 'electrical' WHEN 'cooling' THEN 'cooling_climate' WHEN 'hvac' THEN 'cooling_climate' WHEN 'other' THEN 'other' END;
+  ALTER TABLE maintenance_tasks DROP COLUMN category;
+  ALTER TABLE maintenance_tasks RENAME COLUMN category_new TO category;
+  UPDATE catalogue_parts SET category = CASE category WHEN 'engine' THEN 'engine' WHEN 'ignition' THEN 'engine' WHEN 'fuel_exhaust' THEN 'engine' WHEN 'transmission' THEN 'transmission' WHEN 'drivetrain' THEN 'transmission' WHEN 'brakes' THEN 'brakes' WHEN 'tires_suspension' THEN 'chassis' WHEN 'body' THEN 'chassis' WHEN 'electrical' THEN 'electrical' WHEN 'cooling' THEN 'cooling_climate' WHEN 'hvac' THEN 'cooling_climate' WHEN 'other' THEN 'other' END WHERE category IS NOT NULL;
+  `,
 ];
 
 function schemaVersion(db: DatabaseSync): number {

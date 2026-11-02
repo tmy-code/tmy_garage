@@ -113,16 +113,21 @@ describe('vehicles and tasks', () => {
     ]);
   });
 
-  it('stores the category picked for a Task replacing no part, and drops it once the Task replaces one', async () => {
+  it('stores the category picked for a Task, whether or not it replaces a part, and copies it', async () => {
     const a = await createVehicle('A');
     const b = await createVehicle('B');
-    const lube = await createTask(a.id, { name: 'Chain lube', category: 'drivetrain' });
-    expect(lube.category).toBe('drivetrain');
+    const lube = await createTask(a.id, { name: 'Chain lube', category: 'transmission' });
+    expect(lube.category).toBe('transmission');
     expect((await call('POST', `/api/vehicles/${a.id}/tasks`, { name: 'X', intervalKm: 1000, category: 'garden' })).status).toBe(422);
+    // The old categories are no longer accepted.
+    expect((await call('POST', `/api/vehicles/${a.id}/tasks`, { name: 'X', intervalKm: 1000, category: 'drivetrain' })).status).toBe(422);
     await call('POST', `/api/vehicles/${b.id}/copy-tasks`, { fromVehicleId: a.id });
-    expect((await snapshot()).tasks.find((t) => t.vehicleId === b.id)!.category).toBe('drivetrain');
-    await call('PUT', `/api/tasks/${lube.id}`, { name: 'Chain kit', intervalKm: 1000, standardPart: 'moto_chain', category: 'body' });
-    expect((await snapshot()).tasks.find((t) => t.id === lube.id)).toMatchObject({ standardPart: 'moto_chain', category: null });
+    expect((await snapshot()).tasks.find((t) => t.vehicleId === b.id)!.category).toBe('transmission');
+    // A Task replacing a part keeps the owner's pick over the part's own category; none follows the part.
+    await call('PUT', `/api/tasks/${lube.id}`, { name: 'Chain kit', intervalKm: 1000, standardPart: 'moto_chain', category: 'chassis' });
+    expect((await snapshot()).tasks.find((t) => t.id === lube.id)).toMatchObject({ standardPart: 'moto_chain', category: 'chassis' });
+    await call('PUT', `/api/tasks/${lube.id}`, { name: 'Chain kit', intervalKm: 1000, standardPart: 'moto_chain', category: null });
+    expect((await snapshot()).tasks.find((t) => t.id === lube.id)).toMatchObject({ category: null });
   });
 
   it('stores, updates and copies a Task’s French name', async () => {
@@ -1053,7 +1058,7 @@ describe('the parts catalogue in Settings', () => {
       name: 'Particle filter',
       nameFr: 'Filtre à particules',
       unit: 'piece',
-      category: 'fuel_exhaust',
+      category: 'engine',
       intervalKm: 150000,
       conditions: { fuel: ['diesel'] },
       characteristics: 'Original type',
@@ -1067,7 +1072,7 @@ describe('the parts catalogue in Settings', () => {
     expect((await snapshot()).positions.find((p) => p.vehicleId === diesel.id && p.standardPart === code)).toBeDefined();
     expect(await taskOf(diesel.id, code)).toMatchObject({ name: 'Particle filter', nameFr: 'Filtre à particules', intervalKm: 150000 });
 
-    const body = { kind: 'car', name: 'DPF', unit: 'piece', category: 'fuel_exhaust', intervalKm: 100000, conditions: { fuel: ['diesel'] } };
+    const body = { kind: 'car', name: 'DPF', unit: 'piece', category: 'engine', intervalKm: 100000, conditions: { fuel: ['diesel'] } };
     expect((await call('PUT', `/api/catalogue/${code}`, body)).status).toBe(200);
     expect(await specOf(diesel.id, code)).toMatchObject({ name: 'DPF' });
     // The Task's Interval was never set by the owner, so it follows; its name follows too.
@@ -1077,7 +1082,7 @@ describe('the parts catalogue in Settings', () => {
   it('deletes a part of the owner’s: what was never used goes, what was used stays under its name', async () => {
     const unused = await createCar();
     const used = await createCar();
-    const res = await call('POST', '/api/catalogue', { kind: 'car', name: 'Roof rack', unit: 'piece', category: 'body', intervalMonths: 60, conditions: {} });
+    const res = await call('POST', '/api/catalogue', { kind: 'car', name: 'Roof rack', unit: 'piece', category: 'chassis', intervalMonths: 60, conditions: {} });
     const { code } = (await res.json()) as { code: string };
     const usedSpec = (await specOf(used.id, code))!;
     const usedTask = (await taskOf(used.id, code))!;
@@ -1095,7 +1100,7 @@ describe('the parts catalogue in Settings', () => {
     expect(s.partSpecs.some((p) => p.vehicleId === unused.id && p.name === 'Roof rack')).toBe(false);
     expect(s.tasks.some((t) => t.vehicleId === unused.id && t.name === 'Roof rack')).toBe(false);
     expect(s.partSpecs.find((p) => p.id === usedSpec.id)).toMatchObject({ standardPart: null, name: 'Roof rack', notFitted: false });
-    expect(s.tasks.find((t) => t.id === usedTask.id)).toMatchObject({ standardPart: null, category: 'body' });
+    expect(s.tasks.find((t) => t.id === usedTask.id)).toMatchObject({ standardPart: null, category: 'chassis' });
     expect(s.positions.find((p) => p.id === position.id)).toMatchObject({ standardPart: null, name: 'Roof rack' });
   });
 
@@ -1104,7 +1109,7 @@ describe('the parts catalogue in Settings', () => {
     expect((await call('PUT', '/api/catalogue/wipers', { conditions: { fuel: ['steam'] } })).status).toBe(422);
     expect((await call('PUT', '/api/catalogue/nothing', { conditions: {} })).status).toBe(404);
     expect((await call('DELETE', '/api/catalogue/nothing')).status).toBe(404);
-    expect((await call('POST', '/api/catalogue', { kind: 'car', name: 'X', unit: 'piece', category: 'body', conditions: {} })).status).toBe(422);
+    expect((await call('POST', '/api/catalogue', { kind: 'car', name: 'X', unit: 'piece', category: 'chassis', conditions: {} })).status).toBe(422);
     expect((await call('PUT', '/api/catalogue/timing_belt_kit', { conditions: { distribution: ['belt'] } })).status).toBe(200);
     expect((await snapshot()).catalogue).toEqual([]);
   });
@@ -1195,7 +1200,7 @@ describe('the maintenance task list in Settings', () => {
       kind: 'motorcycle',
       name: 'Chain lubrication',
       nameFr: 'Graissage de la chaîne',
-      category: 'drivetrain',
+      category: 'transmission',
       intervalKm: 1000,
       conditions: { finalDrive: ['chain'] },
     });
@@ -1238,9 +1243,9 @@ describe('the maintenance task list in Settings', () => {
   });
 
   it('does not turn a check into a part or a part into a check', async () => {
-    const check = (await (await call('POST', '/api/catalogue', { kind: 'car', name: 'Alignment', category: 'tires_suspension', intervalMonths: 24, conditions: {} })).json()) as { code: string };
-    const part = (await (await call('POST', '/api/catalogue', { kind: 'car', name: 'Roof rack', unit: 'piece', category: 'body', intervalMonths: 60, conditions: {} })).json()) as { code: string };
-    const body = { kind: 'car', name: 'X', category: 'body', intervalMonths: 12, conditions: {} };
+    const check = (await (await call('POST', '/api/catalogue', { kind: 'car', name: 'Alignment', category: 'chassis', intervalMonths: 24, conditions: {} })).json()) as { code: string };
+    const part = (await (await call('POST', '/api/catalogue', { kind: 'car', name: 'Roof rack', unit: 'piece', category: 'chassis', intervalMonths: 60, conditions: {} })).json()) as { code: string };
+    const body = { kind: 'car', name: 'X', category: 'chassis', intervalMonths: 12, conditions: {} };
     expect((await call('PUT', `/api/catalogue/${check.code}`, { ...body, unit: 'piece' })).status).toBe(422);
     expect((await call('PUT', `/api/catalogue/${part.code}`, body)).status).toBe(422);
     expect((await call('PUT', `/api/catalogue/${part.code}`, { ...body, unit: 'litre' })).status).toBe(200);
@@ -1250,7 +1255,7 @@ describe('the maintenance task list in Settings', () => {
     const unused = await createBike();
     const used = await createBike();
     const { code } = (await (
-      await call('POST', '/api/catalogue', { kind: 'motorcycle', name: 'Fork check', category: 'tires_suspension', intervalMonths: 12, conditions: {} })
+      await call('POST', '/api/catalogue', { kind: 'motorcycle', name: 'Fork check', category: 'chassis', intervalMonths: 12, conditions: {} })
     ).json()) as { code: string };
     const usedTask = (await taskOf(used.id, code))!;
     await call('PUT', '/api/services/svc-00004', { id: 'svc-00004', vehicleId: used.id, date: '2026-10-01', odometer: 1000, taskIds: [usedTask.id], partsUsed: [] });
@@ -1258,7 +1263,7 @@ describe('the maintenance task list in Settings', () => {
     expect((await call('DELETE', `/api/catalogue/${code}`)).status).toBe(204);
     const s = await snapshot();
     expect(s.tasks.some((t) => t.vehicleId === unused.id && t.name === 'Fork check')).toBe(false);
-    expect(s.tasks.find((t) => t.id === usedTask.id)).toMatchObject({ standardPart: null, category: 'tires_suspension' });
+    expect(s.tasks.find((t) => t.id === usedTask.id)).toMatchObject({ standardPart: null, category: 'chassis' });
   });
 
   it('applies a new or changed check to vehicles added earlier, the sold ones excepted', async () => {
@@ -1463,6 +1468,38 @@ describe('migrations', () => {
     old.close();
     const migrated = openDatabase(path);
     expect(migrated.prepare('SELECT code FROM catalogue_parts').all()).toEqual([{ code: 'wipers' }]);
+    migrated.close();
+  });
+
+  it('moves the twelve categories into six, for Tasks and the owner’s own parts', () => {
+    const path = join(dir, 'garage.sqlite');
+    const old = openDatabase(path, undefined, 20);
+    old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v1', 'default', 'car', 'Old car')`);
+    const task = (id: string, category: string | null) =>
+      old.exec(`INSERT INTO maintenance_tasks (id, vehicle_id, name, interval_km, category) VALUES ('${id}', 'v1', '${id}', 1000, ${category ? `'${category}'` : 'NULL'})`);
+    for (const c of ['engine', 'ignition', 'fuel_exhaust', 'cooling', 'transmission', 'drivetrain', 'brakes', 'tires_suspension', 'electrical', 'hvac', 'body', 'other']) task(c, c);
+    task('none', null);
+    old.exec(`INSERT INTO catalogue_parts (garage_id, code, kind, name, unit, category, interval_km) VALUES ('default', 'own_a', 'car', 'Roof rack', 'piece', 'body', 1000)`);
+    old.exec(`INSERT INTO catalogue_parts (garage_id, code, conditions, removed) VALUES ('default', 'wipers', '{}', 1)`);
+    old.close();
+
+    const migrated = openDatabase(path);
+    const categories = Object.fromEntries((migrated.prepare('SELECT id, category FROM maintenance_tasks').all() as { id: string; category: string | null }[]).map((r) => [r.id, r.category]));
+    expect(categories).toEqual({
+      engine: 'engine', ignition: 'engine', fuel_exhaust: 'engine',
+      transmission: 'transmission', drivetrain: 'transmission',
+      brakes: 'brakes',
+      tires_suspension: 'chassis', body: 'chassis',
+      electrical: 'electrical',
+      cooling: 'cooling_climate', hvac: 'cooling_climate',
+      other: 'other',
+      none: null,
+    });
+    expect(migrated.prepare('SELECT code, category FROM catalogue_parts ORDER BY code').all()).toEqual([
+      { code: 'own_a', category: 'chassis' },
+      { code: 'wipers', category: null },
+    ]);
+    expect(() => migrated.exec(`UPDATE maintenance_tasks SET category = 'hvac' WHERE id = 'none'`)).toThrow();
     migrated.close();
   });
 });

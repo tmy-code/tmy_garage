@@ -249,12 +249,12 @@ describe('shoppingList', () => {
 });
 
 describe('groupByCategory', () => {
-  it('groups Tasks by their part’s category or the one picked, in screen order, keeping their order and setting paused ones apart', () => {
+  it('groups Tasks by the category picked, else their part’s, in screen order, keeping their order and setting paused ones apart', () => {
     const due = (taskId: string, status: DueInfo['status'] = 'ok') => ({ taskId, status }) as DueInfo;
     const tasks = new Map(
       [
-        task({ id: 'pads', standardPart: 'moto_brake_pads_front', category: 'body' }),
-        task({ id: 'lube', name: 'Chain lube', category: 'drivetrain' }),
+        task({ id: 'pads', standardPart: 'moto_brake_pads_front', category: 'chassis' }),
+        task({ id: 'lube', name: 'Chain lube', category: 'transmission' }),
         task({ id: 'oil', standardPart: 'moto_engine_oil' }),
         task({ id: 'wash', name: 'Wash' }),
         task({ id: 'chain', standardPart: 'moto_chain' }),
@@ -264,8 +264,8 @@ describe('groupByCategory', () => {
     const groups = groupByCategory([due('chain', 'overdue'), due('wash'), due('pads'), due('belt', 'paused'), due('lube'), due('oil')], tasks, BUILT_IN_CATALOGUE);
     expect(groups.groups.map((g) => [g.category, g.due.map((d) => d.taskId)])).toEqual([
       ['engine', ['oil']],
-      ['drivetrain', ['chain', 'lube']],
-      ['brakes', ['pads']],
+      ['transmission', ['chain', 'lube']],
+      ['chassis', ['pads']],
       ['other', ['wash']],
     ]);
     expect(groups.paused.map((d) => d.taskId)).toEqual(['belt']);

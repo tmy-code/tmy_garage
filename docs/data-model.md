@@ -193,7 +193,7 @@ The database refuses a Task with neither a distance nor a time interval.
 | `workshop_notes` | Free-text steps and warnings. |
 | `standard_part` | The code of the Standard Part this Task replaces. The Task is paused while that part is not on the Vehicle. |
 | `custom_interval` | Required, yes/no. No means the interval follows the Build (shorter with a turbo, for example). Yes means the owner set it. |
-| `category` | The group chosen by the owner, for a Task that replaces no part. A Task that replaces a part takes the part's category. |
+| `category` | The category the owner placed the Task in: `engine`, `transmission`, `brakes`, `chassis`, `electrical`, `cooling_climate` or `other`. Empty follows the Task's part's category, or `other` when it has no part. |
 | `switched_off` | Required, yes/no. A check or service of the schedule the owner switched off on this Vehicle, which pauses it. |
 
 ### `services`
@@ -322,7 +322,7 @@ The key is `garage_id` and `code`. This table has no `id`.
 | `name` | Own parts only. |
 | `name_fr` | Own parts only. |
 | `unit` | Own entries only: `piece` for fitted, `litre` for a fluid, **empty for a check or service**, which has no Part Spec and no Fitment Position. |
-| `category` | Own entries only. |
+| `category` | Own entries only; the same seven values as a Task's. A built-in entry's category is in the code. |
 | `interval_km` | The default distance interval: for an own entry always, for a built-in one only when `interval_set` is 1. |
 | `interval_months` | The same, for time. |
 | `interval_set` | Required, yes/no. A built-in entry whose default interval is the owner's. |
@@ -574,7 +574,7 @@ These values are always calculated from the records above, so they can't drift o
 | Current odometer | The latest value logged in a reading, a Service or an inspection. It is never estimated. |
 | Monthly distance | The rate between logged values, using the last 180 days where possible and at least 14 days of history. |
 | Due Date and status | From the last Service or the baseline, the stricter interval and the distance rate. The status is `overdue`, `dueSoon`, `ok`, `unknown` or `paused`. A date from a distance is a projection, and the screens mark it "≈". |
-| A Task's category | The part's category if it replaces one, otherwise the owner's choice, otherwise `other`. |
+| A Task's category | The owner's choice, otherwise the part's category if it replaces one, otherwise `other`. |
 | Shopping List | The Required Parts of the Tasks coming due, added up per Part Spec. No stock is tracked. |
 | What is fitted | The latest Part Used or Modification at a position. |
 | Next Technical Inspection | The date on the last report, otherwise the regulatory rhythm from first registration. |

@@ -92,9 +92,9 @@ export function fitments(snapshot: Snapshot, vehicle: Vehicle): Fitment[] {
     });
 }
 
-/** A Maintenance Task's category: its Standard Part's if it replaces one, else the one the owner picked, else 'other'. */
+/** A Maintenance Task's category: the one the owner picked, else its Standard Part's if it replaces one, else 'other'. */
 export function taskCategory(task: MaintenanceTask, catalogue: Catalogue): PartCategory {
-  return task.standardPart !== null ? catalogue.category(task.standardPart) : (task.category ?? 'other');
+  return task.category ?? (task.standardPart !== null ? catalogue.category(task.standardPart) : 'other');
 }
 
 export interface TaskGroups {

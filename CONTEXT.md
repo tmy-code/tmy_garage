@@ -19,8 +19,12 @@ The app speaks English and French. French screens use: Vehicle → véhicule, Ma
 ## Maintenance
 
 **Maintenance Task**:
-A recurring job defined for one Vehicle, named for what is to be done (e.g. "Change engine oil and filter", "Replace front brake pads"), with an Interval saying how often it must be done. A Task may say which Standard Part it replaces; while that part is not on the Vehicle (set aside after a Build change, or marked by the user), the Task is paused: it has no Due Date, sends no Reminder and adds nothing to the Shopping List. A Vehicle's Tasks are listed by category: a Task replacing a Standard Part takes the part's category, any other the one the owner picks ("other" until then); paused Tasks are listed apart.
+A recurring job defined for one Vehicle, named for what is to be done (e.g. "Change engine oil and filter", "Replace front brake pads"), with an Interval saying how often it must be done. A Task may say which Standard Part it replaces; while that part is not on the Vehicle (set aside after a Build change, or marked by the user), the Task is paused: it has no Due Date, sends no Reminder and adds nothing to the Shopping List. A Vehicle's Tasks are listed by Category; paused Tasks are listed apart.
 _Avoid_: Job, service item, schedule entry
+
+**Category**:
+The group a Maintenance Task, Standard Part or Check is listed under: Engine, Transmission, Braking system, Chassis, Electrical, Cooling & Climate, and Other for what fits none. A Standard Part, and the Task replacing it, starts in the Category the Parts Catalogue gives it (ignition and fuel parts in Engine, the drivetrain in Transmission, tyres, suspension and wipers in Chassis, heating and A/C in Cooling & Climate); the owner can place any Task in another, and Other is listed only when something is in it.
+_Avoid_: Type, group, section
 
 **Interval**:
 How often a Maintenance Task recurs: a distance, a duration, or both, in which case it is due at whichever is reached first. Where the user's own interval and the Official Interval differ, the stricter one applies.

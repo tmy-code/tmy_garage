@@ -993,7 +993,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       t.baselineOdometer,
       standardPart,
       isCustomInterval(buildOfRow(vehicle), standardPart, t.intervalKm, t.intervalMonths) ? 1 : 0,
-      standardPart === null ? t.category : null,
+      t.category,
     );
     return c.json(loadTask(id), 201);
   });
@@ -1038,7 +1038,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
             t.official_interval_months,
             standardPart,
             custom,
-            standardPart === null ? t.category : null,
+            t.category,
           );
         }
       }
@@ -1073,7 +1073,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       standardPart,
       // An Interval equal to the catalogue's for this Build is not the owner's own: it keeps following the Build.
       isCustomInterval(build, standardPart, t.intervalKm, t.intervalMonths) ? 1 : 0,
-      standardPart === null ? t.category : null,
+      t.category,
       t.switchedOff ? 1 : 0,
       id,
     );

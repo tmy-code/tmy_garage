@@ -162,7 +162,7 @@ export const taskInput = z
       .min(1)
       .nullish()
       .transform((v) => v ?? null),
-    /** Only for a Task replacing no Standard Part; one that does takes the part's category. */
+    /** The category the owner placed the Task in; empty follows its Standard Part's, else 'other'. */
     category: z
       .enum(PART_CATEGORIES)
       .nullish()

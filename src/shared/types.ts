@@ -58,7 +58,7 @@ export interface MaintenanceTask {
   workshopNotes: string | null;
   /** The Standard Part the Task replaces, if any; the Task is paused while that part is not on the Vehicle. */
   standardPart: StandardPartKey | null;
-  /** The category the owner picked when the Task replaces no Standard Part; see taskCategory. */
+  /** The category the owner placed the Task in; empty follows its Standard Part's, else 'other'. See taskCategory. */
   category: PartCategory | null;
   /** A check or service of the schedule the owner switched off on this Vehicle: the Task is paused. */
   switchedOff: boolean;
