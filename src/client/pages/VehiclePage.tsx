@@ -1,5 +1,6 @@
 import { Fragment, useMemo, useState } from 'react';
 import { todayIso } from '../../shared/dates.ts';
+import { catalogueOf } from '../../shared/catalogue.ts';
 import { vehicleDue, type DueInfo } from '../../shared/due.ts';
 import { nextInspection, openDefects } from '../../shared/inspections.ts';
 import { currentCover, renewal } from '../../shared/insurance.ts';
@@ -59,7 +60,7 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
   const today = todayIso();
   const { usage, due } = useMemo(() => vehicleDue(snapshot, vehicle.id, today), [snapshot, vehicle.id, today]);
   const tasks = new Map(snapshot.tasks.filter((task) => task.vehicleId === vehicle.id).map((task) => [task.id, task]));
-  const groups = groupByCategory(due, tasks);
+  const groups = groupByCategory(due, tasks, catalogueOf(snapshot));
   const pending = new Set(outbox.map((op) => op.data.id));
   const owned = vehicle.status === 'owned';
   const inspection = nextInspection(snapshot, vehicle, today);

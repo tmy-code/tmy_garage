@@ -72,6 +72,7 @@ function snapshot(inspections: TechnicalInspection[] = [], documents: GarageDocu
     policies: [],
     claims: [],
     quotes: [],
+    catalogue: [],
   };
 }
 

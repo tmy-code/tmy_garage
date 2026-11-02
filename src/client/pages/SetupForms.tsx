@@ -5,11 +5,9 @@ import {
   DRIVETRAINS,
   FINAL_DRIVES,
   flagsOf,
-  defaultInterval,
+  catalogueOf,
   fuelsOf,
-  isStandardPartKey,
   PART_CATEGORIES,
-  partFits,
   SPEC_FLAGS,
   transmissionsOf,
   type PartCategory,
@@ -387,13 +385,14 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
   const standardParts = partSpecsOf(snapshot, vehicle, { notFitted: true }).filter(
     (p) => p.standardPart !== null && (!p.notFitted || p.standardPart === existing?.standardPart),
   );
-  const fallback = standardPart && isStandardPartKey(standardPart) ? defaultInterval(vehicle, standardPart) : null;
+  const catalogue = catalogueOf(snapshot);
+  const fallback = standardPart ? catalogue.defaultInterval(vehicle, standardPart) : null;
   const atDefault =
     fallback !== null && intervalKm === String(fallback.intervalKm ?? '') && intervalMonths === String(fallback.intervalMonths ?? '');
   // The only Task for a part the Vehicle has stays on its schedule: switching it off is done on the part.
   const scheduled =
     existing?.standardPart != null &&
-    partFits(vehicle, existing.standardPart) &&
+    catalogue.fits(vehicle, existing.standardPart) &&
     !snapshot.tasks.some((task) => task.id !== existing.id && task.vehicleId === vehicle.id && task.standardPart === existing.standardPart);
   const { error, disabled, run } = useSubmit();
   const back = `/vehicles/${vehicle.id}`;

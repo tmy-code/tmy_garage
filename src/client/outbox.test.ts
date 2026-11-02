@@ -17,6 +17,7 @@ const base: Snapshot = {
   policies: [],
   claims: [],
   quotes: [],
+  catalogue: [],
 };
 
 const service = (id: string, odometer: number): OutboxOp => ({

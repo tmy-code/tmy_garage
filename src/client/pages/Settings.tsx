@@ -17,6 +17,19 @@ export function SettingsPage() {
         <Reminders />
       </section>
       <section>
+        <h2 className="with-icon">
+          <Icon name="part" /> {t.settings.partsTitle}
+        </h2>
+        <ul className="list">
+          <li>
+            <a href="#/settings/parts" className="history-row">
+              <span>{t.settings.partsLink}</span>
+              <span className="muted">{t.settings.partsLinkHint}</span>
+            </a>
+          </li>
+        </ul>
+      </section>
+      <section>
         <LanguageSwitch />
       </section>
     </Layout>

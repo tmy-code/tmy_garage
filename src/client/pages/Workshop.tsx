@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { PART_CATEGORIES, partCategory, partFits, specsProblem } from '../../shared/catalogue.ts';
+import { catalogueOf, PART_CATEGORIES, specsProblem, type Catalogue } from '../../shared/catalogue.ts';
 import { todayIso } from '../../shared/dates.ts';
 import { vehicleDue } from '../../shared/due.ts';
 import type { PartUnit, VehicleSpecKind } from '../../shared/schemas.ts';
@@ -329,9 +329,9 @@ function PartSpecEditor({ vehicle, existing, editor }: { vehicle: Vehicle; exist
   );
 }
 
-function PartSpecLine({ spec, vehicle }: { spec: PartSpec; vehicle: Vehicle }) {
+function PartSpecLine({ spec, vehicle, catalogue }: { spec: PartSpec; vehicle: Vehicle; catalogue: Catalogue }) {
   const t = useT();
-  const mismatch = spec.standardPart !== null && !spec.notFitted && !partFits(vehicle, spec.standardPart);
+  const mismatch = spec.standardPart !== null && !spec.notFitted && !catalogue.fits(vehicle, spec.standardPart);
   const references = partReferences(spec, t);
   const empty = !spec.characteristics && !references;
   return (
@@ -348,11 +348,13 @@ function PartSpecLine({ spec, vehicle }: { spec: PartSpec; vehicle: Vehicle }) {
 /** Edited in place on a phone; on a wide screen the editor sits beside the list and the row is highlighted. */
 function PartSpecList({
   vehicle,
+  catalogue,
   specs,
   editor,
   inline,
 }: {
   vehicle: Vehicle;
+  catalogue: Catalogue;
   specs: PartSpec[];
   editor: ReturnType<typeof useEditor>;
   inline: boolean;
@@ -372,7 +374,7 @@ function PartSpecList({
               .join(' ') || undefined}
           >
             <button type="button" className="item-row" onClick={() => editor.setEditing(spec.id)}>
-              <PartSpecLine spec={spec} vehicle={vehicle} />
+              <PartSpecLine spec={spec} vehicle={vehicle} catalogue={catalogue} />
             </button>
           </li>
         ),
@@ -387,6 +389,7 @@ export function PartSpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapsho
   const wide = useWide();
   const all = partSpecsOf(snapshot, vehicle, { notFitted: true });
   const fitted = all.filter((s) => !s.notFitted);
+  const catalogue = catalogueOf(snapshot);
   const notFitted = all.filter((s) => s.notFitted);
   const editing = editor.editing === 'new' ? null : all.find((s) => s.id === editor.editing);
   const side =
@@ -400,18 +403,18 @@ export function PartSpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapsho
     <>
       {!wide && editor.editing === 'new' ? <PartSpecEditor vehicle={vehicle} editor={editor} /> : null}
       {PART_CATEGORIES.map((category) => {
-        const specs = fitted.filter((s) => partCategory(s.standardPart) === category);
+        const specs = fitted.filter((s) => catalogue.category(s.standardPart) === category);
         return specs.length > 0 ? (
           <section key={category}>
             <h2>{t.workshop.partCategories[category]}</h2>
-            <PartSpecList vehicle={vehicle} specs={specs} editor={editor} inline={!wide} />
+            <PartSpecList vehicle={vehicle} catalogue={catalogue} specs={specs} editor={editor} inline={!wide} />
           </section>
         ) : null;
       })}
       {notFitted.length > 0 ? (
         <details className="sold">
           <summary>{t.workshop.notFittedSection(notFitted.length)}</summary>
-          <PartSpecList vehicle={vehicle} specs={notFitted} editor={editor} inline={!wide} />
+          <PartSpecList vehicle={vehicle} catalogue={catalogue} specs={notFitted} editor={editor} inline={!wide} />
         </details>
       ) : null}
     </>
@@ -492,7 +495,7 @@ export function FittedPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: 
       <TraitsNudge vehicle={vehicle} />
       {list.length === 0 ? <p className="empty">{t.workshop.noPositions}</p> : null}
       {PART_CATEGORIES.map((category) => {
-        const items = list.filter(({ position }) => partCategory(position.standardPart) === category);
+        const items = list.filter(({ position }) => catalogueOf(snapshot).category(position.standardPart) === category);
         return items.length > 0 ? (
           <section key={category}>
             <h2>{t.workshop.partCategories[category]}</h2>

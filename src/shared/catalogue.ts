@@ -128,10 +128,10 @@ export type PartCategory = (typeof PART_CATEGORIES)[number];
 type SpecKey = keyof VehicleSpecs | 'combustion';
 
 /**
- * A condition on one detail of the Build: equal, different, one of, or at least. 'combustion' is whether it has a
- * combustion engine (any fuel but electric). A detail that is not filled in never matches.
+ * A condition of a built-in part on one detail of the Build: equal or one of. 'combustion' is whether it has a
+ * combustion engine (any fuel but electric).
  */
-type Rule = readonly [SpecKey, '=' | '!=', string | number | boolean] | readonly [SpecKey, 'in', readonly string[]] | readonly [SpecKey, '>=', number];
+type Rule = readonly [SpecKey, '=', string | boolean] | readonly [SpecKey, 'in', readonly string[]];
 
 interface PartTemplate {
   code: string;
@@ -226,58 +226,126 @@ export const PART_TEMPLATES = [
   { code: 'moto_ev_coolant', kind: 'motorcycle', en: 'Motor and battery coolant', fr: 'Liquide de refroidissement moteur et batterie', unit: 'litre', category: 'cooling', intervalKm: null, intervalMonths: 48, when: [['fuel', '=', 'electric'], ['cooling', '=', 'liquid']] },
 ] as const satisfies readonly PartTemplate[];
 
-export type StandardPartKey = (typeof PART_TEMPLATES)[number]['code'];
+/** A Standard Part's code: a built-in one, or `own_…` for one the owner added. Codes are stored, so never rename one. */
+export type StandardPartKey = string;
 
-const BY_CODE = new Map<string, PartTemplate>(PART_TEMPLATES.map((t) => [t.code, t]));
+// --- Conditions on the Build ---
 
-export function isStandardPartKey(key: string): key is StandardPartKey {
-  return BY_CODE.has(key);
+/** The details of a Build a part can depend on: one of their values, or an option being there or not. */
+export const CONDITION_KEYS = ['fuel', 'transmission', 'drivetrain', 'distribution', 'finalDrive', 'cooling', ...SPEC_FLAGS] as const;
+export type ConditionKey = (typeof CONDITION_KEYS)[number];
+
+/**
+ * For each detail a part depends on, the values a Vehicle needs for the part to be on it (an option as 'true' or
+ * 'false'). A detail left out takes any value; a detail not filled in on the Vehicle never matches.
+ */
+export type Conditions = Partial<Record<ConditionKey, readonly string[]>>;
+
+/** The details a part of this kind can depend on, with the values each can take, in screen order. */
+export function conditionChoices(kind: VehicleKind): { key: ConditionKey; values: readonly string[] }[] {
+  const flag = (key: SpecFlag) => ({ key, values: ['true', 'false'] });
+  return kind === 'car'
+    ? [
+        { key: 'fuel', values: fuelsOf('car') },
+        { key: 'transmission', values: [...transmissionsOf('car', null), 'single_speed'] },
+        { key: 'drivetrain', values: DRIVETRAINS },
+        { key: 'distribution', values: ['belt', 'chain', 'none'] },
+        ...SPEC_FLAGS.filter((f) => f !== 'hasHydraulicClutch').map(flag),
+      ]
+    : [
+        { key: 'fuel', values: fuelsOf('motorcycle') },
+        { key: 'transmission', values: [...transmissionsOf('motorcycle', null), 'single_speed'] },
+        { key: 'finalDrive', values: FINAL_DRIVES },
+        { key: 'cooling', values: COOLINGS },
+        flag('hasHydraulicClutch'),
+      ];
 }
 
-export function templatesOf(kind: VehicleKind): (PartTemplate & { code: StandardPartKey })[] {
-  return PART_TEMPLATES.filter((t) => t.kind === kind) as (PartTemplate & { code: StandardPartKey })[];
-}
-
-/** A Standard Part's name in the interface language. */
-export function standardPartName(key: StandardPartKey, lang: 'en' | 'fr'): string {
-  return BY_CODE.get(key)![lang];
-}
-
-function matches(build: Build, [key, op, value]: Rule): boolean {
-  const actual = key === 'combustion' ? build.fuel !== 'electric' : build[key];
-  if (actual === null) return false;
-  switch (op) {
-    case '=':
-      return actual === value;
-    case '!=':
-      return actual !== value;
-    case 'in':
-      return (value as readonly unknown[]).includes(actual);
-    case '>=':
-      return typeof actual === 'number' && actual >= value;
+/** Conditions as they are kept: details of the kind only, known values only, and a detail taking any value left out. */
+export function tidyConditions(kind: VehicleKind, conditions: Conditions): Conditions {
+  const tidy: Conditions = {};
+  for (const { key, values } of conditionChoices(kind)) {
+    const wanted = conditions[key];
+    if (!wanted) continue;
+    const kept = values.filter((v) => wanted.includes(v));
+    if (kept.length < values.length) tidy[key] = kept;
   }
+  return tidy;
 }
 
-/** Whether a Standard Part is on a Vehicle with this Build. */
-export function partFits(build: Build, key: StandardPartKey): boolean {
-  const template = BY_CODE.get(key);
-  if (!template || template.kind !== build.kind) return false;
-  return (template.when ?? []).every((rule) => matches(build, rule));
+/** A built-in part's rules as Conditions, so the owner can change them like any other. */
+function conditionsOf(kind: VehicleKind, rules: readonly Rule[]): Conditions {
+  const conditions: Partial<Record<ConditionKey, string[]>> = {};
+  for (const [key, op, value] of rules) {
+    const detail = (key === 'combustion' ? 'fuel' : key) as ConditionKey;
+    const allowed =
+      key === 'combustion'
+        ? fuelsOf(kind).filter((f) => f !== 'electric')
+        : op === 'in'
+          ? [...(value as readonly string[])]
+          : [String(value)];
+    const before = conditions[detail];
+    conditions[detail] = before ? before.filter((v) => allowed.includes(v)) : allowed;
+  }
+  return conditions;
 }
 
-/** Position of a Standard Part in the catalogue, so screens keep its order; other Parts come after. */
-export function catalogueOrder(key: StandardPartKey | null): number {
-  const index = key === null ? -1 : PART_TEMPLATES.findIndex((t) => t.code === key);
-  return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+function matches(build: Build, conditions: Conditions): boolean {
+  return Object.entries(conditions).every(([key, values]) => {
+    const actual = build[key as ConditionKey];
+    // A fuel never filled in (a Vehicle added before it was required) still counts as a combustion engine.
+    if (key === 'fuel' && actual === null) {
+      return !values!.includes('electric') && fuelsOf(build.kind).every((f) => f === 'electric' || values!.includes(f));
+    }
+    return actual !== null && values!.includes(String(actual));
+  });
 }
 
-/** Whether a Standard Part is fitted at a position, rather than a fluid that is topped up or drained. */
-export function isFitted(key: StandardPartKey): boolean {
-  return BY_CODE.get(key)?.unit === 'piece';
+// --- The catalogue: built-in parts with the owner's changes ---
+
+/** A part the owner added to the catalogue. */
+export interface OwnPart {
+  kind: VehicleKind;
+  name: string;
+  nameFr: string | null;
+  unit: PartUnit;
+  category: PartCategory;
+  intervalKm: number | null;
+  intervalMonths: number | null;
 }
 
-export function partCategory(key: StandardPartKey | null): PartCategory {
-  return key === null ? 'other' : (BY_CODE.get(key)?.category ?? 'other');
+/** What the owner changed in the catalogue for one part: a built-in one's conditions, details or removal, or a part of their own. */
+export interface CatalogueEntry {
+  code: StandardPartKey;
+  /** The owner's own part; null for a change to a built-in one. */
+  own: OwnPart | null;
+  /** Null keeps a built-in part's own conditions. */
+  conditions: Conditions | null;
+  /** Default details (e.g. "10W-40, JASO MA2") a matching Vehicle's Part Spec starts with. */
+  characteristics: string | null;
+  /** A built-in part taken off the list. */
+  removed: boolean;
+}
+
+/** A part of the catalogue as it stands, built-in or the owner's own. */
+export interface CataloguePart {
+  code: StandardPartKey;
+  kind: VehicleKind;
+  en: string;
+  fr: string;
+  unit: PartUnit;
+  category: PartCategory;
+  intervalKm: number | null;
+  intervalMonths: number | null;
+  turboIntervalKm?: number;
+  task?: { en: string; fr: string };
+  goesWith?: string;
+  conditions: Conditions;
+  characteristics: string | null;
+  builtIn: boolean;
+  /** A built-in part the owner changed: its conditions, its details or its removal. */
+  changed: boolean;
+  removed: boolean;
 }
 
 /** A Maintenance Task a new Vehicle starts with, one per Standard Part it has (an oil filter goes with the oil). */
@@ -292,23 +360,137 @@ export interface StarterTask {
   parts: StandardPartKey[];
 }
 
-/** The catalogue's Interval for the Task replacing a Standard Part on a Vehicle with this Build (shorter with a turbo). */
-export function defaultInterval(build: Build, key: StandardPartKey): { intervalKm: number | null; intervalMonths: number | null } | null {
-  const t = BY_CODE.get(key);
-  if (!t || t.kind !== build.kind || t.goesWith !== undefined) return null;
-  return { intervalKm: build.hasTurbo && t.turboIntervalKm ? t.turboIntervalKm : t.intervalKm, intervalMonths: t.intervalMonths };
+const BUILT_IN_CODES = new Set<string>(PART_TEMPLATES.map((t) => t.code));
+
+export function isBuiltInPart(code: string): boolean {
+  return BUILT_IN_CODES.has(code);
 }
 
-/** The Vehicle's maintenance schedule: a Task per Standard Part that fits its Build (the oil filter goes with the oil). */
-export function starterTasks(build: Build): StarterTask[] {
-  const fitting = templatesOf(build.kind).filter((t) => partFits(build, t.code));
-  return fitting
-    .filter((t) => t.goesWith === undefined)
-    .map((t) => ({
-      name: t.task ? t.task.en : t.en,
-      nameFr: t.task ? t.task.fr : t.fr,
-      ...defaultInterval(build, t.code)!,
-      standardPart: t.code,
-      parts: [t.code, ...fitting.filter((other) => other.goesWith === t.code).map((other) => other.code)],
-    }));
+/**
+ * The Standard Parts and when a Vehicle has them: the built-in list, with the owner's changes. Every question about
+ * a part goes through it, so a change in Settings reaches every screen.
+ */
+export class Catalogue {
+  /** Every part, removed ones included: built-in ones in their order, then the owner's own in the order added. */
+  readonly all: readonly CataloguePart[];
+  private readonly byCode: Map<string, CataloguePart>;
+
+  constructor(entries: readonly CatalogueEntry[] = []) {
+    const changes = new Map(entries.map((e) => [e.code, e]));
+    const builtIn = (PART_TEMPLATES as readonly PartTemplate[]).map((t): CataloguePart => {
+      const change = changes.get(t.code);
+      return {
+        ...t,
+        conditions: change?.conditions ?? conditionsOf(t.kind, t.when ?? []),
+        characteristics: change?.characteristics ?? null,
+        builtIn: true,
+        changed: change !== undefined,
+        removed: change?.removed ?? false,
+      };
+    });
+    const own = entries
+      .filter((e) => e.own !== null && !BUILT_IN_CODES.has(e.code))
+      .map(
+        (e): CataloguePart => ({
+          code: e.code,
+          kind: e.own!.kind,
+          en: e.own!.name,
+          fr: e.own!.nameFr ?? e.own!.name,
+          unit: e.own!.unit,
+          category: e.own!.category,
+          intervalKm: e.own!.intervalKm,
+          intervalMonths: e.own!.intervalMonths,
+          conditions: e.conditions ?? {},
+          characteristics: e.characteristics,
+          builtIn: false,
+          changed: false,
+          removed: false,
+        }),
+      );
+    this.all = [...builtIn, ...own];
+    this.byCode = new Map(this.all.map((p) => [p.code, p]));
+  }
+
+  /** A part on the list (not removed). */
+  part(code: StandardPartKey | null): CataloguePart | undefined {
+    const part = code === null ? undefined : this.byCode.get(code);
+    return part && !part.removed ? part : undefined;
+  }
+
+  /** Any part this catalogue knows, removed ones included. */
+  known(code: StandardPartKey | null): CataloguePart | undefined {
+    return code === null ? undefined : this.byCode.get(code);
+  }
+
+  /** The parts on the list for a kind of Vehicle. */
+  partsOf(kind: VehicleKind): CataloguePart[] {
+    return this.all.filter((p) => p.kind === kind && !p.removed);
+  }
+
+  /** Whether a Standard Part is on a Vehicle with this Build. */
+  fits(build: Build, code: StandardPartKey): boolean {
+    const part = this.part(code);
+    return part !== undefined && part.kind === build.kind && matches(build, part.conditions);
+  }
+
+  /** A Standard Part's name in the interface language, or null for one this catalogue does not know. */
+  name(code: StandardPartKey, lang: 'en' | 'fr'): string | null {
+    return this.known(code)?.[lang] ?? null;
+  }
+
+  /** Position of a Standard Part in the catalogue, so screens keep its order; other Parts come after. */
+  order(code: StandardPartKey | null): number {
+    const index = code === null ? -1 : this.all.findIndex((p) => p.code === code);
+    return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+  }
+
+  /** Whether a Standard Part is fitted at a position, rather than a fluid that is topped up or drained. */
+  isFitted(code: StandardPartKey): boolean {
+    return this.known(code)?.unit === 'piece';
+  }
+
+  category(code: StandardPartKey | null): PartCategory {
+    return this.known(code)?.category ?? 'other';
+  }
+
+  /** Whether a part's Task is the one of the part it goes with (the oil filter with the oil) on this Build. */
+  private bundled(build: Build, part: CataloguePart): boolean {
+    return part.goesWith !== undefined && this.fits(build, part.goesWith);
+  }
+
+  /** The catalogue's Interval for the Task replacing a Standard Part on a Vehicle with this Build (shorter with a turbo). */
+  defaultInterval(build: Build, code: StandardPartKey): { intervalKm: number | null; intervalMonths: number | null } | null {
+    const part = this.part(code);
+    if (!part || part.kind !== build.kind || this.bundled(build, part)) return null;
+    return { intervalKm: build.hasTurbo && part.turboIntervalKm ? part.turboIntervalKm : part.intervalKm, intervalMonths: part.intervalMonths };
+  }
+
+  /** The Vehicle's maintenance schedule: a Task per Standard Part that fits its Build (the oil filter goes with the oil). */
+  starterTasks(build: Build): StarterTask[] {
+    const fitting = this.partsOf(build.kind).filter((p) => this.fits(build, p.code));
+    return fitting
+      .filter((p) => !this.bundled(build, p))
+      .map((p) => ({
+        name: p.task ? p.task.en : p.en,
+        nameFr: p.task ? p.task.fr : p.fr,
+        ...this.defaultInterval(build, p.code)!,
+        standardPart: p.code,
+        parts: [p.code, ...fitting.filter((other) => other.goesWith === p.code).map((other) => other.code)],
+      }));
+  }
+}
+
+/** The built-in catalogue, without any change of the owner's. */
+export const BUILT_IN_CATALOGUE = new Catalogue();
+
+const bySnapshot = new WeakMap<readonly CatalogueEntry[], Catalogue>();
+
+/** The catalogue a snapshot of the garage carries, built once per snapshot. */
+export function catalogueOf(snapshot: { catalogue: readonly CatalogueEntry[] }): Catalogue {
+  let catalogue = bySnapshot.get(snapshot.catalogue);
+  if (!catalogue) {
+    catalogue = new Catalogue(snapshot.catalogue);
+    bySnapshot.set(snapshot.catalogue, catalogue);
+  }
+  return catalogue;
 }

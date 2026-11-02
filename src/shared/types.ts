@@ -1,5 +1,5 @@
 import type { IsoDate } from './dates.ts';
-import type { PartCategory, StandardPartKey, VehicleSpecs } from './catalogue.ts';
+import type { CatalogueEntry, PartCategory, StandardPartKey, VehicleSpecs } from './catalogue.ts';
 import type {
   CoverLevel,
   DefectSeverity,
@@ -287,4 +287,6 @@ export interface Snapshot {
   policies: InsurancePolicy[];
   claims: Claim[];
   quotes: Quote[];
+  /** The owner's changes to the parts catalogue; see catalogueOf. */
+  catalogue: CatalogueEntry[];
 }

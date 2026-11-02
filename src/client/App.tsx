@@ -14,7 +14,9 @@ import {
   VehicleInsurancePage,
 } from './pages/Insurance.tsx';
 import { DocumentsPage, InspectionForm, InspectionsPage, ModificationForm, ModificationsPage } from './pages/Papers.tsx';
+import { CataloguePage, PartForm } from './pages/PartCatalogue.tsx';
 import { SettingsPage } from './pages/Settings.tsx';
+import { catalogueOf } from '../shared/catalogue.ts';
 import { ReadingForm, ServiceForm } from './pages/ServiceForm.tsx';
 import { CopyTasks, SellForm, TaskForm, VehicleForm } from './pages/SetupForms.tsx';
 import { VehiclePage } from './pages/VehiclePage.tsx';
@@ -69,6 +71,12 @@ export function App() {
   if (section === 'shopping') return <ShoppingPage snapshot={snapshot} />;
   if (section === 'insurance') return <InsurancePage snapshot={snapshot} />;
   // Reminders used to have their own page; links to it (a test notification, say) open the settings.
+  if (section === 'settings' && id === 'parts') {
+    if (sub === undefined) return <CataloguePage snapshot={snapshot} />;
+    if (sub === 'new' && (subId === 'car' || subId === 'motorcycle')) return <PartForm key={subId} kind={subId} />;
+    const part = catalogueOf(snapshot).known(sub);
+    return part ? <PartForm key={part.code} part={part} kind={part.kind} /> : <NotFound what="page" />;
+  }
   if (section === 'settings' || section === 'reminders') return <SettingsPage />;
   if (section === 'vehicles' && id === 'new') return <VehicleForm />;
   if (section === 'vehicles' && id === 'manage') {

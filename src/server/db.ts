@@ -427,6 +427,26 @@ const MIGRATIONS: string[] = [
   ALTER TABLE services DROP COLUMN odometer;
   ALTER TABLE services RENAME COLUMN odometer_new TO odometer;
   `,
+  `
+  -- What the owner changed in the parts catalogue: for a built-in part (kind is null) its conditions, default details
+  -- or removal; otherwise a whole part of their own.
+  CREATE TABLE catalogue_parts (
+    garage_id TEXT NOT NULL REFERENCES garages(id),
+    code TEXT NOT NULL,
+    kind TEXT CHECK (kind IN ('car', 'motorcycle')),
+    name TEXT,
+    name_fr TEXT,
+    unit TEXT CHECK (unit IN ('piece', 'litre')),
+    category TEXT,
+    interval_km INTEGER,
+    interval_months INTEGER,
+    conditions TEXT,
+    characteristics TEXT,
+    removed INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (garage_id, code)
+  );
+  `,
 ];
 
 function schemaVersion(db: DatabaseSync): number {

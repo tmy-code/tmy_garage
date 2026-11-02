@@ -1,4 +1,4 @@
-import { catalogueOrder, PART_CATEGORIES, partCategory, type PartCategory } from './catalogue.ts';
+import { catalogueOf, PART_CATEGORIES, type Catalogue, type PartCategory } from './catalogue.ts';
 import { addDays, type IsoDate } from './dates.ts';
 import { vehicleDue, type DueInfo } from './due.ts';
 import type { FitmentPosition, MaintenanceTask, Modification, PartSpec, PartUsed, Service, Snapshot, Vehicle } from './types.ts';
@@ -29,7 +29,7 @@ function usages(snapshot: Snapshot, vehicleId: string, matches: (p: PartUsed) =>
 export function partSpecsOf(snapshot: Snapshot, vehicle: Vehicle, { notFitted = false, keep = [] as (string | null)[] } = {}): PartSpec[] {
   return snapshot.partSpecs
     .filter((p) => p.vehicleId === vehicle.id && (notFitted || !p.notFitted || keep.includes(p.id)))
-    .sort((a, b) => catalogueOrder(a.standardPart) - catalogueOrder(b.standardPart));
+    .sort((a, b) => catalogueOf(snapshot).order(a.standardPart) - catalogueOf(snapshot).order(b.standardPart));
 }
 
 /** The most recent Part Used for a Part Spec: what to buy again. */
@@ -67,7 +67,7 @@ export function positionsOf(snapshot: Snapshot, vehicle: Vehicle): FitmentPositi
   ]);
   return snapshot.positions
     .filter((p) => p.vehicleId === vehicle.id && (!p.standardPart || !notFitted.has(p.standardPart) || used.has(p.id)))
-    .sort((a, b) => catalogueOrder(a.standardPart) - catalogueOrder(b.standardPart));
+    .sort((a, b) => catalogueOf(snapshot).order(a.standardPart) - catalogueOf(snapshot).order(b.standardPart));
 }
 
 export function fitments(snapshot: Snapshot, vehicle: Vehicle): Fitment[] {
@@ -93,8 +93,8 @@ export function fitments(snapshot: Snapshot, vehicle: Vehicle): Fitment[] {
 }
 
 /** A Maintenance Task's category: its Standard Part's if it replaces one, else the one the owner picked, else 'other'. */
-export function taskCategory(task: MaintenanceTask): PartCategory {
-  return task.standardPart !== null ? partCategory(task.standardPart) : (task.category ?? 'other');
+export function taskCategory(task: MaintenanceTask, catalogue: Catalogue): PartCategory {
+  return task.standardPart !== null ? catalogue.category(task.standardPart) : (task.category ?? 'other');
 }
 
 export interface TaskGroups {
@@ -105,10 +105,10 @@ export interface TaskGroups {
 }
 
 /** A Vehicle's Tasks with their due information, grouped by category, paused ones set apart. */
-export function groupByCategory(due: DueInfo[], tasks: Map<string, MaintenanceTask>): TaskGroups {
+export function groupByCategory(due: DueInfo[], tasks: Map<string, MaintenanceTask>, catalogue: Catalogue): TaskGroups {
   const active = due.filter((d) => d.status !== 'paused' && tasks.has(d.taskId));
   return {
-    groups: PART_CATEGORIES.map((category) => ({ category, due: active.filter((d) => taskCategory(tasks.get(d.taskId)!) === category) })).filter(
+    groups: PART_CATEGORIES.map((category) => ({ category, due: active.filter((d) => taskCategory(tasks.get(d.taskId)!, catalogue) === category) })).filter(
       (g) => g.due.length > 0,
     ),
     paused: due.filter((d) => d.status === 'paused' && tasks.has(d.taskId)),
@@ -185,6 +185,7 @@ export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
       specIds: t.specIds ?? [],
     })),
     services: snapshot.services.map(normalizeService),
+    catalogue: snapshot.catalogue ?? [],
     vehicleSpecs: snapshot.vehicleSpecs ?? [],
     partSpecs: (snapshot.partSpecs ?? []).map((p) => ({
       ...p,

@@ -1,8 +1,10 @@
 import { useSyncExternalStore } from 'react';
 import { get, set } from 'idb-keyval';
+import { catalogueOf } from '../shared/catalogue.ts';
 import type { Snapshot } from '../shared/types.ts';
 import { normalizeSnapshot } from '../shared/workshop.ts';
 import { ApiError, NetworkError, request } from './api.ts';
+import { nameFrom } from './format.ts';
 import { applyOutbox, enqueueOp, opRequest, type OutboxOp } from './outbox.ts';
 
 export interface StoreState {
@@ -38,6 +40,7 @@ function update(patch: Partial<StoreState>) {
   const next = { ...state, ...patch };
   if ('serverSnapshot' in patch || 'outbox' in patch) {
     next.view = next.serverSnapshot ? applyOutbox(next.serverSnapshot, next.outbox) : null;
+    if (next.view) nameFrom(catalogueOf(next.view));
   }
   state = next;
   listeners.forEach((l) => l());

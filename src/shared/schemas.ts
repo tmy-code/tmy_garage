@@ -175,6 +175,44 @@ export const taskInput = z
 
 export const copyTasksInput = z.object({ fromVehicleId: z.string().min(1) });
 
+/** For each detail a part depends on, the values it needs; at least one, or no Vehicle could ever have the part. */
+const conditions = z.record(z.string(), z.array(z.string().min(1)).min(1, 'Tick at least one value'));
+
+export const catalogueChangeInput = z.object({
+  conditions,
+  characteristics: optionalText(500),
+  removed: z.boolean().default(false),
+});
+
+export const ownPartInput = z
+  .object({
+    kind: vehicleKind,
+    name: z.string().trim().min(1).max(120),
+    nameFr: optionalText(120),
+    unit: partUnit,
+    category: z.enum(PART_CATEGORIES),
+    intervalKm: z
+      .number()
+      .int()
+      .positive()
+      .max(1_000_000)
+      .nullish()
+      .transform((v) => v ?? null),
+    intervalMonths: z
+      .number()
+      .int()
+      .positive()
+      .max(600)
+      .nullish()
+      .transform((v) => v ?? null),
+    conditions,
+    characteristics: optionalText(500),
+  })
+  .refine((p) => p.intervalKm !== null || p.intervalMonths !== null, {
+    message: 'An Interval needs a distance, a duration, or both',
+    path: ['intervalKm'],
+  });
+
 export const workshopInput = z.object({
   workshopNotes: optionalText(20_000),
   requiredParts: z.array(z.object({ partSpecId: z.string().min(1), quantity: quantity.nullish().transform((v) => v ?? null) })).max(50),

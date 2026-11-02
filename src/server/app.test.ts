@@ -20,7 +20,7 @@ import type {
   Vehicle,
   VehicleSpec,
 } from '../shared/types.ts';
-import { partFits, templatesOf, type Build } from '../shared/catalogue.ts';
+import { BUILT_IN_CATALOGUE, type Build } from '../shared/catalogue.ts';
 import { vehicleDue } from '../shared/due.ts';
 import { createApp } from './app.ts';
 import { openDatabase } from './db.ts';
@@ -522,7 +522,7 @@ describe('workshop data', () => {
     const later = createApp(db);
     const s = (await (await later.request('/api/snapshot')).json()) as Snapshot;
     const old = s.vehicles.find((v) => v.id === 'old')!;
-    const expected = templatesOf('car').filter((t) => partFits(old as Build, t.code)).map((t) => t.code);
+    const expected = BUILT_IN_CATALOGUE.partsOf('car').filter((p) => BUILT_IN_CATALOGUE.fits(old as Build, p.code)).map((p) => p.code);
     expect(s.partSpecs.filter((p) => p.vehicleId === 'old').map((p) => p.standardPart)).toEqual(expected);
     // Details not filled in never match, so nothing that depends on them is listed.
     expect(expected).toEqual(expect.arrayContaining(['tires', 'brake_pads_front', 'engine_oil']));
@@ -935,6 +935,170 @@ describe('garage isolation', () => {
     await createVehicle('Mine');
     const res = await friendApp.request('/api/snapshot');
     expect((await res.json()).vehicles).toEqual([]);
+  });
+});
+
+describe('the parts catalogue in Settings', () => {
+  const FUELS = ['petrol', 'flexfuel', 'hybrid', 'phev', 'diesel'];
+
+  async function createCar(build: object = {}): Promise<Vehicle> {
+    const res = await call('POST', '/api/vehicles', { ...CAR, name: 'Test car', ...build });
+    expect(res.status).toBe(201);
+    return res.json();
+  }
+
+  const specOf = async (vehicleId: string, code: string) =>
+    (await snapshot()).partSpecs.find((p) => p.vehicleId === vehicleId && p.standardPart === code);
+  const taskOf = async (vehicleId: string, code: string) =>
+    (await snapshot()).tasks.find((t) => t.vehicleId === vehicleId && t.standardPart === code);
+  const statusOf = async (vehicleId: string, code: string) => {
+    const s = await snapshot();
+    const task = s.tasks.find((t) => t.vehicleId === vehicleId && t.standardPart === code)!;
+    return vehicleDue(s, vehicleId, '2026-11-01').due.find((d) => d.taskId === task.id)!.status;
+  };
+
+  it('applies changed conditions to existing vehicles right away, and goes back to the built-in version', async () => {
+    const diesel = await createCar({ fuel: 'diesel' });
+    expect(await specOf(diesel.id, 'spark_plugs')).toBeUndefined();
+
+    expect((await call('PUT', '/api/catalogue/spark_plugs', { conditions: { fuel: FUELS } })).status).toBe(200);
+    expect(await specOf(diesel.id, 'spark_plugs')).toMatchObject({ notFitted: false });
+    expect((await taskOf(diesel.id, 'spark_plugs'))!.requiredParts).toHaveLength(1);
+    // A new vehicle follows the changed conditions too.
+    const other = await createCar({ fuel: 'diesel' });
+    expect(await specOf(other.id, 'spark_plugs')).toBeDefined();
+
+    expect((await call('DELETE', '/api/catalogue/spark_plugs')).status).toBe(204);
+    expect((await snapshot()).catalogue).toEqual([]);
+    expect(await specOf(diesel.id, 'spark_plugs')).toMatchObject({ notFitted: true });
+    expect(await statusOf(diesel.id, 'spark_plugs')).toBe('paused');
+  });
+
+  it('takes a part off the list, keeping it on a vehicle where it was filled in', async () => {
+    const empty = await createCar();
+    const filled = await createCar();
+    const spec = (await specOf(filled.id, 'wipers'))!;
+    await call('PUT', `/api/part-specs/${spec.id}`, { name: spec.name, unit: spec.unit, characteristics: 'Bosch A 000' });
+
+    expect((await call('PUT', '/api/catalogue/wipers', { conditions: {}, removed: true })).status).toBe(200);
+    expect(await specOf(empty.id, 'wipers')).toMatchObject({ notFitted: true });
+    expect(await statusOf(empty.id, 'wipers')).toBe('paused');
+    expect(await specOf(filled.id, 'wipers')).toMatchObject({ notFitted: false, characteristics: 'Bosch A 000' });
+    const later = await createCar();
+    expect(await specOf(later.id, 'wipers')).toBeUndefined();
+
+    await call('DELETE', '/api/catalogue/wipers');
+    expect(await specOf(empty.id, 'wipers')).toMatchObject({ notFitted: false });
+    expect(await statusOf(empty.id, 'wipers')).not.toBe('paused');
+  });
+
+  it('leaves the owner’s own “not on this vehicle” alone when a change does not alter whether the part fits', async () => {
+    const car = await createCar();
+    const spec = (await specOf(car.id, 'cabin_filter'))!;
+    await call('PUT', `/api/part-specs/${spec.id}`, { name: spec.name, unit: spec.unit, notFitted: true });
+    await call('PUT', '/api/catalogue/cabin_filter', { conditions: {}, characteristics: 'Pollen filter' });
+    expect(await specOf(car.id, 'cabin_filter')).toMatchObject({ notFitted: true });
+  });
+
+  it('spreads default details where nothing else was written, without counting them as filled in', async () => {
+    const empty = await createCar();
+    const written = await createCar();
+    const spec = (await specOf(written.id, 'engine_oil'))!;
+    await call('PUT', `/api/part-specs/${spec.id}`, { name: spec.name, unit: spec.unit, characteristics: '0W-20' });
+
+    const condition = { fuel: FUELS };
+    await call('PUT', '/api/catalogue/engine_oil', { conditions: condition, characteristics: '5W-30' });
+    expect((await specOf(empty.id, 'engine_oil'))!.characteristics).toBe('5W-30');
+    expect((await specOf(written.id, 'engine_oil'))!.characteristics).toBe('0W-20');
+    expect((await specOf((await createCar()).id, 'engine_oil'))!.characteristics).toBe('5W-30');
+
+    await call('PUT', '/api/catalogue/engine_oil', { conditions: condition, characteristics: '5W-40' });
+    expect((await specOf(empty.id, 'engine_oil'))!.characteristics).toBe('5W-40');
+    expect((await specOf(written.id, 'engine_oil'))!.characteristics).toBe('0W-20');
+
+    // The default alone does not keep the part on a vehicle it no longer fits.
+    await call('PUT', `/api/vehicles/${empty.id}`, { ...CAR, name: 'Test car', fuel: 'electric' });
+    expect(await specOf(empty.id, 'engine_oil')).toMatchObject({ notFitted: true });
+  });
+
+  it('adds a part of the owner’s to matching vehicles, with its position and Task, and renames it', async () => {
+    const petrol = await createCar();
+    const diesel = await createCar({ fuel: 'diesel' });
+    const res = await call('POST', '/api/catalogue', {
+      kind: 'car',
+      name: 'Particle filter',
+      nameFr: 'Filtre à particules',
+      unit: 'piece',
+      category: 'fuel_exhaust',
+      intervalKm: 150000,
+      conditions: { fuel: ['diesel'] },
+      characteristics: 'Original type',
+    });
+    expect(res.status).toBe(201);
+    const { code } = (await res.json()) as { code: string };
+    expect(code).toMatch(/^own_/);
+
+    expect(await specOf(petrol.id, code)).toBeUndefined();
+    expect(await specOf(diesel.id, code)).toMatchObject({ name: 'Particle filter', nameFr: 'Filtre à particules', characteristics: 'Original type', unit: 'piece' });
+    expect((await snapshot()).positions.find((p) => p.vehicleId === diesel.id && p.standardPart === code)).toBeDefined();
+    expect(await taskOf(diesel.id, code)).toMatchObject({ name: 'Particle filter', nameFr: 'Filtre à particules', intervalKm: 150000 });
+
+    const body = { kind: 'car', name: 'DPF', unit: 'piece', category: 'fuel_exhaust', intervalKm: 100000, conditions: { fuel: ['diesel'] } };
+    expect((await call('PUT', `/api/catalogue/${code}`, body)).status).toBe(200);
+    expect(await specOf(diesel.id, code)).toMatchObject({ name: 'DPF' });
+    // The Task's Interval was never set by the owner, so it follows; its name follows too.
+    expect(await taskOf(diesel.id, code)).toMatchObject({ name: 'DPF', intervalKm: 100000 });
+  });
+
+  it('deletes a part of the owner’s: what was never used goes, what was used stays under its name', async () => {
+    const unused = await createCar();
+    const used = await createCar();
+    const res = await call('POST', '/api/catalogue', { kind: 'car', name: 'Roof rack', unit: 'piece', category: 'body', intervalMonths: 60, conditions: {} });
+    const { code } = (await res.json()) as { code: string };
+    const usedSpec = (await specOf(used.id, code))!;
+    const usedTask = (await taskOf(used.id, code))!;
+    const position = (await snapshot()).positions.find((p) => p.vehicleId === used.id && p.standardPart === code)!;
+    await call('PUT', '/api/services/svc-00003', {
+      id: 'svc-00003',
+      vehicleId: used.id,
+      date: '2026-10-01',
+      taskIds: [usedTask.id],
+      partsUsed: [{ partSpecId: usedSpec.id, positionId: position.id, description: 'Thule', quantity: 1, unit: 'piece' }],
+    });
+
+    expect((await call('DELETE', `/api/catalogue/${code}`)).status).toBe(204);
+    const s = await snapshot();
+    expect(s.partSpecs.some((p) => p.vehicleId === unused.id && p.name === 'Roof rack')).toBe(false);
+    expect(s.tasks.some((t) => t.vehicleId === unused.id && t.name === 'Roof rack')).toBe(false);
+    expect(s.partSpecs.find((p) => p.id === usedSpec.id)).toMatchObject({ standardPart: null, name: 'Roof rack', notFitted: false });
+    expect(s.tasks.find((t) => t.id === usedTask.id)).toMatchObject({ standardPart: null, category: 'body' });
+    expect(s.positions.find((p) => p.id === position.id)).toMatchObject({ standardPart: null, name: 'Roof rack' });
+  });
+
+  it('refuses a detail with nothing ticked and an unknown part, and keeps a part set as built in as no change', async () => {
+    expect((await call('PUT', '/api/catalogue/wipers', { conditions: { fuel: [] } })).status).toBe(422);
+    expect((await call('PUT', '/api/catalogue/wipers', { conditions: { fuel: ['steam'] } })).status).toBe(422);
+    expect((await call('PUT', '/api/catalogue/nothing', { conditions: {} })).status).toBe(404);
+    expect((await call('DELETE', '/api/catalogue/nothing')).status).toBe(404);
+    expect((await call('POST', '/api/catalogue', { kind: 'car', name: 'X', unit: 'piece', category: 'body', conditions: {} })).status).toBe(422);
+    expect((await call('PUT', '/api/catalogue/timing_belt_kit', { conditions: { distribution: ['belt'] } })).status).toBe(200);
+    expect((await snapshot()).catalogue).toEqual([]);
+  });
+
+  it('keeps one Garage’s catalogue from another’s', async () => {
+    await call('PUT', '/api/catalogue/wipers', { conditions: {}, removed: true });
+    db.exec(`INSERT INTO garages (id, name) VALUES ('other', 'Other')`);
+    const other = createApp(db, 'other');
+    expect(((await (await other.request('/api/snapshot')).json()) as Snapshot).catalogue).toEqual([]);
+  });
+
+  it('keeps the changes when the server starts again', async () => {
+    const car = await createCar();
+    await call('PUT', '/api/catalogue/wipers', { conditions: {}, removed: true });
+    const later = createApp(db);
+    const s = (await (await later.request('/api/snapshot')).json()) as Snapshot;
+    expect(s.catalogue).toMatchObject([{ code: 'wipers', own: null, removed: true }]);
+    expect(s.partSpecs.find((p) => p.vehicleId === car.id && p.standardPart === 'wipers')).toMatchObject({ notFitted: true });
   });
 });
 

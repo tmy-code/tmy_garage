@@ -1,4 +1,4 @@
-import { standardPartName } from '../shared/catalogue.ts';
+import { BUILT_IN_CATALOGUE, type Catalogue } from '../shared/catalogue.ts';
 import { effectiveInterval, type DueInfo } from '../shared/due.ts';
 import type { PartUnit } from '../shared/schemas.ts';
 import type { FitmentPosition, MaintenanceTask, PartSpec } from '../shared/types.ts';
@@ -35,14 +35,21 @@ export function taskName(task: MaintenanceTask, m: Messages = messages()): strin
   return localName(task, m);
 }
 
+let catalogue: Catalogue = BUILT_IN_CATALOGUE;
+
+/** The catalogue parts are named from, set whenever the garage's data changes. */
+export function nameFrom(current: Catalogue) {
+  catalogue = current;
+}
+
 /** A Standard Part is named in the interface language; another Part by the name the user gave it. */
 export function partName(spec: PartSpec, m: Messages = messages()): string {
-  return spec.standardPart ? standardPartName(spec.standardPart, m.lang) : localName(spec, m);
+  return (spec.standardPart && catalogue.name(spec.standardPart, m.lang)) || localName(spec, m);
 }
 
 /** A Standard Part's position is named in the interface language; an older one by the name the user gave it. */
 export function positionName(position: FitmentPosition, m: Messages = messages()): string {
-  return position.standardPart ? standardPartName(position.standardPart, m.lang) : position.name;
+  return (position.standardPart && catalogue.name(position.standardPart, m.lang)) || position.name;
 }
 
 /** The OEM reference then the acceptable equivalents, e.g. "OEM 15410-MFJ-D01 · HF204, KN-204"; null when neither is set. */

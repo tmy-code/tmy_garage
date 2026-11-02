@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MaintenanceTask, PartUsed, Service, Snapshot } from './types.ts';
+import { BUILT_IN_CATALOGUE } from './catalogue.ts';
 import type { DueInfo } from './due.ts';
 import { fitments, groupByCategory, normalizeSnapshot, positionsOf, shoppingList } from './workshop.ts';
 
@@ -119,6 +120,7 @@ const base: Snapshot = {
   policies: [],
   claims: [],
   quotes: [],
+  catalogue: [],
 };
 
 const bike = base.vehicles[0]!;
@@ -258,7 +260,7 @@ describe('groupByCategory', () => {
         task({ id: 'belt', standardPart: 'moto_drive_belt' }),
       ].map((t) => [t.id, t]),
     );
-    const groups = groupByCategory([due('chain', 'overdue'), due('wash'), due('pads'), due('belt', 'paused'), due('lube'), due('oil')], tasks);
+    const groups = groupByCategory([due('chain', 'overdue'), due('wash'), due('pads'), due('belt', 'paused'), due('lube'), due('oil')], tasks, BUILT_IN_CATALOGUE);
     expect(groups.groups.map((g) => [g.category, g.due.map((d) => d.taskId)])).toEqual([
       ['engine', ['oil']],
       ['drivetrain', ['chain', 'lube']],

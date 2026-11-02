@@ -233,6 +233,7 @@ describe('vehicleDue', () => {
       policies: [],
       claims: [],
       quotes: [],
+      catalogue: [],
     };
     const { usage, due } = vehicleDue(snapshot, 'bike', '2026-10-01');
     expect(usage.latest?.odometer).toBe(21_500);
@@ -271,6 +272,7 @@ describe('vehicleDue', () => {
       policies: [],
       claims: [],
       quotes: [],
+      catalogue: [],
     };
     const { due } = vehicleDue(snapshot, 'bike', '2026-10-01');
     // The chain is set aside; the vehicle does not list a drive belt at all.

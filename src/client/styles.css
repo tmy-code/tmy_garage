@@ -1103,3 +1103,9 @@ body > .banner {
   flex: 1;
   min-width: 0;
 }
+
+/* Car or motorcycle, on the parts list in Settings. */
+.kind-switch {
+  display: flex;
+  gap: 8px;
+}
