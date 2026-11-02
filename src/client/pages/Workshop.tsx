@@ -292,18 +292,18 @@ export function PartsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: S
 }
 
 /**
- * A Vehicle's spec lines by group (fluids, parts, torque, other), then by category in screen order (what is in none is
- * under Other), in the order they were entered. Empty groups and categories are left out.
+ * A Vehicle's spec lines by category in screen order (what is in none is under Other), then by group (fluids, parts,
+ * torque, other), in the order they were entered. Empty categories and groups are left out.
  */
-export function specGroupsOf(snapshot: Snapshot, vehicleId: string): [SpecGroup, [PartCategory, SpecLine[]][]][] {
+export function specCategoriesOf(snapshot: Snapshot, vehicleId: string): [PartCategory, [SpecGroup, SpecLine[]][]][] {
   const lines = snapshot.specLines.filter((s) => s.vehicleId === vehicleId);
-  return GROUPS.map((g) => {
-    const inGroup = lines.filter((s) => s.group === g);
-    const categories = PART_CATEGORIES.map(
-      (c) => [c, inGroup.filter((s) => (s.category ?? 'other') === c).sort((a, b) => a.sort - b.sort)] as [PartCategory, SpecLine[]],
-    ).filter(([, items]) => items.length > 0);
-    return [g, categories] as [SpecGroup, [PartCategory, SpecLine[]][]];
-  }).filter(([, categories]) => categories.length > 0);
+  return PART_CATEGORIES.map((c) => {
+    const inCategory = lines.filter((s) => (s.category ?? 'other') === c);
+    const groups = GROUPS.map((g) => [g, inCategory.filter((s) => s.group === g).sort((a, b) => a.sort - b.sort)] as [SpecGroup, SpecLine[]]).filter(
+      ([, items]) => items.length > 0,
+    );
+    return [c, groups] as [PartCategory, [SpecGroup, SpecLine[]][]];
+  }).filter(([, groups]) => groups.length > 0);
 }
 
 function SpecText({ spec }: { spec: SpecLine }) {
@@ -320,7 +320,7 @@ export function SpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: S
   const t = useT();
   const editor = useEditor();
   const wide = useWide();
-  const groups = specGroupsOf(snapshot, vehicle.id);
+  const categories = specCategoriesOf(snapshot, vehicle.id);
   const editing = snapshot.specLines.find((l) => l.id === editor.editing);
   async function addStandard() {
     try {
@@ -340,13 +340,13 @@ export function SpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: S
             {t.workshop.addStandardSpecs}
           </button>
           {!wide && editor.editing === 'new' ? <SpecEditor vehicle={vehicle} editor={editor} /> : null}
-          {groups.length === 0 && editor.editing !== 'new' ? <p className="empty">{t.workshop.noSpecs}</p> : null}
-          {groups.map(([group, categories]) => (
-            <section key={group}>
-              <h2>{t.workshop.specGroups[group]}</h2>
-              {categories.map(([category, items]) => (
-                <Fragment key={category}>
-                  <h3 className="due-group">{t.workshop.partCategories[category]}</h3>
+          {categories.length === 0 && editor.editing !== 'new' ? <p className="empty">{t.workshop.noSpecs}</p> : null}
+          {categories.map(([category, groups]) => (
+            <section key={category}>
+              <h2>{t.workshop.partCategories[category]}</h2>
+              {groups.map(([group, items]) => (
+                <Fragment key={group}>
+                  <h3 className="due-group">{t.workshop.specGroups[group]}</h3>
                   <ul className="list list-plain">
                     {items.map((spec) =>
                       !wide && editor.editing === spec.id ? (
@@ -485,7 +485,7 @@ export function WorkshopPage({ snapshot }: { snapshot: Snapshot }) {
       ) : null}
       <div className="card-grid">
         {shown.map((v) => {
-          const groups = specGroupsOf(snapshot, v.id);
+          const categories = specCategoriesOf(snapshot, v.id);
           return (
             <section key={v.id}>
               <div className="heading-row">
@@ -496,13 +496,13 @@ export function WorkshopPage({ snapshot }: { snapshot: Snapshot }) {
                   {t.workshop.editSpecs}
                 </a>
               </div>
-              {groups.length === 0 ? <p className="muted">{t.workshop.noSpecs}</p> : null}
-              {groups.map(([group, categories]) => (
-                <Fragment key={group}>
-                  <h3 className="due-group">{t.workshop.specGroups[group]}</h3>
-                  {categories.map(([category, items]) => (
-                    <Fragment key={category}>
-                      <h4 className="muted">{t.workshop.partCategories[category]}</h4>
+              {categories.length === 0 ? <p className="muted">{t.workshop.noSpecs}</p> : null}
+              {categories.map(([category, groups]) => (
+                <Fragment key={category}>
+                  <h3 className="due-group">{t.workshop.partCategories[category]}</h3>
+                  {groups.map(([group, items]) => (
+                    <Fragment key={group}>
+                      <h4 className="muted">{t.workshop.specGroups[group]}</h4>
                       <ul className="list list-plain">
                         {items.map((spec) => (
                           <li key={spec.id}>
