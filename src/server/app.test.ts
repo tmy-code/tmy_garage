@@ -345,6 +345,18 @@ describe('spec lines and the plan templates', () => {
     expect((await snapshot()).tasks.filter((t) => t.vehicleId === bike.id)).toHaveLength(before.length);
   });
 
+  it('counts the fork oil as changed whenever the fork seals are, but not the other way round', async () => {
+    const bike = (await (await call('POST', '/api/vehicles', { ...BIKE, name: 'Fresh' })).json()) as Vehicle;
+    const tasks = (await snapshot()).tasks.filter((t) => t.vehicleId === bike.id);
+    const oil = tasks.find((t) => t.name === 'Change fork oil')!;
+    const seals = tasks.find((t) => t.name === 'Replace fork seals')!;
+    expect(oil && seals).toBeTruthy();
+    const log = (id: string, taskIds: string[]) => call('PUT', `/api/services/${id}`, { id, vehicleId: bike.id, date: '2026-10-01', odometer: 100, taskIds });
+    await log('svc-00001', [oil.id]);
+    await log('svc-00002', [seals.id]);
+    expect((await snapshot()).services.map((s) => s.taskIds)).toEqual([[oil.id], [seals.id, oil.id]]);
+  });
+
   it('changes a template without touching vehicles that exist, and the next vehicle gets the change', async () => {
     const before = (await (await call('POST', '/api/vehicles', { ...BIKE, name: 'Before' })).json()) as Vehicle;
     expect((await call('PUT', '/api/catalogue/moto_engine_oil', { conditions: {}, intervalKm: 5000, intervalMonths: 6 })).status).toBe(200);
@@ -598,13 +610,29 @@ describe('migrations', () => {
     const latest = openDatabase(join(dir, 'latest.sqlite'));
     const version = (latest.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
     latest.close();
-    const old = openDatabase(path, undefined, version - 1);
+    const old = openDatabase(path, undefined, version - 2);
     old.exec(`INSERT INTO catalogue_parts (garage_id, code, conditions, removed) VALUES ('default', 'tires', '{}', 1)`);
     old.close();
     const migrated = openDatabase(path);
     expect(migrated.prepare('SELECT code, removed FROM catalogue_parts ORDER BY code').all()).toEqual([
       { code: 'tires_front', removed: 1 },
       { code: 'tires_rear', removed: 1 },
+    ]);
+    migrated.close();
+  });
+
+  it('turns what the owner changed on the fork oil and seals template into the same change on each', () => {
+    const path = join(dir, 'garage.sqlite');
+    const latest = openDatabase(join(dir, 'latest.sqlite'));
+    const version = (latest.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
+    latest.close();
+    const old = openDatabase(path, undefined, version - 1);
+    old.exec(`INSERT INTO catalogue_parts (garage_id, code, conditions, removed) VALUES ('default', 'moto_fork_oil_seals', '{}', 1)`);
+    old.close();
+    const migrated = openDatabase(path);
+    expect(migrated.prepare('SELECT code, removed FROM catalogue_parts ORDER BY code').all()).toEqual([
+      { code: 'moto_fork_oil', removed: 1 },
+      { code: 'moto_fork_seals', removed: 1 },
     ]);
     migrated.close();
   });

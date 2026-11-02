@@ -783,6 +783,14 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       const task = db.prepare('SELECT vehicle_id FROM maintenance_tasks WHERE id = ?').get(taskId) as Row | undefined;
       if (!task || task.vehicle_id !== s.vehicleId) throw new HttpError(422, 'A Maintenance Task in this Service no longer exists');
     }
+    // A Task that always comes with another (the fork seals with the fork oil) counts that one as done too.
+    for (const taskId of [...taskIds]) {
+      const { template_code } = db.prepare('SELECT template_code FROM maintenance_tasks WHERE id = ?').get(taskId) as Row;
+      const included = template_code === null ? null : catalogue.includedWith(template_code);
+      if (included === null) continue;
+      const other = db.prepare('SELECT id FROM maintenance_tasks WHERE vehicle_id = ? AND template_code = ?').get(s.vehicleId, included) as Row | undefined;
+      if (other && !taskIds.includes(other.id)) taskIds.push(other.id);
+    }
     const partsUsed = s.partsUsed;
     transaction(() => {
       db.prepare(

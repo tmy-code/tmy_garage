@@ -138,6 +138,8 @@ interface PartTemplate {
   task?: { en: string; fr: string };
   /** The part whose Maintenance Task also replaces this one (the oil filter goes with the oil), instead of its own. */
   goesWith?: string;
+  /** The part whose Task is always done together with this one's, though it can be done alone (fork seals imply the fork oil). */
+  includes?: string;
 }
 
 const COMBUSTION: Rule = ['combustion', '=', true];
@@ -194,7 +196,8 @@ export const PART_TEMPLATES = [
   { code: 'moto_brake_discs_rear', kind: 'motorcycle', en: 'Rear brake disc', fr: 'Disque arrière', unit: 'piece', category: 'brakes', intervalKm: 60_000, intervalMonths: null, task: { en: 'Replace rear brake disc', fr: 'Remplacer le disque arrière' } },
   { code: 'moto_brake_fluid', kind: 'motorcycle', en: 'Brake fluid', fr: 'Liquide de frein', unit: 'litre', category: 'brakes', intervalKm: null, intervalMonths: 24, task: { en: 'Change brake fluid', fr: 'Remplacer le liquide de frein' } },
   { code: 'moto_brake_hoses', kind: 'motorcycle', en: 'Brake hoses', fr: 'Durites de frein', unit: 'piece', category: 'brakes', intervalKm: null, intervalMonths: 60, task: { en: 'Replace brake hoses', fr: 'Remplacer les durites de frein' } },
-  { code: 'moto_fork_oil_seals', kind: 'motorcycle', en: 'Fork oil and seals', fr: 'Huile et joints de fourche', unit: 'litre', category: 'chassis', intervalKm: 30_000, intervalMonths: 36, task: { en: 'Change fork oil and seals', fr: 'Remplacer l’huile et les joints de fourche' } },
+  { code: 'moto_fork_oil', kind: 'motorcycle', en: 'Fork oil', fr: 'Huile de fourche', unit: 'litre', category: 'chassis', intervalKm: 30_000, intervalMonths: 36, task: { en: 'Change fork oil', fr: 'Vidanger la fourche' } },
+  { code: 'moto_fork_seals', kind: 'motorcycle', en: 'Fork seals', fr: 'Joints de fourche', unit: 'piece', category: 'chassis', intervalKm: 60_000, intervalMonths: 72, task: { en: 'Replace fork seals', fr: 'Remplacer les joints de fourche' }, includes: 'moto_fork_oil' },
   { code: 'moto_battery', kind: 'motorcycle', en: 'Battery', fr: 'Batterie', unit: 'piece', category: 'electrical', intervalKm: null, intervalMonths: 48, task: { en: 'Replace battery', fr: 'Remplacer la batterie' } },
   { code: 'moto_engine_oil', kind: 'motorcycle', en: 'Engine oil', fr: 'Huile moteur', unit: 'litre', category: 'engine', intervalKm: 8_000, intervalMonths: 12, when: [COMBUSTION], task: { en: 'Change engine oil and filter', fr: 'Vidange huile moteur et filtre' } },
   { code: 'moto_oil_filter', kind: 'motorcycle', en: 'Oil filter', fr: 'Filtre à huile', unit: 'piece', category: 'engine', intervalKm: 8_000, intervalMonths: 12, when: [COMBUSTION], goesWith: 'moto_engine_oil' },
@@ -340,6 +343,7 @@ export interface CataloguePart {
   turboIntervalKm?: number;
   task?: { en: string; fr: string };
   goesWith?: string;
+  includes?: string;
   conditions: Conditions;
   characteristics: string | null;
   builtIn: boolean;
@@ -456,6 +460,11 @@ export class Catalogue {
     const part = this.known(code);
     if (!part?.builtIn) return [];
     return [part.en, part.fr, ...(part.goesWith === undefined && part.task && code.endsWith('engine_oil') ? ['Engine oil and filter', 'Huile moteur et filtre'] : [])];
+  }
+
+  /** The Template code of the Task always done along with this one (the fork oil is changed with the fork seals), if any. */
+  includedWith(code: StandardPartKey): StandardPartKey | null {
+    return this.part(code)?.includes ?? null;
   }
 
   /** Position of a Standard Part in the catalogue, so screens keep its order; other Parts come after. */

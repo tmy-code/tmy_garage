@@ -152,6 +152,7 @@ A Vehicle's factory specs, one labelled value per row (for example "Engine oil: 
 The Templates are the built-in list in [`catalogue.ts`](../src/shared/catalogue.ts) (name in both languages, Action, Category, Interval, and the Build details it applies to), plus the owner's changes in `catalogue_parts`.
 
 - A **new Vehicle** gets the Templates that fit its Build as Tasks, at the Template's Interval (shorter engine oil distance with a turbo).
+- A Template can **include** another (`includes` in the catalogue): logging a Service for the fork seals also logs the fork oil, since the seals are never done without it, while the oil can be done alone. The server adds the included Task to the Service when it is saved.
 - After that the Vehicle's Tasks are its own. Changing a Template, or the Vehicle's Build, never changes them.
 - **Add missing tasks from templates** (on the Vehicle page) gives an existing Vehicle the Templates it has no Task for yet. A Task is the Template's when it carries its `template_code`, or, for Tasks made before the code existed or by hand, when it is named like the Template or its part ("Engine oil"); such a Task is then tagged. It is safe to run again. **Merging** a duplicate into another Task (Task page) moves its Services over and passes its `template_code` on.
 - **Settings** edits any Template: its name, Action, Category, Interval and the Build details it applies to; a built-in one can also be taken off the list or set back to the built-in version.

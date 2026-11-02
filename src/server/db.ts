@@ -592,15 +592,20 @@ const MIGRATIONS: (string | ((db: DatabaseSync) => void))[] = [
 `,
   // The car tyres template became a front and a rear one, since a pair is often changed alone: what the owner changed
   // on the old one now applies to both. Tasks already on Vehicles stay as they are.
-  (db) => {
-    const columns = (db.prepare('PRAGMA table_info(catalogue_parts)').all() as { name: string }[]).map((c) => c.name).filter((n) => n !== 'code');
-    const list = columns.join(', ');
-    for (const code of ['tires_front', 'tires_rear']) {
-      db.prepare(`INSERT INTO catalogue_parts (code, ${list}) SELECT ?, ${list} FROM catalogue_parts WHERE code = 'tires'`).run(code);
-    }
-    db.exec(`DELETE FROM catalogue_parts WHERE code = 'tires'`);
-  },
+  (db) => splitCatalogueEntry(db, 'tires', ['tires_front', 'tires_rear']),
+  // Likewise the fork oil and seals: the seals are never done without the oil, but the oil can be done alone.
+  (db) => splitCatalogueEntry(db, 'moto_fork_oil_seals', ['moto_fork_oil', 'moto_fork_seals']),
 ];
+
+/** Replaces what the owner changed on a template that was split by the same change on each of the new ones. */
+function splitCatalogueEntry(db: DatabaseSync, from: string, into: string[]): void {
+  const columns = (db.prepare('PRAGMA table_info(catalogue_parts)').all() as { name: string }[]).map((c) => c.name).filter((n) => n !== 'code');
+  const list = columns.join(', ');
+  for (const code of into) {
+    db.prepare(`INSERT INTO catalogue_parts (code, ${list}) SELECT ?, ${list} FROM catalogue_parts WHERE code = ?`).run(code, from);
+  }
+  db.prepare('DELETE FROM catalogue_parts WHERE code = ?').run(from);
+}
 
 function schemaVersion(db: DatabaseSync): number {
   return (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
