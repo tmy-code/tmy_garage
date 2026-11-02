@@ -167,6 +167,23 @@ section {
   overflow-wrap: anywhere;
 }
 
+/* The page's name with the button acting on it right beside it; a long name wraps rather than pushing it off. */
+.page-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 16px;
+}
+
+.page-title-row .page-title {
+  margin: 0;
+  min-width: 0;
+}
+
+.page-title-row .button {
+  flex: none;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

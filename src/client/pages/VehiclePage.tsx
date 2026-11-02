@@ -101,7 +101,7 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
     <Layout
       title={vehicle.name}
       back="/"
-      actions={
+      titleAction={
         <a className="button button-small" href={`#/vehicles/${vehicle.id}/edit`} aria-label={t.vehicle.edit}>
           <Icon name="pencil" /> {t.vehicle.editShort}
         </a>

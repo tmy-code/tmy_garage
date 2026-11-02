@@ -23,7 +23,20 @@ export function useWide(): boolean {
   );
 }
 
-export function Layout({ title, back, actions, children }: { title: string; back?: string; actions?: ReactNode; children: ReactNode }) {
+export function Layout({
+  title,
+  back,
+  actions,
+  titleAction,
+  children,
+}: {
+  title: string;
+  back?: string;
+  actions?: ReactNode;
+  /** Sits right next to the page's name, for acting on what it names. */
+  titleAction?: ReactNode;
+  children: ReactNode;
+}) {
   const t = useT();
   // "Garage" sits in the middle of every top bar and leads home; the page's own name is its heading below.
   // Home screens (no back arrow) would only repeat "Garage", so their heading is for screen readers only.
@@ -48,7 +61,14 @@ export function Layout({ title, back, actions, children }: { title: string; back
       </header>
       <RejectedBanner />
       <main>
-        <h1 className={back !== undefined ? 'page-title' : 'visually-hidden'}>{title}</h1>
+        {titleAction ? (
+          <div className="page-title-row">
+            <h1 className="page-title">{title}</h1>
+            {titleAction}
+          </div>
+        ) : (
+          <h1 className={back !== undefined ? 'page-title' : 'visually-hidden'}>{title}</h1>
+        )}
         {children}
       </main>
       <ToastHost />
