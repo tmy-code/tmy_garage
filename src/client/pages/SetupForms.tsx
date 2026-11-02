@@ -364,6 +364,18 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
     }, t.feedback.deleted);
   }
 
+  const siblings = existing ? snapshot.tasks.filter((task) => task.vehicleId === vehicle.id && task.id !== existing.id) : [];
+  const [mergeInto, setMergeInto] = useState('');
+
+  async function merge() {
+    const target = siblings.find((task) => task.id === mergeInto);
+    if (!existing || !target || !(await confirmDelete(t.setup.confirmMergeTask(taskName(existing, t), taskName(target, t))))) return;
+    void run(async () => {
+      await online('POST', `/api/tasks/${existing.id}/merge`, { intoTaskId: target.id });
+      navigate(back, { replace: true });
+    });
+  }
+
   return (
     <Layout title={existing ? t.setup.editTask : t.setup.newTask(vehicle.name)} back={back}>
       <NeedsConnection />
@@ -429,6 +441,21 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
           <button type="button" className="button button-danger button-block" onClick={remove} disabled={disabled}>
             {t.setup.deleteTask}
           </button>
+        ) : null}
+        {siblings.length > 0 ? (
+          <Field label={t.setup.mergeTask} hint={t.setup.mergeTaskHint}>
+            <select value={mergeInto} onChange={(e) => setMergeInto(e.target.value)}>
+              <option value="">{t.setup.mergeInto}</option>
+              {siblings.map((task) => (
+                <option key={task.id} value={task.id}>
+                  {taskName(task, t)}
+                </option>
+              ))}
+            </select>
+            <button type="button" className="button button-block" onClick={merge} disabled={disabled || !mergeInto}>
+              {t.setup.mergeButton}
+            </button>
+          </Field>
         ) : null}
       </form>
     </Layout>

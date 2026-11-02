@@ -349,12 +349,16 @@ export interface CataloguePart {
 
 /** A Maintenance Task a new Vehicle starts with, one per Standard Part it has (an oil filter goes with the oil). */
 export interface StarterTask {
+  /** The template's part code: it identifies the Task for good, whatever the owner renames it. */
+  code: StandardPartKey;
   name: string;
   nameFr: string;
   intervalKm: number | null;
   intervalMonths: number | null;
   category: PartCategory;
   action: TaskAction;
+  /** Other names for the same job (the part's own name, older wordings): a Task already named so is this Task. */
+  sameAs: string[];
 }
 
 const BUILT_IN_CODES = new Set<string>(PART_TEMPLATES.map((t) => t.code));
@@ -481,11 +485,13 @@ export class Catalogue {
     return fitting
       .filter((p) => !this.bundled(build, p))
       .map((p) => ({
+        code: p.code,
         name: p.task ? p.task.en : p.en,
         nameFr: p.task ? p.task.fr : p.fr,
         ...this.defaultInterval(build, p.code)!,
         category: p.category,
         action: p.action,
+        sameAs: [p.en, p.fr, ...this.legacyTaskNames(p.code)],
       }));
   }
 }

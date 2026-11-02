@@ -136,6 +136,8 @@ export const taskInput = z
 
 export const copyTasksInput = z.object({ fromVehicleId: z.string().min(1) });
 
+export const mergeTaskInput = z.object({ intoTaskId: z.string().min(1) });
+
 /** For each detail a part depends on, the values it needs; at least one, or no Vehicle could ever have the part. */
 const conditions = z.record(z.string(), z.array(z.string().min(1)).min(1, 'Tick at least one value'));
 

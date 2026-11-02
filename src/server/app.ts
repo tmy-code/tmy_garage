@@ -9,6 +9,7 @@ import type { ZodType } from 'zod';
 import {
   catalogueChangeInput,
   copyTasksInput,
+  mergeTaskInput,
   documentInput,
   documentOwner,
   odometerReadingInput,
@@ -301,19 +302,29 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
   }
 
   /**
-   * Gives a Vehicle the Tasks of the plan templates that fit its Build, at the template's interval. Tasks it already
-   * has (by name) are left alone, so this can be run again after the Build changed. Only a new Vehicle gets this by
-   * itself: after that the plan is the owner's.
+   * Gives a Vehicle the Tasks of the plan templates that fit its Build, at the template's interval. Every Task it
+   * creates is tagged with its template, so running this again never doubles one, whatever the owner renamed it. A
+   * Task without a tag that is named like the template ("Engine oil" for the oil change) is taken as that template's
+   * Task and tagged. Only a new Vehicle gets this by itself: after that the plan is the owner's.
    */
   function seedTasks(vehicleId: string, build: Build): number {
-    const names = new Set((db.prepare('SELECT name, name_fr FROM maintenance_tasks WHERE vehicle_id = ?').all(vehicleId) as Row[]).flatMap((t) => [looseName(t.name), looseName(t.name_fr)]));
+    const tasks = db.prepare('SELECT id, name, name_fr, template_code FROM maintenance_tasks WHERE vehicle_id = ?').all(vehicleId) as Row[];
+    const tagged = new Set(tasks.map((t) => t.template_code).filter((code) => code !== null));
+    const untagged = tasks.filter((t) => t.template_code === null);
     const insert = db.prepare(
-      'INSERT INTO maintenance_tasks (id, vehicle_id, name, name_fr, interval_km, interval_months, category, action) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO maintenance_tasks (id, vehicle_id, name, name_fr, interval_km, interval_months, category, action, template_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
     );
     let added = 0;
     for (const s of catalogue.starterTasks(build)) {
-      if (names.has(looseName(s.name)) || names.has(looseName(s.nameFr))) continue;
-      insert.run(randomUUID(), vehicleId, s.name, s.nameFr, s.intervalKm, s.intervalMonths, s.category, s.action);
+      if (tagged.has(s.code)) continue;
+      const known = new Set([s.name, s.nameFr, ...s.sameAs].map(looseName));
+      const same = untagged.find((t) => known.has(looseName(t.name)) || known.has(looseName(t.name_fr)));
+      if (same) {
+        db.prepare('UPDATE maintenance_tasks SET template_code = ? WHERE id = ?').run(s.code, same.id);
+        untagged.splice(untagged.indexOf(same), 1);
+        continue;
+      }
+      insert.run(randomUUID(), vehicleId, s.name, s.nameFr, s.intervalKm, s.intervalMonths, s.category, s.action, s.code);
       added++;
     }
     return added;
@@ -460,18 +471,20 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     vehicleOrThrow(fromVehicleId);
     if (fromVehicleId === vehicleId) throw new HttpError(422, 'Cannot copy a Vehicle onto itself');
     const source = db.prepare('SELECT * FROM maintenance_tasks WHERE vehicle_id = ? ORDER BY created_at, rowid').all(fromVehicleId) as Row[];
-    const names = new Set((db.prepare('SELECT name, name_fr FROM maintenance_tasks WHERE vehicle_id = ?').all(vehicleId) as Row[]).flatMap((t) => [looseName(t.name), looseName(t.name_fr)]));
+    const existing = db.prepare('SELECT name, name_fr, template_code FROM maintenance_tasks WHERE vehicle_id = ?').all(vehicleId) as Row[];
+    const names = new Set(existing.flatMap((t) => [looseName(t.name), looseName(t.name_fr)]));
+    const codes = new Set(existing.map((t) => t.template_code).filter((code) => code !== null));
     const insert = db.prepare(
-      `INSERT INTO maintenance_tasks (id, vehicle_id, name, name_fr, action, interval_km, interval_months, category, notes, switched_off)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO maintenance_tasks (id, vehicle_id, name, name_fr, action, interval_km, interval_months, category, notes, switched_off, template_code)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     // History is not copied: the copies start with no baseline, since they were never done on this Vehicle. A Task
     // this Vehicle already has by name keeps its own Interval.
     let copied = 0;
     transaction(() => {
       for (const t of source) {
-        if (names.has(looseName(t.name))) continue;
-        insert.run(randomUUID(), vehicleId, t.name, t.name_fr, t.action, t.interval_km, t.interval_months, t.category, t.notes, t.switched_off);
+        if (names.has(looseName(t.name)) || (t.template_code !== null && codes.has(t.template_code))) continue;
+        insert.run(randomUUID(), vehicleId, t.name, t.name_fr, t.action, t.interval_km, t.interval_months, t.category, t.notes, t.switched_off, t.template_code);
         copied++;
       }
     });
@@ -488,6 +501,39 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
        WHERE id = ?`,
     ).run(t.name, t.nameFr, t.action, t.intervalKm, t.intervalMonths, t.baselineDate, t.baselineOdometer, t.category, t.notes, t.switchedOff ? 1 : 0, id);
     return c.json(loadTask(id));
+  });
+
+  /**
+   * Folds a duplicate Task into the one to keep: its Services now count for the kept Task, which keeps its own name and
+   * Interval, takes the more recent baseline and gets the duplicate's notes added. The duplicate is then deleted.
+   */
+  app.post('/api/tasks/:id/merge', async (c) => {
+    const id = c.req.param('id');
+    const duplicate = taskOrThrow(id);
+    const { intoTaskId } = await parse(c, mergeTaskInput);
+    if (intoTaskId === id) throw new HttpError(422, 'Cannot merge a Task into itself');
+    const kept = taskOrThrow(intoTaskId);
+    if (kept.vehicle_id !== duplicate.vehicle_id) throw new HttpError(422, 'Tasks can only be merged within one Vehicle');
+    transaction(() => {
+      // A Service that lists both Tasks keeps the kept one only.
+      db.prepare('UPDATE OR IGNORE service_tasks SET task_id = ? WHERE task_id = ?').run(intoTaskId, id);
+      db.prepare('DELETE FROM service_tasks WHERE task_id = ?').run(id);
+      if (duplicate.baseline_date && (!kept.baseline_date || duplicate.baseline_date > kept.baseline_date)) {
+        db.prepare('UPDATE maintenance_tasks SET baseline_date = ?, baseline_odometer = ? WHERE id = ?').run(
+          duplicate.baseline_date,
+          duplicate.baseline_odometer,
+          intoTaskId,
+        );
+      }
+      const notes = [kept.notes, duplicate.notes].filter((n, i, all) => n && all.indexOf(n) === i).join('\n\n');
+      db.prepare('UPDATE maintenance_tasks SET notes = ? WHERE id = ?').run(notes || null, intoTaskId);
+      db.prepare('DELETE FROM maintenance_tasks WHERE id = ?').run(id);
+      // The kept Task stands for the template too, so adding templates again does not bring the duplicate back.
+      if (kept.template_code === null && duplicate.template_code !== null) {
+        db.prepare('UPDATE maintenance_tasks SET template_code = ? WHERE id = ?').run(duplicate.template_code, intoTaskId);
+      }
+    });
+    return c.json(loadTask(intoTaskId));
   });
 
   app.delete('/api/tasks/:id', (c) => {

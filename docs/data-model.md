@@ -145,6 +145,7 @@ A Vehicle's factory specs, one labelled value per row (for example "Engine oil: 
 | `category` | `engine`, `transmission`, `brakes`, `chassis`, `electrical`, `cooling_climate` or `other`. Empty means `other`. |
 | `notes` | Instructions, torque values, fluid reminders, standard part codes, links. |
 | `switched_off` | Required, yes/no. Paused on this Vehicle: no Due Date, no Reminder. |
+| `template_code` | The Plan Template (part code) the Task came from, empty for the owner's own Tasks. Unique per Vehicle, so adding templates again never doubles a Task, whatever it was renamed to. |
 
 ### Plan Templates
 
@@ -152,7 +153,7 @@ The Templates are the built-in list in [`catalogue.ts`](../src/shared/catalogue.
 
 - A **new Vehicle** gets the Templates that fit its Build as Tasks, at the Template's Interval (shorter engine oil distance with a turbo).
 - After that the Vehicle's Tasks are its own. Changing a Template, or the Vehicle's Build, never changes them.
-- **Add missing tasks from templates** (on the Vehicle page) gives an existing Vehicle the Templates it has no Task named like yet.
+- **Add missing tasks from templates** (on the Vehicle page) gives an existing Vehicle the Templates it has no Task for yet. A Task is the Template's when it carries its `template_code`, or, for Tasks made before the code existed or by hand, when it is named like the Template or its part ("Engine oil"); such a Task is then tagged. It is safe to run again. **Merging** a duplicate into another Task (Task page) moves its Services over and passes its `template_code` on.
 - **Settings** edits any Template: its name, Action, Category, Interval and the Build details it applies to; a built-in one can also be taken off the list or set back to the built-in version.
 
 ### `catalogue_parts`

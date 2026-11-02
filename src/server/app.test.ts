@@ -187,6 +187,26 @@ describe('vehicles and tasks', () => {
     });
     expect((await call('DELETE', `/api/tasks/${task.id}`)).status).toBe(409);
   });
+
+  it('merges a duplicate Task into the one to keep, moving its Services over', async () => {
+    const bike = await createVehicle();
+    const other = await createVehicle('Other');
+    const kept = await createTask(bike.id, { name: 'Engine oil', baselineDate: '2025-12-26', baselineOdometer: 45600 });
+    const duplicate = await createTask(bike.id, { name: 'Change engine oil and filter', baselineDate: '2026-03-01', baselineOdometer: 47000, notes: 'Use 5W-30' });
+    const foreign = await createTask(other.id);
+    await call('PUT', '/api/services/svc-00001', { id: 'svc-00001', vehicleId: bike.id, date: '2026-03-01', odometer: 47000, taskIds: [duplicate.id] });
+    await call('PUT', '/api/services/svc-00002', { id: 'svc-00002', vehicleId: bike.id, date: '2026-04-01', odometer: 48000, taskIds: [kept.id, duplicate.id] });
+
+    expect((await call('POST', `/api/tasks/${duplicate.id}/merge`, { intoTaskId: duplicate.id })).status).toBe(422);
+    expect((await call('POST', `/api/tasks/${duplicate.id}/merge`, { intoTaskId: foreign.id })).status).toBe(422);
+    const res = await call('POST', `/api/tasks/${duplicate.id}/merge`, { intoTaskId: kept.id });
+    expect(res.status).toBe(200);
+
+    const { tasks, services } = await snapshot();
+    expect(tasks.find((t) => t.id === duplicate.id)).toBeUndefined();
+    expect(tasks.find((t) => t.id === kept.id)).toMatchObject({ name: 'Engine oil', baselineDate: '2026-03-01', baselineOdometer: 47000, notes: 'Use 5W-30' });
+    expect(services.map((s) => s.taskIds)).toEqual([[kept.id], [kept.id]]);
+  });
 });
 
 describe('services and readings (replayed by the offline send queue)', () => {
@@ -302,6 +322,27 @@ describe('spec lines and the plan templates', () => {
     expect(again.added).toBe(1);
     expect((await snapshot()).tasks.find((t) => t.vehicleId === bike.id && t.name === 'Replace final drive belt')).toBeDefined();
     expect(((await (await call('POST', `/api/vehicles/${bike.id}/add-from-templates`)).json()) as { added: number }).added).toBe(0);
+  });
+
+  it('does not add a template’s Task when the Vehicle has one named like the template’s part', async () => {
+    const bike = (await (await call('POST', '/api/vehicles', { ...BIKE, name: 'Fresh' })).json()) as Vehicle;
+    const oil = (await snapshot()).tasks.find((t) => t.vehicleId === bike.id && t.name === 'Change engine oil and filter')!;
+    await call('DELETE', `/api/tasks/${oil.id}`);
+    await call('POST', `/api/vehicles/${bike.id}/tasks`, { name: 'Engine Oil', intervalKm: 10000, intervalMonths: 12 });
+    await call('POST', `/api/vehicles/${bike.id}/add-from-templates`);
+    const names = (await snapshot()).tasks.filter((t) => t.vehicleId === bike.id).map((t) => t.name);
+    expect(names).toContain('Engine Oil');
+    expect(names).not.toContain('Change engine oil and filter');
+  });
+
+  it('never doubles a template’s Task, even once the owner renamed it', async () => {
+    const bike = (await (await call('POST', '/api/vehicles', { ...BIKE, name: 'Fresh' })).json()) as Vehicle;
+    const before = (await snapshot()).tasks.filter((t) => t.vehicleId === bike.id);
+    const oil = before.find((t) => t.name === 'Change engine oil and filter')!;
+    await call('PUT', `/api/tasks/${oil.id}`, { name: 'Vidange maison', intervalKm: 8000, intervalMonths: 12 });
+    await call('POST', `/api/vehicles/${bike.id}/add-from-templates`);
+    await call('POST', `/api/vehicles/${bike.id}/add-from-templates`);
+    expect((await snapshot()).tasks.filter((t) => t.vehicleId === bike.id)).toHaveLength(before.length);
   });
 
   it('changes a template without touching vehicles that exist, and the next vehicle gets the change', async () => {

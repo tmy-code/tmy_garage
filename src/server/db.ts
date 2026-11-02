@@ -584,6 +584,12 @@ const MIGRATIONS: (string | ((db: DatabaseSync) => void))[] = [
   ALTER TABLE services ADD COLUMN title TEXT;
   ALTER TABLE services ADD COLUMN category TEXT CHECK (category IN ('engine', 'transmission', 'brakes', 'chassis', 'electrical', 'cooling_climate', 'other'));
 `,
+  `
+  -- The Plan Template a Task came from, so adding templates again never doubles a Task, whatever it was renamed to.
+  -- Tasks that exist already are tagged the next time templates are added, by their name.
+  ALTER TABLE maintenance_tasks ADD COLUMN template_code TEXT;
+  CREATE UNIQUE INDEX maintenance_tasks_template ON maintenance_tasks (vehicle_id, template_code) WHERE template_code IS NOT NULL;
+`,
 ];
 
 function schemaVersion(db: DatabaseSync): number {
