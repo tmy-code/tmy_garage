@@ -1,11 +1,13 @@
 import { DatabaseSync } from 'node:sqlite';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { convertToFiveParts } from './five-parts.ts';
 
 export const DEFAULT_GARAGE_ID = 'default';
 
 // Append-only: never edit a migration that has shipped, add a new one.
-const MIGRATIONS: string[] = [
+/** SQL, or a function for a step that needs code (the rework onto the five parts). */
+const MIGRATIONS: (string | ((db: DatabaseSync) => void))[] = [
   `
   CREATE TABLE garages (
     id TEXT PRIMARY KEY,
@@ -513,6 +515,58 @@ const MIGRATIONS: string[] = [
 
   DROP TABLE fitment_positions;
 `,
+`
+  -- The rework: insurance, inspections, modifications, quotes and drivers leave the app. Their tables go (a backup is
+  -- written first); Documents attached to them stay stored but are no longer shown. A Vehicle keeps the facts of its
+  -- Profile only.
+  DROP TABLE inspection_defects;
+  DROP TABLE technical_inspections;
+  DROP TABLE modifications;
+  DROP TABLE claims;
+  DROP TABLE covers;
+  DROP TABLE policy_terms;
+  DROP TABLE policy_drivers;
+  DROP TABLE insurance_policies;
+  DROP TABLE drivers;
+  DROP TABLE quotes;
+  ALTER TABLE vehicles DROP COLUMN registration;
+  ALTER TABLE vehicles DROP COLUMN first_registration;
+  ALTER TABLE vehicles DROP COLUMN version;
+  ALTER TABLE vehicles DROP COLUMN fiscal_power;
+  ALTER TABLE vehicles DROP COLUMN national_type;
+  ALTER TABLE vehicles DROP COLUMN purchase_date;
+  ALTER TABLE vehicles DROP COLUMN overnight_parking;
+`,
+`
+  -- Each Task says what is done to the part (replace, inspect, clean or adjust); the action is guessed from the name of
+  -- the Tasks already there. A Service says who did the work and what it all cost: the cost starts as the sum of the
+  -- prices of its Parts Used. The Official Interval is folded into the Interval (the stricter of the two applied, so
+  -- nothing is due earlier or later than before) and goes.
+  ALTER TABLE maintenance_tasks ADD COLUMN action TEXT NOT NULL DEFAULT 'replace' CHECK (action IN ('replace', 'inspect', 'clean', 'adjust'));
+  UPDATE maintenance_tasks SET action = 'inspect'
+    WHERE lower(name || ' ' || coalesce(name_fr, '')) LIKE '%check%' OR lower(name || ' ' || coalesce(name_fr, '')) LIKE '%inspect%'
+      OR lower(name || ' ' || coalesce(name_fr, '')) LIKE '%vérif%' OR lower(name || ' ' || coalesce(name_fr, '')) LIKE '%contrôl%'
+      OR lower(name || ' ' || coalesce(name_fr, '')) LIKE '%controle%';
+  UPDATE maintenance_tasks SET action = 'clean'
+    WHERE lower(name || ' ' || coalesce(name_fr, '')) LIKE '%clean%' OR lower(name || ' ' || coalesce(name_fr, '')) LIKE '%nettoy%';
+  UPDATE maintenance_tasks SET action = 'adjust'
+    WHERE lower(name || ' ' || coalesce(name_fr, '')) LIKE '%adjust%' OR lower(name || ' ' || coalesce(name_fr, '')) LIKE '%lubric%'
+      OR lower(name || ' ' || coalesce(name_fr, '')) LIKE '%tension%' OR lower(name || ' ' || coalesce(name_fr, '')) LIKE '%règl%'
+      OR lower(name || ' ' || coalesce(name_fr, '')) LIKE '%regl%' OR lower(name || ' ' || coalesce(name_fr, '')) LIKE '%grais%'
+      OR lower(name || ' ' || coalesce(name_fr, '')) LIKE '%alignment%' OR lower(name || ' ' || coalesce(name_fr, '')) LIKE '%géométrie%';
+  UPDATE maintenance_tasks SET
+    interval_km = CASE WHEN official_interval_km IS NULL THEN interval_km WHEN interval_km IS NULL THEN official_interval_km
+                       ELSE min(interval_km, official_interval_km) END,
+    interval_months = CASE WHEN official_interval_months IS NULL THEN interval_months WHEN interval_months IS NULL THEN official_interval_months
+                           ELSE min(interval_months, official_interval_months) END;
+  ALTER TABLE maintenance_tasks DROP COLUMN official_interval_km;
+  ALTER TABLE maintenance_tasks DROP COLUMN official_interval_months;
+
+  ALTER TABLE services ADD COLUMN performed_by TEXT NOT NULL DEFAULT 'diy' CHECK (performed_by IN ('diy', 'garage', 'dealership'));
+  ALTER TABLE services ADD COLUMN total_cost REAL;
+  UPDATE services SET total_cost = (SELECT sum(price) FROM parts_used WHERE parts_used.service_id = services.id AND price IS NOT NULL);
+`,
+  convertToFiveParts,
 ];
 
 function schemaVersion(db: DatabaseSync): number {
@@ -541,7 +595,9 @@ export function openDatabase(path: string, backupDir?: string, targetVersion = M
   for (let version = current; version < targetVersion; version++) {
     db.exec('BEGIN');
     try {
-      db.exec(MIGRATIONS[version]!);
+      const step = MIGRATIONS[version]!;
+      if (typeof step === 'string') db.exec(step);
+      else step(db);
       db.exec(`PRAGMA user_version = ${version + 1}`);
       db.exec('COMMIT');
     } catch (error) {

@@ -1,9 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { addDays, type IsoDate } from '../shared/dates.ts';
 import { vehicleDue } from '../shared/due.ts';
-import { expiringDocuments, nextInspection } from '../shared/inspections.ts';
-import { currentTerm, isActive, renewal } from '../shared/insurance.ts';
-import type { DocumentType } from '../shared/schemas.ts';
 import type { Snapshot } from '../shared/types.ts';
 import type { PushMessage, PushSender } from './push.ts';
 
@@ -14,14 +11,10 @@ const MAX_LINES = 5;
 
 export type ReminderStatus = 'dueSoon' | 'overdue';
 
-export type ReminderSubject =
-  | { kind: 'task'; name: string; nameFr: string | null }
-  | { kind: 'inspection' }
-  | { kind: 'document'; title: string | null; type: DocumentType }
-  | { kind: 'renewal'; insurer: string; policyId: string };
+export type ReminderSubject = { kind: 'task'; name: string; nameFr: string | null };
 
 export interface Reminder {
-  /** Names one occurrence: doing the job, passing the inspection or renewing starts a new key, so the next one is reminded too. */
+  /** Names one occurrence: doing the job starts a new key, so the next one is reminded too. */
   key: string;
   status: ReminderStatus;
   vehicleId: string | null;
@@ -44,37 +37,6 @@ export function currentReminders(snapshot: Snapshot, today: IsoDate): Reminder[]
         dueDate: d.dueDate,
       });
     }
-    const inspection = nextInspection(snapshot, vehicle, today);
-    if (inspection.status === 'overdue' || inspection.status === 'dueSoon') {
-      reminders.push({
-        key: `inspection:${vehicle.id}:${inspection.last?.id ?? 'first'}`,
-        status: inspection.status,
-        vehicleId: vehicle.id,
-        subject: { kind: 'inspection' },
-        dueDate: inspection.dueDate,
-      });
-    }
-    for (const doc of expiringDocuments(snapshot, vehicle.id, today)) {
-      reminders.push({
-        key: `document:${doc.id}:${doc.expiryDate}`,
-        status: doc.expiryDate! < today ? 'overdue' : 'dueSoon',
-        vehicleId: vehicle.id,
-        subject: { kind: 'document', title: doc.title, type: doc.type },
-        dueDate: doc.expiryDate,
-      });
-    }
-  }
-  for (const policy of snapshot.policies) {
-    const due = renewal(policy, today);
-    if (!due || due.status === 'ok') continue;
-    const covers = (isActive(policy, today) ? currentTerm(policy, today)?.covers : undefined) ?? [];
-    reminders.push({
-      key: `renewal:${policy.id}:${due.date}`,
-      status: due.status,
-      vehicleId: covers.length === 1 ? covers[0]!.vehicleId : null,
-      subject: { kind: 'renewal', insurer: policy.insurer, policyId: policy.id },
-      dueDate: due.date,
-    });
   }
   return reminders;
 }
@@ -101,54 +63,18 @@ const TEXT = {
     colon: ': ',
     many: (n: number) => `${n} reminders`,
     more: (n: number) => `and ${n} more`,
-    inspection: 'Technical inspection',
-    renewal: (insurer: string) => `Insurance renewal (${insurer})`,
     due: (date: string | null) => (date ? `due ${date}` : 'due soon'),
     overdue: (date: string | null) => (date ? `overdue since ${date}` : 'overdue'),
-    expires: (date: string) => `expires ${date}`,
-    expired: (date: string) => `expired ${date}`,
-    renews: (date: string) => `renews ${date}`,
-    renewalPassed: (date: string) => `renewed ${date}: record the new term`,
     test: { title: 'Reminders are on', body: 'This device will be told when something becomes due soon or overdue.' },
-    types: {
-      registration: 'Registration certificate',
-      invoice: 'Invoice or receipt',
-      inspectionReport: 'Inspection report',
-      manual: 'Manual',
-      photo: 'Photo',
-      policySchedule: 'Policy schedule',
-      insuranceCertificate: 'Proof of insurance',
-      claimsStatement: 'Relevé d’information',
-      claimReport: 'Claim paperwork',
-      other: 'Document',
-    } satisfies Record<DocumentType, string>,
   },
   fr: {
     locale: 'fr-FR',
     colon: ' : ',
     many: (n: number) => `${n} rappels`,
     more: (n: number) => `et ${n} de plus`,
-    inspection: 'Contrôle technique',
-    renewal: (insurer: string) => `Échéance d’assurance (${insurer})`,
     due: (date: string | null) => (date ? `à faire avant le ${date}` : 'bientôt'),
     overdue: (date: string | null) => (date ? `en retard depuis le ${date}` : 'en retard'),
-    expires: (date: string) => `expire le ${date}`,
-    expired: (date: string) => `expiré le ${date}`,
-    renews: (date: string) => `échéance le ${date}`,
-    renewalPassed: (date: string) => `échéance passée le ${date} : saisissez la nouvelle période`,
     test: { title: 'Rappels activés', body: 'Cet appareil sera prévenu quand quelque chose arrive à échéance ou est en retard.' },
-    types: {
-      registration: 'Carte grise',
-      invoice: 'Facture ou ticket',
-      inspectionReport: 'Procès-verbal de contrôle',
-      manual: 'Manuel',
-      photo: 'Photo',
-      policySchedule: 'Conditions particulières',
-      insuranceCertificate: 'Mémo véhicule assuré',
-      claimsStatement: 'Relevé d’information',
-      claimReport: 'Papiers de sinistre',
-      other: 'Document',
-    } satisfies Record<DocumentType, string>,
   },
 };
 
@@ -170,19 +96,11 @@ function subjectLabel(subject: ReminderSubject, lang: ReminderLang): string {
   switch (subject.kind) {
     case 'task':
       return lang === 'fr' && subject.nameFr ? subject.nameFr : subject.name;
-    case 'inspection':
-      return text.inspection;
-    case 'document':
-      return subject.title ?? text.types[subject.type];
-    case 'renewal':
-      return text.renewal(subject.insurer);
   }
 }
 
 function whenLabel(r: Reminder, text: (typeof TEXT)[ReminderLang], today: IsoDate): string {
   const date = r.dueDate ? formatDay(r.dueDate, text.locale, today) : null;
-  if (r.subject.kind === 'document' && date) return r.status === 'overdue' ? text.expired(date) : text.expires(date);
-  if (r.subject.kind === 'renewal' && date) return r.status === 'overdue' ? text.renewalPassed(date) : text.renews(date);
   return r.status === 'overdue' ? text.overdue(date) : text.due(date);
 }
 
@@ -195,8 +113,7 @@ export function reminderMessage(reminders: Reminder[], snapshot: Snapshot, lang:
   const only = sorted.length === 1 ? sorted[0]! : null;
 
   let url = '/#/';
-  if (only?.subject.kind === 'renewal') url = `/#/policies/${only.subject.policyId}`;
-  else if (vehicles.size === 1 && sorted[0]!.vehicleId) url = `/#/vehicles/${sorted[0]!.vehicleId}`;
+  if (vehicles.size === 1 && sorted[0]!.vehicleId) url = `/#/vehicles/${sorted[0]!.vehicleId}`;
 
   if (only) {
     const vehicle = vehicleName(only.vehicleId);

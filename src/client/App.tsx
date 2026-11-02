@@ -2,25 +2,13 @@ import { useLayoutEffect } from 'react';
 import { LanguageSwitch, Layout, NotFound } from './components.tsx';
 import { useT } from './i18n.ts';
 import { Dashboard, ManageGaragePage } from './pages/Dashboard.tsx';
-import {
-  ClaimForm,
-  DriverForm,
-  InsurancePage,
-  PolicyForm,
-  PolicyPage,
-  QuoteForm,
-  QuotePackPage,
-  TermForm,
-  VehicleInsurancePage,
-} from './pages/Insurance.tsx';
-import { DocumentsPage, InspectionForm, InspectionsPage, ModificationForm, ModificationsPage } from './pages/Papers.tsx';
 import { CataloguePage, PartForm } from './pages/PartCatalogue.tsx';
 import { SettingsPage } from './pages/Settings.tsx';
 import { catalogueOf } from '../shared/catalogue.ts';
 import { ReadingForm, ServiceForm } from './pages/ServiceForm.tsx';
 import { CopyTasks, SellForm, TaskForm, VehicleForm } from './pages/SetupForms.tsx';
 import { VehiclePage } from './pages/VehiclePage.tsx';
-import { PartSpecsPage, ShoppingPage, SpecsPage, TaskPage, WorkshopForm, WorkshopPage } from './pages/Workshop.tsx';
+import { SpecsPage, TaskPage, WorkshopPage } from './pages/Workshop.tsx';
 import { scrollForNewRoute, useRoute } from './router.ts';
 import { sync, useStore } from './store.ts';
 
@@ -68,8 +56,6 @@ export function App() {
 
   if (section === undefined) return <Dashboard snapshot={snapshot} />;
   if (section === 'workshop') return <WorkshopPage snapshot={snapshot} />;
-  if (section === 'shopping') return <ShoppingPage snapshot={snapshot} />;
-  if (section === 'insurance') return <InsurancePage snapshot={snapshot} />;
   // Reminders used to have their own page; links to it (a test notification, say) open the settings.
   if (section === 'settings' && id === 'parts') {
     if (sub === undefined) return <CataloguePage snapshot={snapshot} />;
@@ -101,23 +87,6 @@ export function App() {
         return <CopyTasks vehicle={vehicle} snapshot={snapshot} />;
       case 'specs':
         return <SpecsPage vehicle={vehicle} snapshot={snapshot} />;
-      case 'parts':
-        return <PartSpecsPage vehicle={vehicle} snapshot={snapshot} />;
-      case 'documents':
-        return <DocumentsPage vehicle={vehicle} snapshot={snapshot} />;
-      case 'inspections':
-        if (subId === 'new') return <InspectionForm vehicle={vehicle} snapshot={snapshot} />;
-        return <InspectionsPage vehicle={vehicle} snapshot={snapshot} />;
-      case 'modifications':
-        if (subId === 'new') return <ModificationForm vehicle={vehicle} snapshot={snapshot} />;
-        return <ModificationsPage vehicle={vehicle} snapshot={snapshot} />;
-      case 'insurance':
-        return <VehicleInsurancePage vehicle={vehicle} snapshot={snapshot} />;
-      case 'quote-pack':
-        return <QuotePackPage vehicle={vehicle} snapshot={snapshot} />;
-      case 'quotes':
-        if (subId === 'new') return <QuoteForm vehicle={vehicle} snapshot={snapshot} />;
-        break;
       case 'tasks':
         if (subId === 'new') return <TaskForm vehicle={vehicle} snapshot={snapshot} />;
     }
@@ -128,7 +97,6 @@ export function App() {
     if (!task || !owner) return <NotFound what="task" />;
     if (sub === undefined) return <TaskPage key={task.id} task={task} vehicle={owner} snapshot={snapshot} />;
     if (sub === 'edit') return <TaskForm key={task.id} vehicle={owner} snapshot={snapshot} existing={task} />;
-    if (sub === 'workshop') return <WorkshopForm key={task.id} task={task} vehicle={owner} snapshot={snapshot} />;
   }
   if (section === 'readings' && sub === 'edit') {
     const reading = snapshot.readings.find((r) => r.id === id);
@@ -141,45 +109,6 @@ export function App() {
     const owner = service && snapshot.vehicles.find((v) => v.id === service.vehicleId);
     if (service && owner) return <ServiceForm key={service.id} vehicle={owner} snapshot={snapshot} existing={service} />;
     return <NotFound what="service" />;
-  }
-  if (section === 'inspections') {
-    const inspection = snapshot.inspections.find((i) => i.id === id);
-    const owner = inspection && snapshot.vehicles.find((v) => v.id === inspection.vehicleId);
-    if (inspection && owner) return <InspectionForm key={inspection.id} vehicle={owner} snapshot={snapshot} existing={inspection} />;
-  }
-  if (section === 'modifications') {
-    const modification = snapshot.modifications.find((m) => m.id === id);
-    const owner = modification && snapshot.vehicles.find((v) => v.id === modification.vehicleId);
-    if (modification && owner)
-      return <ModificationForm key={modification.id} vehicle={owner} snapshot={snapshot} existing={modification} />;
-  }
-  if (section === 'policies' && id === 'new') return <PolicyForm snapshot={snapshot} />;
-  if (section === 'policies') {
-    const policy = snapshot.policies.find((p) => p.id === id);
-    if (policy && sub === undefined) return <PolicyPage policy={policy} snapshot={snapshot} />;
-    if (policy && sub === 'edit') return <PolicyForm key={policy.id} snapshot={snapshot} existing={policy} />;
-    if (policy && sub === 'terms' && subId === 'new') return <TermForm policy={policy} snapshot={snapshot} />;
-    if (policy && sub === 'claims' && subId === 'new') return <ClaimForm policy={policy} snapshot={snapshot} />;
-  }
-  if (section === 'terms') {
-    const policy = snapshot.policies.find((p) => p.terms.some((term) => term.id === id));
-    const term = policy?.terms.find((x) => x.id === id);
-    if (policy && term) return <TermForm key={term.id} policy={policy} snapshot={snapshot} existing={term} />;
-  }
-  if (section === 'claims') {
-    const claim = snapshot.claims.find((c) => c.id === id);
-    const policy = claim && snapshot.policies.find((p) => p.id === claim.policyId);
-    if (claim && policy) return <ClaimForm key={claim.id} policy={policy} snapshot={snapshot} existing={claim} />;
-  }
-  if (section === 'drivers' && id === 'new') return <DriverForm />;
-  if (section === 'drivers') {
-    const driver = snapshot.drivers.find((d) => d.id === id);
-    if (driver) return <DriverForm key={driver.id} existing={driver} />;
-  }
-  if (section === 'quotes') {
-    const quote = snapshot.quotes.find((q) => q.id === id);
-    const owner = quote && snapshot.vehicles.find((v) => v.id === quote.vehicleId);
-    if (quote && owner) return <QuoteForm key={quote.id} vehicle={owner} snapshot={snapshot} existing={quote} />;
   }
   return <NotFound what="page" />;
 }

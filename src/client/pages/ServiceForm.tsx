@@ -1,12 +1,11 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { todayIso } from '../../shared/dates.ts';
 import { effectiveInterval, vehicleDue } from '../../shared/due.ts';
-import type { PartUnit } from '../../shared/schemas.ts';
+import type { PartUnit, PerformedBy } from '../../shared/schemas.ts';
 import type { OdometerReading, PartUsed, Service, Snapshot, Vehicle } from '../../shared/types.ts';
-import { lastUsed, partSpecsOf } from '../../shared/workshop.ts';
 import { newId } from '../api.ts';
 import { confirmDelete, Field, FormError, Layout, StatusChip } from '../components.tsx';
-import { formatKm, parseNumber, partName, taskName } from '../format.ts';
+import { formatKm, parseNumber, taskName } from '../format.ts';
 import { showToast } from '../feedback.ts';
 import { useT, type Messages } from '../i18n.ts';
 import { navigate } from '../router.ts';
@@ -17,13 +16,10 @@ import { DocumentsPanel } from './Papers.tsx';
 /** A Part Used as typed in the form: numbers stay text until saved. */
 interface PartDraft {
   key: number;
-  partSpecId: string | null;
   description: string;
   partNumber: string;
   quantity: string;
   unit: PartUnit;
-  price: string;
-  supplier: string;
 }
 
 let nextKey = 1;
@@ -31,29 +27,21 @@ let nextKey = 1;
 function toDraft(p: PartUsed): PartDraft {
   return {
     key: nextKey++,
-    partSpecId: p.partSpecId,
     description: p.description,
     partNumber: p.partNumber ?? '',
     quantity: String(p.quantity),
     unit: p.unit,
-    price: p.price === null ? '' : String(p.price),
-    supplier: p.supplier ?? '',
   };
 }
 
 function fromDraft(d: PartDraft, t: Messages): PartUsed {
   const quantity = parseNumber(d.quantity);
-  const price = parseNumber(d.price);
   if (!d.description.trim() || quantity === null || Number.isNaN(quantity) || quantity <= 0) throw new Error(t.workshop.partError);
-  if (price !== null && (Number.isNaN(price) || price < 0)) throw new Error(t.workshop.priceError);
   return {
-    partSpecId: d.partSpecId,
     description: d.description.trim(),
     partNumber: d.partNumber.trim() || null,
     quantity,
     unit: d.unit,
-    price,
-    supplier: d.supplier.trim() || null,
   };
 }
 
@@ -84,11 +72,9 @@ export function ServiceForm({
     () => new Set(existing?.taskIds ?? due.filter((d) => d.taskId === preselect).map((d) => d.taskId)),
   );
   const [notes, setNotes] = useState(existing?.notes ?? '');
+  const [performedBy, setPerformedBy] = useState<PerformedBy>(existing?.performedBy ?? 'diy');
+  const [costText, setCostText] = useState(existing?.totalCost != null ? String(existing.totalCost) : '');
   const [parts, setParts] = useState<PartDraft[]>(() => (existing?.partsUsed ?? []).map(toDraft));
-  const partSpecs = partSpecsOf(snapshot, vehicle, { keep: (existing?.partsUsed ?? []).map((p) => p.partSpecId) });
-  const missingParts = [...selected]
-    .flatMap((id) => tasks.get(id)?.requiredParts ?? [])
-    .filter((r) => partSpecs.some((s) => s.id === r.partSpecId) && !parts.some((p) => p.partSpecId === r.partSpecId));
   const [error, setError] = useState<string | null>(null);
   const [odometerError, setOdometerError] = useState<string | null>(null);
   const [tasksError, setTasksError] = useState<string | null>(null);
@@ -118,40 +104,15 @@ export function ServiceForm({
     setParts(parts.map((p) => (p.key === key ? { ...p, ...patch } : p)));
   }
 
-  /** Adds the Required Parts of the ticked Tasks, filled in with what was used last time. */
-  function addFromTasks() {
-    const added: PartDraft[] = [];
-    for (const r of missingParts) {
-      const spec = partSpecs.find((s) => s.id === r.partSpecId)!;
-      if (added.some((p) => p.partSpecId === spec.id)) continue;
-      const last = lastUsed(snapshot, spec)?.part;
-      added.push({
-        key: nextKey++,
-        partSpecId: spec.id,
-        description: last?.description ?? [partName(spec, t), spec.characteristics].filter(Boolean).join(' '),
-        partNumber: last?.partNumber ?? '',
-        // A quantity not given yet is taken from last time, if any.
-        quantity: String(r.quantity ?? last?.quantity ?? ''),
-        unit: spec.unit,
-        price: '',
-        supplier: last?.supplier ?? '',
-      });
-    }
-    setParts([...parts, ...added]);
-  }
-
   function addEmptyPart() {
     setParts([
       ...parts,
       {
         key: nextKey++,
-        partSpecId: null,
         description: '',
         partNumber: '',
         quantity: '1',
         unit: 'piece',
-        price: '',
-        supplier: '',
       },
     ]);
   }
@@ -173,6 +134,11 @@ export function ServiceForm({
       tasksField.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       return;
     }
+    const totalCost = parseNumber(costText);
+    if (totalCost !== null && (Number.isNaN(totalCost) || totalCost < 0)) {
+      setError(t.service.totalCostError);
+      return;
+    }
     let partsUsed: PartUsed[];
     try {
       partsUsed = parts.map((d) => fromDraft(d, t));
@@ -189,6 +155,8 @@ export function ServiceForm({
         odometer,
         taskIds: [...selected],
         notes: notes.trim() || null,
+        performedBy,
+        totalCost,
         partsUsed,
       },
     };
@@ -240,6 +208,21 @@ export function ServiceForm({
                 aria-invalid={odometerError ? true : undefined}
               />
             </Field>
+
+            <div className="row">
+              <Field label={t.service.performedBy}>
+                <select value={performedBy} onChange={(e) => setPerformedBy(e.target.value as PerformedBy)}>
+                  {(['diy', 'garage', 'dealership'] as const).map((k) => (
+                    <option key={k} value={k}>
+                      {t.service.performers[k]}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label={t.service.totalCost}>
+                <input inputMode="decimal" value={costText} onChange={(e) => setCostText(e.target.value)} />
+              </Field>
+            </div>
 
             <fieldset ref={tasksField} className={`field ${tasksError ? 'field-invalid' : ''}`}>
               <legend className="field-label">{t.service.tasksDone}</legend>
@@ -299,34 +282,11 @@ export function ServiceForm({
                       <Field label={t.workshop.partNumber}>
                         <input value={d.partNumber} onChange={(e) => setPart(d.key, { partNumber: e.target.value })} maxLength={120} />
                       </Field>
-                      <Field label={t.workshop.price}>
-                        <input inputMode="decimal" value={d.price} onChange={(e) => setPart(d.key, { price: e.target.value })} />
-                      </Field>
                     </div>
-                    {partSpecs.length > 0 ? (
-                      <Field label={t.workshop.spec}>
-                        <select value={d.partSpecId ?? ''} onChange={(e) => setPart(d.key, { partSpecId: e.target.value || null })}>
-                          <option value="">{t.workshop.noSpec}</option>
-                          {partSpecs.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {partName(s, t)}
-                            </option>
-                          ))}
-                        </select>
-                      </Field>
-                    ) : null}
-                    <Field label={t.workshop.supplier}>
-                      <input value={d.supplier} onChange={(e) => setPart(d.key, { supplier: e.target.value })} maxLength={120} />
-                    </Field>
                   </details>
                 </div>
               ))}
               <div className="actions">
-                {missingParts.length > 0 ? (
-                  <button type="button" className="button button-small" onClick={addFromTasks}>
-                    {t.workshop.addFromTasks}
-                  </button>
-                ) : null}
                 <button type="button" className="button button-small" onClick={addEmptyPart}>
                   {t.workshop.addPartUsed}
                 </button>
@@ -351,7 +311,7 @@ export function ServiceForm({
         ) : null}
       </form>
       {existing && !pending ? (
-        <DocumentsPanel snapshot={snapshot} ownerKind="service" ownerId={existing.id} defaultType="invoice" title={t.papers.invoices} />
+        <DocumentsPanel snapshot={snapshot} ownerKind="service" ownerId={existing.id} defaultType="invoice" title={t.papers.receipt} />
       ) : null}
     </Layout>
   );

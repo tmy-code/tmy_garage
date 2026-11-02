@@ -11,7 +11,7 @@ import {
   type PartCategory,
   type SpecFlag,
 } from '../../shared/catalogue.ts';
-import type { PartUnit, VehicleKind } from '../../shared/schemas.ts';
+import type { TaskAction, VehicleKind } from '../../shared/schemas.ts';
 import type { Snapshot } from '../../shared/types.ts';
 import { confirmDelete, Field, FormError, IntervalFields, Layout, NeedsConnection } from '../components.tsx';
 import { describeEvery } from '../format.ts';
@@ -72,7 +72,6 @@ function PartRow({ part, t }: { part: CataloguePart; t: Messages }) {
         </span>
         {interval ? <span className="muted">{interval}</span> : null}
         <span className="muted">{conditions ?? t.settings.allOfKind[part.kind]}</span>
-        {part.characteristics ? <span className="muted">{part.characteristics}</span> : null}
       </a>
     </li>
   );
@@ -140,9 +139,6 @@ function optionalNumber(text: string, label: string): number | null {
   return n;
 }
 
-/** What a task is for: a fitted part, a fluid, or a check or service with nothing to buy. */
-type TaskType = PartUnit | 'check';
-
 /** Every detail of a Build with its values as checkboxes: ticked is what is allowed. */
 function ConditionGrid({ kind, ticked, onChange }: { kind: VehicleKind; ticked: Conditions; onChange: (ticked: Conditions) => void }) {
   const t = useT();
@@ -185,10 +181,9 @@ export function PartForm({ part, kind }: { part?: CataloguePart; kind: VehicleKi
   const [name, setName] = useState(part?.en ?? '');
   const [nameFr, setNameFr] = useState(part && part.fr !== part.en ? part.fr : '');
   const [category, setCategory] = useState<PartCategory>(part?.category ?? 'other');
-  const [type, setType] = useState<TaskType>(part ? (part.unit ?? 'check') : 'piece');
+  const [action, setAction] = useState<TaskAction>(part?.action ?? 'replace');
   const [intervalKm, setIntervalKm] = useState(String(part?.intervalKm ?? ''));
   const [intervalMonths, setIntervalMonths] = useState(String(part?.intervalMonths ?? ''));
-  const [characteristics, setCharacteristics] = useState(part?.characteristics ?? '');
   const [ticked, setTicked] = useState<Conditions>(() => allTicked(kind, part?.conditions ?? {}));
   const { error, disabled, run } = useSubmit();
   // The oil filter is replaced with the oil, on the oil's task: it has no interval of its own.
@@ -202,9 +197,9 @@ export function PartForm({ part, kind }: { part?: CataloguePart; kind: VehicleKi
         intervalMonths: optionalNumber(intervalMonths, t.setup.monthsLabel),
       };
       if (!together && intervals.intervalKm === null && intervals.intervalMonths === null) throw new Error(t.setup.needInterval);
-      const shared = { conditions: ticked, characteristics: type === 'check' ? '' : characteristics, ...(together ? {} : intervals) };
+      const shared = { conditions: ticked, ...(together ? {} : intervals) };
       if (own) {
-        const body = { ...shared, kind, name, nameFr, category, unit: type === 'check' ? null : type };
+        const body = { ...shared, kind, name, nameFr, category, action };
         if (part) await online('PUT', `/api/catalogue/${part.code}`, body);
         else await online('POST', '/api/catalogue', body);
       } else {
@@ -251,16 +246,13 @@ export function PartForm({ part, kind }: { part?: CataloguePart; kind: VehicleKi
                 ))}
               </select>
             </Field>
-            <Field label={t.settings.partType}>
-              {/* A check cannot become a part, nor a part a check: Part Specs would have to be made or dropped. */}
-              <select value={type} onChange={(e) => setType(e.target.value as TaskType)}>
-                {part?.unit === null ? null : (
-                  <>
-                    <option value="piece">{t.settings.fitted}</option>
-                    <option value="litre">{t.settings.fluid}</option>
-                  </>
-                )}
-                {part && part.unit !== null ? null : <option value="check">{t.settings.check}</option>}
+            <Field label={t.setup.action}>
+              <select value={action} onChange={(e) => setAction(e.target.value as TaskAction)}>
+                {(['replace', 'inspect', 'clean', 'adjust'] as const).map((a) => (
+                  <option key={a} value={a}>
+                    {t.setup.actions[a]}
+                  </option>
+                ))}
               </select>
             </Field>
           </>
@@ -277,11 +269,6 @@ export function PartForm({ part, kind }: { part?: CataloguePart; kind: VehicleKi
             <IntervalFields km={intervalKm} months={intervalMonths} onKm={setIntervalKm} onMonths={setIntervalMonths} />
             {part?.turboIntervalKm ? <p className="muted">{t.settings.turboNote(describeEvery(part.turboIntervalKm, part.intervalMonths, t))}</p> : null}
           </>
-        )}
-        {type === 'check' ? null : (
-          <Field label={t.settings.defaultDetails} hint={t.settings.defaultDetailsHint}>
-            <input value={characteristics} onChange={(e) => setCharacteristics(e.target.value)} maxLength={500} />
-          </Field>
         )}
         <FormError error={error} />
         <button type="submit" className="button button-primary button-block" disabled={disabled}>

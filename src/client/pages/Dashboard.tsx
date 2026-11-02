@@ -175,7 +175,6 @@ function VehicleCard({ vehicle, items, snapshot, today }: { vehicle: Vehicle; it
 
 function keyOf(item: Upcoming): string {
   if (item.kind === 'task') return item.due.taskId;
-  if (item.kind === 'document') return item.document.id;
   return '';
 }
 
@@ -189,29 +188,12 @@ function when(date: string, status: Upcoming['status'], today: string, t: Messag
 /** One line: what it is, and when. Opens the screen where it is dealt with. */
 function UpcomingLine({ item, vehicle, snapshot, today }: { item: Upcoming; vehicle: Vehicle; snapshot: Snapshot; today: string }) {
   const t = useT();
-  const base = `#/vehicles/${vehicle.id}`;
   let href: string;
   let name: string;
   switch (item.kind) {
     case 'task':
       href = `#/tasks/${item.due.taskId}`;
       name = taskName(snapshot.tasks.find((x) => x.id === item.due.taskId)!, t);
-      break;
-    case 'inspection':
-      href = `${base}/inspections`;
-      name = t.papers.nextInspection;
-      break;
-    case 'insurance':
-      href = `${base}/insurance`;
-      name = item.insurer;
-      break;
-    case 'document':
-      href = `${base}/documents`;
-      name = item.document.title ?? t.papers.types[item.document.type];
-      break;
-    case 'defects':
-      href = `${base}/inspections`;
-      name = t.papers.openDefects(item.count);
       break;
     case 'reading':
       return null;

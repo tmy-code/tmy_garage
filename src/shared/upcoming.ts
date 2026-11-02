@@ -1,8 +1,6 @@
 import { daysBetween, type IsoDate } from './dates.ts';
 import { vehicleDue, type DueInfo } from './due.ts';
-import { expiringDocuments, nextInspection, openDefects } from './inspections.ts';
-import { currentCover, renewal } from './insurance.ts';
-import type { GarageDocument, Snapshot } from './types.ts';
+import type { Snapshot } from './types.ts';
 
 /** Tasks that are fine for now still appear on the dashboard, a few of them, so it is never empty. */
 export const UPCOMING_PREVIEW = 5;
@@ -16,10 +14,6 @@ type Urgency = 'overdue' | 'dueSoon' | 'ok';
 /** One line of the dashboard: something coming up on one of the owned Vehicles. */
 export type Upcoming = { vehicleId: string; status: Urgency; date: IsoDate | null } & (
   | { kind: 'task'; due: DueInfo }
-  | { kind: 'inspection' }
-  | { kind: 'insurance'; insurer: string }
-  | { kind: 'document'; document: GarageDocument }
-  | { kind: 'defects'; count: number }
   | { kind: 'reading'; daysSince: number | null }
 );
 
@@ -51,19 +45,6 @@ export function upcoming(snapshot: Snapshot, today: IsoDate): Upcoming[] {
       else if (d.status === 'ok' && d.daysRemaining !== null && d.daysRemaining <= UPCOMING_HORIZON_DAYS)
         later.push({ vehicleId, status: 'ok', date: d.dueDate, kind: 'task', due: d });
     }
-    const inspection = nextInspection(snapshot, vehicle, today);
-    if (inspection.dueDate && (inspection.status === 'overdue' || inspection.status === 'dueSoon'))
-      urgent.push({ vehicleId, status: inspection.status, date: inspection.dueDate, kind: 'inspection' });
-    const cover = currentCover(snapshot, vehicleId, today);
-    const insuranceDue = cover ? renewal(cover.policy, today) : null;
-    if (cover && insuranceDue && insuranceDue.status !== 'ok')
-      urgent.push({ vehicleId, status: insuranceDue.status, date: insuranceDue.date, kind: 'insurance', insurer: cover.policy.insurer });
-    for (const document of expiringDocuments(snapshot, vehicleId, today)) {
-      const date = document.expiryDate!;
-      urgent.push({ vehicleId, status: date < today ? 'overdue' : 'dueSoon', date, kind: 'document', document });
-    }
-    const defects = openDefects(snapshot, vehicle).length;
-    if (defects > 0) urgent.push({ vehicleId, status: 'dueSoon', date: null, kind: 'defects', count: defects });
     const daysSince = usage.latest ? daysBetween(usage.latest.date, today) : null;
     if (daysSince === null || daysSince > STALE_READING_DAYS) readings.push({ vehicleId, status: 'ok', date: null, kind: 'reading', daysSince });
   }

@@ -1,19 +1,6 @@
 import type { IsoDate } from './dates.ts';
-import type { CatalogueEntry, PartCategory, StandardPartKey, VehicleSpecs } from './catalogue.ts';
-import type {
-  CoverLevel,
-  DefectSeverity,
-  DocumentOwnerKind,
-  DocumentType,
-  InspectionResult,
-  MotorcycleLicence,
-  OvernightParking,
-  PartUnit,
-  Responsibility,
-  VehicleKind,
-  VehicleSpecKind,
-} from './schemas.ts';
-
+import type { CatalogueEntry, PartCategory, VehicleSpecs } from './catalogue.ts';
+import type { DocumentOwnerKind, DocumentType, PartUnit, PerformedBy, SpecGroup, TaskAction, VehicleKind } from './schemas.ts';
 /** A car or motorcycle; what it is built with (its Build) comes from VehicleSpecs. */
 export interface Vehicle extends VehicleSpecs {
   id: string;
@@ -22,16 +9,8 @@ export interface Vehicle extends VehicleSpecs {
   make: string | null;
   model: string | null;
   year: number | null;
-  registration: string | null;
-  /** Date of first registration (carte grise, field B): sets when the first Technical Inspection is due. */
-  firstRegistration: IsoDate | null;
-  /** Registration certificate facts for a Quote Pack: VIN (field E), version (D.2), fiscal power (P.6), national type (J.1). */
+  /** Vehicle identification number. */
   vin: string | null;
-  version: string | null;
-  fiscalPower: number | null;
-  nationalType: string | null;
-  purchaseDate: IsoDate | null;
-  overnightParking: OvernightParking | null;
   status: 'owned' | 'sold';
   /** Whether it has a card on the garage page, whatever its status; selling it hides it, and the user can change either. */
   onGaragePage: boolean;
@@ -46,73 +25,37 @@ export interface MaintenanceTask {
   /** The name in English; nameFr is shown instead in French when given. */
   name: string;
   nameFr: string | null;
+  /** What is done to the part. */
+  action: TaskAction;
   intervalKm: number | null;
   intervalMonths: number | null;
-  /** The Official Interval from the Vehicle's Service Schedule; the stricter of the two applies. */
-  officialIntervalKm: number | null;
-  officialIntervalMonths: number | null;
   /** When the Task was last done before the garage started tracking it; superseded by any Service. */
   baselineDate: IsoDate | null;
   baselineOdometer: number | null;
-  /** Free-text steps, warnings and links for doing the job. */
-  workshopNotes: string | null;
-  /** The Standard Part the Task replaces, if any; the Task is paused while that part is not on the Vehicle. */
-  standardPart: StandardPartKey | null;
-  /** The category the owner placed the Task in; empty follows its Standard Part's, else 'other'. See taskCategory. */
-  category: PartCategory | null;
-  /** A check or service of the schedule the owner switched off on this Vehicle: the Task is paused. */
-  switchedOff: boolean;
-  requiredParts: RequiredPart[];
-  /** Required Tools, in checklist order. */
-  tools: string[];
-  /** Vehicle Specs (torque values, pressures…) the job involves. */
-  specIds: string[];
-}
-
-/** A Part Spec and the quantity of it a Maintenance Task needs. */
-export interface RequiredPart {
-  partSpecId: string;
-  /** Null until the user says how much. */
-  quantity: number | null;
-}
-
-/** Technical reference data about a Vehicle; a Torque Spec when kind is 'torque'. */
-export interface VehicleSpec {
-  id: string;
-  vehicleId: string;
-  kind: VehicleSpecKind;
-  name: string;
-  value: string;
+  /** Instructions, torque and fluid reminders, standard part codes. */
   notes: string | null;
+  /** The owner's category; empty is 'other'. */
+  category: PartCategory | null;
+  /** Paused on this Vehicle: no status and no reminder. */
+  switchedOff: boolean;
 }
 
-/** What a Part a Vehicle takes must be, without quantity. */
-export interface PartSpec {
+/** One line of a Vehicle's factory specs: a fluid capacity or grade, a part size or reference, a torque value. */
+export interface SpecLine {
   id: string;
   vehicleId: string;
-  /** Which Standard Part this is; null for another Part, named by the user. */
-  standardPart: StandardPartKey | null;
-  /** Only meaningful for another Part: a Standard Part is named by the interface language. */
-  name: string;
-  nameFr: string | null;
-  characteristics: string | null;
-  /** The vehicle manufacturer's own part number; partNumbers lists the equivalents that also fit. */
-  oemReference: string | null;
-  partNumbers: string | null;
-  unit: PartUnit;
-  /** A Standard Part set aside as not on this Vehicle: its Build no longer has it, or the user said so. */
-  notFitted: boolean;
+  label: string;
+  value: string;
+  group: SpecGroup;
+  sort: number;
 }
 
-/** The actual Part fitted or consumed during a Service. */
+/** A component used in a Service, with its brand and variant in the description. */
 export interface PartUsed {
-  partSpecId: string | null;
   description: string;
   partNumber: string | null;
   quantity: number;
   unit: PartUnit;
-  price: number | null;
-  supplier: string | null;
 }
 
 export interface Service {
@@ -123,6 +66,10 @@ export interface Service {
   odometer: number | null;
   taskIds: string[];
   notes: string | null;
+  /** Who did the work. */
+  performedBy: PerformedBy;
+  /** Parts and labour, in one amount. */
+  totalCost: number | null;
   partsUsed: PartUsed[];
 }
 
@@ -133,121 +80,9 @@ export interface OdometerReading {
   odometer: number;
 }
 
-/** The regulatory roadworthiness check of a Vehicle by an approved centre (contrôle technique). */
-export interface TechnicalInspection {
-  id: string;
-  vehicleId: string;
-  date: IsoDate;
-  odometer: number;
-  centre: string | null;
-  result: InspectionResult;
-  /** The deadline for the next inspection as printed on the report; estimated from the regulatory rhythm when null. */
-  nextDueDate: IsoDate | null;
-  notes: string | null;
-  defects: InspectionDefect[];
-}
-
-export interface InspectionDefect {
-  description: string;
-  severity: DefectSeverity;
-  /** The Service in which the user fixed it. */
-  fixedServiceId: string | null;
-}
-
-/** A change that takes a Vehicle away from its factory configuration. */
-export interface Modification {
-  id: string;
-  vehicleId: string;
-  name: string;
-  fittedDate: IsoDate;
-  fittedOdometer: number | null;
-  removedDate: IsoDate | null;
-  declaredToInsurer: boolean;
-  notes: string | null;
-}
-
-/** A person declared on Insurance Policies as allowed to drive their Vehicles. */
-export interface Driver {
-  id: string;
-  name: string;
-  birthDate: IsoDate | null;
-  /** Date the car licence (B) was obtained. */
-  carLicenceDate: IsoDate | null;
-  motorcycleLicenceDate: IsoDate | null;
-  motorcycleLicence: MotorcycleLicence | null;
-  notes: string | null;
-}
-
-/** A contract with one Insurer covering one or more Vehicles, running from a start date until cancelled. */
-export interface InsurancePolicy {
-  id: string;
-  insurer: string;
-  policyNumber: string | null;
-  startDate: IsoDate;
-  cancelledDate: IsoDate | null;
-  driverIds: string[];
-  notes: string | null;
-  /** Oldest first. */
-  terms: PolicyTerm[];
-}
-
-/** One period of a Policy, ending at its renewal date (échéance), during which its Covers are fixed. */
-export interface PolicyTerm {
-  id: string;
-  policyId: string;
-  startDate: IsoDate;
-  /** The renewal date. */
-  endDate: IsoDate;
-  notes: string | null;
-  covers: Cover[];
-}
-
-/** What a Policy provides for one Vehicle during one Policy Term. */
-export interface Cover {
-  id: string;
-  vehicleId: string;
-  level: CoverLevel;
-  /** Optional guarantees, free text (e.g. "rider gear, assistance 0 km"). */
-  guarantees: string | null;
-  excess: number | null;
-  /** Yearly premium. */
-  premium: number | null;
-  /** The bonus-malus coefficient (CRM) of this Vehicle on this Policy. */
-  crm: number | null;
-  notes: string | null;
-}
-
-/** An incident declared to an Insurer under a Policy (sinistre). */
-export interface Claim {
-  id: string;
-  policyId: string;
-  vehicleId: string;
-  driverId: string | null;
-  date: IsoDate;
-  responsibility: Responsibility;
-  amount: number | null;
-  description: string;
-  notes: string | null;
-}
-
-/** A price offered by an Insurer for one Vehicle, in the same terms as a Cover. */
-export interface Quote {
-  id: string;
-  vehicleId: string;
-  insurer: string;
-  date: IsoDate;
-  level: CoverLevel;
-  guarantees: string | null;
-  excess: number | null;
-  premium: number;
-  validUntil: IsoDate | null;
-  notes: string | null;
-}
-
-/** A stored file (PDF or photo), attached to exactly one Vehicle, Service, Modification, Technical Inspection, Policy, Cover or Claim. */
+/** A stored file (PDF or photo), attached to one Vehicle or Service; on a Service it is the receipt. */
 export interface GarageDocument {
   id: string;
-  /** Null for a Document of a Policy, which may cover several Vehicles. */
   vehicleId: string | null;
   ownerKind: DocumentOwnerKind;
   ownerId: string;
@@ -266,16 +101,9 @@ export interface Snapshot {
   tasks: MaintenanceTask[];
   services: Service[];
   readings: OdometerReading[];
-  vehicleSpecs: VehicleSpec[];
-  partSpecs: PartSpec[];
-  inspections: TechnicalInspection[];
-  modifications: Modification[];
+  specLines: SpecLine[];
   /** Document details only; the files are fetched on demand. */
   documents: GarageDocument[];
-  drivers: Driver[];
-  policies: InsurancePolicy[];
-  claims: Claim[];
-  quotes: Quote[];
   /** The owner's changes to the parts catalogue; see catalogueOf. */
   catalogue: CatalogueEntry[];
 }

@@ -8,59 +8,33 @@ import { bodyLimit } from 'hono/body-limit';
 import type { ZodType } from 'zod';
 import {
   catalogueChangeInput,
-  claimInput,
   copyTasksInput,
   documentInput,
   documentOwner,
-  driverInput,
-  inspectionInput,
-  modificationInput,
   odometerReadingInput,
   ownPartInput,
-  partSpecInput,
-  policyInput,
   pushEndpointInput,
   pushSubscriptionInput,
-  quoteInput,
   sellInput,
   garagePageInput,
   serviceInput,
   taskInput,
-  termInput,
   vehicleInput,
-  vehicleSpecInput,
-  workshopInput,
+  specLineInput,
 } from '../shared/schemas.ts';
 import type {
-  Claim,
-  Cover,
-  Driver,
   GarageDocument,
-  InsurancePolicy,
   MaintenanceTask,
-  Modification,
-  TechnicalInspection,
   OdometerReading,
-  PartSpec,
   PartUsed,
-  PolicyTerm,
-  Quote,
   Service,
   Snapshot,
   Vehicle,
-  VehicleSpec,
+  SpecLine,
 } from '../shared/types.ts';
-import {
-  BUILT_IN_CATALOGUE,
-  Catalogue,
-  isBuiltInPart,
-  tidyConditions,
-  type Build,
-  type CatalogueEntry,
-  type Conditions,
-  type StandardPartKey,
-} from '../shared/catalogue.ts';
-import type { ClaimInput, TermInput, VehicleInput, VehicleKind } from '../shared/schemas.ts';
+import { BUILT_IN_CATALOGUE, Catalogue, tidyConditions, type Build, type Conditions } from '../shared/catalogue.ts';
+import { buildOfRow, catalogueEntries } from './catalogue-rows.ts';
+import type { VehicleInput, VehicleKind } from '../shared/schemas.ts';
 import { todayIso } from '../shared/dates.ts';
 import { DEFAULT_GARAGE_ID } from './db.ts';
 import type { PushSender } from './push.ts';
@@ -90,79 +64,13 @@ async function parse<T>(c: Context, schema: ZodType<T, any, any>): Promise<T> {
 
 type Row = Record<string, any>;
 
-/** A Vehicle row's Build. */
-const buildOfRow = (r: Row): Build => ({
-  kind: r.kind,
-  fuel: r.fuel,
-  transmission: r.transmission,
-  drivetrain: r.drivetrain,
-  distribution: r.distribution,
-  cooling: r.cooling,
-  finalDrive: r.final_drive,
-  cylinders: r.cylinders,
-  hasHydraulicClutch: r.has_hydraulic_clutch === 1,
-  hasTurbo: r.has_turbo === 1,
-  hasDirectInjection: r.has_direct_injection === 1,
-  hasStartStop: r.has_start_stop === 1,
-  hasAdblue: r.has_adblue === 1,
-  hasAc: r.has_ac === 1,
-  hasAirSuspension: r.has_air_suspension === 1,
-});
-
-/**
- * The Standard Parts of the catalogue before it came from the vehicle parts database, with the code each moved to
- * (null when the new catalogue has no such part to replace) and their names, for those kept as a Part named by the user.
- */
-const LEGACY_PARTS: Record<string, { car?: StandardPartKey | null; motorcycle?: StandardPartKey | null; en: string; fr: string }> = {
-  engineOil: { car: 'engine_oil', motorcycle: 'moto_engine_oil', en: 'Engine oil', fr: 'Huile moteur' },
-  oilFilter: { car: 'oil_filter', motorcycle: 'moto_oil_filter', en: 'Oil filter', fr: 'Filtre à huile' },
-  airFilter: { car: 'air_filter', motorcycle: 'moto_air_filter', en: 'Air filter', fr: 'Filtre à air' },
-  cabinFilter: { car: 'cabin_filter', en: 'Cabin filter', fr: 'Filtre d’habitacle' },
-  fuelFilter: { car: 'fuel_filter', en: 'Fuel filter', fr: 'Filtre à carburant' },
-  sparkPlugs: { car: 'spark_plugs', motorcycle: 'moto_spark_plugs', en: 'Spark plugs', fr: 'Bougies' },
-  glowPlugs: { car: null, en: 'Glow plugs', fr: 'Bougies de préchauffage' },
-  adBlue: { car: null, en: 'AdBlue', fr: 'AdBlue' },
-  gearboxOil: { car: null, en: 'Gearbox oil', fr: 'Huile de boîte' },
-  gearboxFilter: { car: null, en: 'Gearbox filter', fr: 'Filtre de boîte' },
-  clutchKit: { car: 'clutch_kit', en: 'Clutch kit', fr: 'Kit d’embrayage' },
-  brakeFluid: { car: 'brake_fluid', motorcycle: 'moto_brake_fluid', en: 'Brake fluid', fr: 'Liquide de frein' },
-  coolant: { car: 'coolant', motorcycle: 'moto_coolant', en: 'Coolant', fr: 'Liquide de refroidissement' },
-  forkOil: { motorcycle: 'moto_fork_oil_seals', en: 'Fork oil', fr: 'Huile de fourche' },
-  acRefrigerant: { car: null, en: 'AC refrigerant', fr: 'Gaz de climatisation' },
-  frontBrakePads: { car: 'brake_pads_front', motorcycle: 'moto_brake_pads_front', en: 'Front brake pads', fr: 'Plaquettes avant' },
-  rearBrakePads: { car: 'brake_pads_rear', motorcycle: 'moto_brake_pads_rear', en: 'Rear brake pads', fr: 'Plaquettes arrière' },
-  frontBrakeDiscs: { car: 'brake_discs_front', en: 'Front brake discs', fr: 'Disques avant' },
-  rearBrakeDiscs: { car: 'brake_discs_rear', en: 'Rear brake discs', fr: 'Disques arrière' },
-  chainKit: { motorcycle: 'moto_chain', en: 'Chain kit', fr: 'Kit chaîne' },
-  finalDriveBelt: { motorcycle: 'moto_drive_belt', en: 'Drive belt', fr: 'Courroie de transmission' },
-  finalDriveOil: { motorcycle: 'moto_shaft_oil', en: 'Final drive oil', fr: 'Huile de transmission finale' },
-  accessoryBelt: { car: 'drive_belt', en: 'Accessory belt', fr: 'Courroie d’accessoires' },
-  timingBeltKit: { car: 'timing_belt_kit', en: 'Timing belt kit', fr: 'Kit de distribution (courroie)' },
-  timingChainKit: { car: null, en: 'Timing chain kit', fr: 'Kit de distribution (chaîne)' },
-  frontShocks: { car: 'shock_absorbers', en: 'Front shock absorbers', fr: 'Amortisseurs avant' },
-  rearShocks: { car: null, en: 'Rear shock absorbers', fr: 'Amortisseurs arrière' },
-  frontTyre: { motorcycle: 'moto_tire_front', en: 'Front tyre', fr: 'Pneu avant' },
-  rearTyre: { motorcycle: 'moto_tire_rear', en: 'Rear tyre', fr: 'Pneu arrière' },
-  frontTyres: { car: 'tires', en: 'Front tyres', fr: 'Pneus avant' },
-  rearTyres: { car: null, en: 'Rear tyres', fr: 'Pneus arrière' },
-  wiperBlades: { car: 'wipers', en: 'Wiper blades', fr: 'Balais d’essuie-glace' },
-  battery: { car: 'battery_12v', motorcycle: 'moto_battery', en: 'Battery', fr: 'Batterie' },
-};
-
 const toVehicle = (r: Row): Vehicle => ({
   id: r.id,
   name: r.name,
   make: r.make,
   model: r.model,
   year: r.year,
-  registration: r.registration,
-  firstRegistration: r.first_registration,
   vin: r.vin,
-  version: r.version,
-  fiscalPower: r.fiscal_power,
-  nationalType: r.national_type,
-  purchaseDate: r.purchase_date,
-  overnightParking: r.overnight_parking,
   ...buildOfRow(r),
   status: r.status,
   onGaragePage: r.on_garage_page === 1,
@@ -171,60 +79,30 @@ const toVehicle = (r: Row): Vehicle => ({
   soldPrice: r.sold_price,
 });
 
-type Workshop = Pick<MaintenanceTask, 'requiredParts' | 'tools' | 'specIds'>;
-const noWorkshop = (): Workshop => ({ requiredParts: [], tools: [], specIds: [] });
-
-const toTask = (r: Row, w: Workshop = noWorkshop()): MaintenanceTask => ({
+const toTask = (r: Row): MaintenanceTask => ({
   id: r.id,
   vehicleId: r.vehicle_id,
   name: r.name,
   nameFr: r.name_fr,
   intervalKm: r.interval_km,
   intervalMonths: r.interval_months,
-  officialIntervalKm: r.official_interval_km,
-  officialIntervalMonths: r.official_interval_months,
+  action: r.action,
   baselineDate: r.baseline_date,
   baselineOdometer: r.baseline_odometer,
-  workshopNotes: r.workshop_notes,
-  standardPart: r.standard_part,
+  notes: r.notes,
   category: r.category,
   switchedOff: r.switched_off === 1,
-  ...w,
 });
 
 const toReading = (r: Row): OdometerReading => ({ id: r.id, vehicleId: r.vehicle_id, date: r.date, odometer: r.odometer });
 
-const toVehicleSpec = (r: Row): VehicleSpec => ({
+const toSpecLine = (r: Row): SpecLine => ({
   id: r.id,
   vehicleId: r.vehicle_id,
-  kind: r.kind,
-  name: r.name,
+  label: r.label,
   value: r.value,
-  notes: r.notes,
-});
-
-const toPartSpec = (r: Row): PartSpec => ({
-  id: r.id,
-  vehicleId: r.vehicle_id,
-  standardPart: r.standard_part,
-  name: r.name,
-  nameFr: r.name_fr,
-  characteristics: r.characteristics,
-  oemReference: r.oem_reference,
-  partNumbers: r.part_numbers,
-  unit: r.unit,
-  notFitted: r.not_fitted === 1,
-});
-
-const toModification = (r: Row): Modification => ({
-  id: r.id,
-  vehicleId: r.vehicle_id,
-  name: r.name,
-  fittedDate: r.fitted_date,
-  fittedOdometer: r.fitted_odometer,
-  removedDate: r.removed_date,
-  declaredToInsurer: r.declared_to_insurer === 1,
-  notes: r.notes,
+  group: r.spec_group,
+  sort: r.sort,
 });
 
 const toDocument = (r: Row): GarageDocument => ({
@@ -241,52 +119,6 @@ const toDocument = (r: Row): GarageDocument => ({
   size: r.size,
 });
 
-const toDriver = (r: Row): Driver => ({
-  id: r.id,
-  name: r.name,
-  birthDate: r.birth_date,
-  carLicenceDate: r.car_licence_date,
-  motorcycleLicenceDate: r.motorcycle_licence_date,
-  motorcycleLicence: r.motorcycle_licence,
-  notes: r.notes,
-});
-
-const toCover = (r: Row): Cover => ({
-  id: r.id,
-  vehicleId: r.vehicle_id,
-  level: r.level,
-  guarantees: r.guarantees,
-  excess: r.excess,
-  premium: r.premium,
-  crm: r.crm,
-  notes: r.notes,
-});
-
-const toClaim = (r: Row): Claim => ({
-  id: r.id,
-  policyId: r.policy_id,
-  vehicleId: r.vehicle_id,
-  driverId: r.driver_id,
-  date: r.date,
-  responsibility: r.responsibility,
-  amount: r.amount,
-  description: r.description,
-  notes: r.notes,
-});
-
-const toQuote = (r: Row): Quote => ({
-  id: r.id,
-  vehicleId: r.vehicle_id,
-  insurer: r.insurer,
-  date: r.date,
-  level: r.level,
-  guarantees: r.guarantees,
-  excess: r.excess,
-  premium: r.premium,
-  validUntil: r.valid_until,
-  notes: r.notes,
-});
-
 /** Files a Document may be: what a phone camera or a scanner produces. */
 const DOCUMENT_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']);
 export const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
@@ -299,13 +131,10 @@ export interface AppOptions {
 }
 
 const toPartUsed = (r: Row): PartUsed => ({
-  partSpecId: r.part_spec_id,
   description: r.description,
   partNumber: r.part_number,
   quantity: r.quantity,
   unit: r.unit,
-  price: r.price,
-  supplier: r.supplier,
 });
 
 /** Groups rows by a key column, keeping their order. */
@@ -319,29 +148,6 @@ function groupBy<T>(rows: Row[], key: string, map: (r: Row) => T): Map<string, T
   return groups;
 }
 
-/** Reads one Garage's data. Every query is scoped to that Garage. */
-/** What the owner changed in this Garage's parts catalogue. */
-function catalogueEntries(db: DatabaseSync, garageId: string): CatalogueEntry[] {
-  return (db.prepare('SELECT * FROM catalogue_parts WHERE garage_id = ? ORDER BY created_at, code').all(garageId) as Row[]).map((r) => ({
-    code: r.code,
-    own: r.kind
-      ? {
-          kind: r.kind,
-          name: r.name,
-          nameFr: r.name_fr,
-          unit: r.unit,
-          category: r.category,
-          intervalKm: r.interval_km,
-          intervalMonths: r.interval_months,
-        }
-      : null,
-    conditions: r.conditions ? (JSON.parse(r.conditions) as Conditions) : null,
-    characteristics: r.characteristics,
-    removed: r.removed === 1,
-    interval: r.interval_set === 1 ? { intervalKm: r.interval_km, intervalMonths: r.interval_months } : null,
-  }));
-}
-
 function garageReader(db: DatabaseSync, garageId: string) {
   /** Rows of a table whose vehicle_id belongs to this Garage, optionally narrowed by an extra condition. */
   function ownedRows(table: string, where = '1', ...params: (string | number)[]): Row[] {
@@ -353,27 +159,6 @@ function garageReader(db: DatabaseSync, garageId: string) {
       .all(garageId, ...params) as Row[];
   }
 
-  /** Workshop data of one Task, or of all this Garage's Tasks when omitted. */
-  function workshops(taskId?: string): Map<string, Workshop> {
-    const scope = taskId === undefined ? '' : 'AND x.task_id = ?';
-    const params = taskId === undefined ? [garageId] : [garageId, taskId];
-    const query = (table: string, order: string) =>
-      db
-        .prepare(
-          `SELECT x.* FROM ${table} x JOIN maintenance_tasks t ON t.id = x.task_id JOIN vehicles v ON v.id = t.vehicle_id
-           WHERE v.garage_id = ? ${scope} ORDER BY ${order}`,
-        )
-        .all(...params) as Row[];
-    const parts = groupBy(query('required_parts', 'x.sort'), 'task_id', (r) => ({ partSpecId: r.part_spec_id, quantity: r.quantity }));
-    const tools = groupBy(query('required_tools', 'x.sort'), 'task_id', (r) => r.name as string);
-    const specs = groupBy(query('task_specs', 'x.rowid'), 'task_id', (r) => r.spec_id as string);
-    const result = new Map<string, Workshop>();
-    for (const id of new Set([...parts.keys(), ...tools.keys(), ...specs.keys()])) {
-      result.set(id, { requiredParts: parts.get(id) ?? [], tools: tools.get(id) ?? [], specIds: specs.get(id) ?? [] });
-    }
-    return result;
-  }
-
   function snapshot(): Snapshot {
     const vehicles = (db.prepare('SELECT * FROM vehicles WHERE garage_id = ? ORDER BY created_at').all(garageId) as Row[]).map(toVehicle);
     const tasks = db
@@ -382,8 +167,7 @@ function garageReader(db: DatabaseSync, garageId: string) {
            WHERE v.garage_id = ? ORDER BY t.created_at`,
       )
       .all(garageId) as Row[];
-    const workshopByTask = workshops();
-    const taskList = tasks.map((r) => toTask(r, workshopByTask.get(r.id)));
+    const taskList = tasks.map(toTask);
     const links = db
       .prepare(
         `SELECT st.service_id, st.task_id FROM service_tasks st
@@ -396,7 +180,7 @@ function garageReader(db: DatabaseSync, garageId: string) {
     const partsByService = groupBy(
       db
         .prepare(
-          `SELECT p.* FROM parts_used p JOIN services s ON s.id = p.service_id JOIN vehicles v ON v.id = s.vehicle_id
+          `SELECT p.* FROM service_items p JOIN services s ON s.id = p.service_id JOIN vehicles v ON v.id = s.vehicle_id
            WHERE v.garage_id = ? ORDER BY p.service_id, p.sort`,
         )
         .all(garageId) as Row[],
@@ -416,6 +200,8 @@ function garageReader(db: DatabaseSync, garageId: string) {
       date: r.date,
       odometer: r.odometer,
       notes: r.notes,
+      performedBy: r.performed_by,
+      totalCost: r.total_cost,
       taskIds: taskIdsByService.get(r.id) ?? [],
       partsUsed: partsByService.get(r.id) ?? [],
     }));
@@ -432,88 +218,13 @@ function garageReader(db: DatabaseSync, garageId: string) {
       tasks: taskList,
       services,
       readings,
-      vehicleSpecs: ownedRows('vehicle_specs').map(toVehicleSpec),
-      partSpecs: ownedRows('part_specs').map(toPartSpec),
-      inspections: ownedRows('technical_inspections').map((r) => toInspection(r)),
-      modifications: ownedRows('modifications').map(toModification),
-      documents: (db.prepare('SELECT * FROM documents WHERE garage_id = ? ORDER BY created_at').all(garageId) as Row[]).map(toDocument),
-      drivers: (db.prepare('SELECT * FROM drivers WHERE garage_id = ? ORDER BY created_at').all(garageId) as Row[]).map(toDriver),
-      policies: policies(),
-      claims: (
-        db
-          .prepare(
-            `SELECT c.* FROM claims c JOIN insurance_policies p ON p.id = c.policy_id
-             WHERE p.garage_id = ? ORDER BY c.date`,
-          )
-          .all(garageId) as Row[]
-      ).map(toClaim),
-      quotes: ownedRows('quotes').map(toQuote),
+      specLines: ownedRows('spec_lines').map(toSpecLine),
+      documents: (db.prepare("SELECT * FROM documents WHERE garage_id = ? AND owner_kind IN ('vehicle', 'service') ORDER BY created_at").all(garageId) as Row[]).map(toDocument),
       catalogue: catalogueEntries(db, garageId),
     };
   }
 
-  /** This Garage's Policies with their Terms and Covers, or only one Policy when an id is given. */
-  function policies(policyId?: string): InsurancePolicy[] {
-    const scope = policyId === undefined ? '' : 'AND p.id = ?';
-    const params = policyId === undefined ? [garageId] : [garageId, policyId];
-    const query = (sql: string) => db.prepare(sql.replace('$scope', scope)).all(...params) as Row[];
-    const covers = groupBy(
-      query(
-        `SELECT c.* FROM covers c JOIN policy_terms t ON t.id = c.term_id JOIN insurance_policies p ON p.id = t.policy_id
-         WHERE p.garage_id = ? $scope ORDER BY c.rowid`,
-      ),
-      'term_id',
-      toCover,
-    );
-    const drivers = groupBy(
-      query(
-        `SELECT d.* FROM policy_drivers d JOIN insurance_policies p ON p.id = d.policy_id WHERE p.garage_id = ? $scope ORDER BY d.rowid`,
-      ),
-      'policy_id',
-      (r) => r.driver_id as string,
-    );
-    const terms = groupBy(
-      query(
-        `SELECT t.* FROM policy_terms t JOIN insurance_policies p ON p.id = t.policy_id WHERE p.garage_id = ? $scope ORDER BY t.start_date`,
-      ),
-      'policy_id',
-      (r): PolicyTerm => ({
-        id: r.id,
-        policyId: r.policy_id,
-        startDate: r.start_date,
-        endDate: r.end_date,
-        notes: r.notes,
-        covers: covers.get(r.id) ?? [],
-      }),
-    );
-    return query('SELECT p.* FROM insurance_policies p WHERE p.garage_id = ? $scope ORDER BY p.start_date').map((r) => ({
-      id: r.id,
-      insurer: r.insurer,
-      policyNumber: r.policy_number,
-      startDate: r.start_date,
-      cancelledDate: r.cancelled_date,
-      notes: r.notes,
-      driverIds: drivers.get(r.id) ?? [],
-      terms: terms.get(r.id) ?? [],
-    }));
-  }
-
-  function toInspection(r: Row): TechnicalInspection {
-    const defects = db.prepare('SELECT * FROM inspection_defects WHERE inspection_id = ? ORDER BY sort').all(r.id) as Row[];
-    return {
-      id: r.id,
-      vehicleId: r.vehicle_id,
-      date: r.date,
-      odometer: r.odometer,
-      centre: r.centre,
-      result: r.result,
-      nextDueDate: r.next_due_date,
-      notes: r.notes,
-      defects: defects.map((d) => ({ description: d.description, severity: d.severity, fixedServiceId: d.fixed_service_id })),
-    };
-  }
-
-  return { ownedRows, workshops, snapshot, policies, toInspection };
+  return { ownedRows, snapshot };
 }
 
 /** Everything in one Garage, as the app downloads it. */
@@ -528,7 +239,7 @@ export function readSnapshot(db: DatabaseSync, garageId: string = DEFAULT_GARAGE
  */
 export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID, { uploadsDir, push }: AppOptions = {}): Hono {
   const app = new Hono();
-  const { ownedRows, workshops, snapshot, policies, toInspection } = garageReader(db, garageId);
+  const { ownedRows, snapshot } = garageReader(db, garageId);
   if (uploadsDir) mkdirSync(uploadsDir, { recursive: true });
   // The built-in parts with the owner's changes; read again whenever those change.
   let catalogue = new Catalogue(catalogueEntries(db, garageId));
@@ -557,7 +268,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
   }
 
   function loadTask(id: string): MaintenanceTask {
-    return toTask(taskOrThrow(id), workshops(id).get(id));
+    return toTask(taskOrThrow(id));
   }
 
   function transaction<T>(fn: () => T): T {
@@ -570,27 +281,6 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       db.exec('ROLLBACK');
       throw error;
     }
-  }
-
-  function policyOrThrow(id: string): InsurancePolicy {
-    const policy = policies(id)[0];
-    if (!policy) throw new HttpError(404, 'Insurance Policy not found');
-    return policy;
-  }
-
-  /** A row of a table hanging off a Policy (Terms, Claims), checked to be in this Garage. */
-  function policyRowOrThrow(table: string, id: string, what: string): Row {
-    const row = db
-      .prepare(`SELECT x.* FROM ${table} x JOIN insurance_policies p ON p.id = x.policy_id WHERE x.id = ? AND p.garage_id = ?`)
-      .get(id, garageId) as Row | undefined;
-    if (!row) throw new HttpError(404, `${what} not found`);
-    return row;
-  }
-
-  function driverOrThrow(id: string): Row {
-    const row = db.prepare('SELECT * FROM drivers WHERE id = ? AND garage_id = ?').get(id, garageId) as Row | undefined;
-    if (!row) throw new HttpError(404, 'Driver not found');
-    return row;
   }
 
   function documentOrThrow(id: string): Row {
@@ -607,195 +297,33 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
   }
 
   /**
-   * Whether a Part Spec holds anything the user filled in or relies on, so it is not quietly set aside. A Required
-   * Part with no quantity is only what a new Vehicle's tasks start with, and details equal to the catalogue's default
-   * only what it started with: neither is something the user filled in.
+   * Gives a Vehicle the Tasks of the plan templates that fit its Build, at the template's interval. Tasks it already
+   * has (by name) are left alone, so this can be run again after the Build changed. Only a new Vehicle gets this by
+   * itself: after that the plan is the owner's.
    */
-  function partSpecInUse(id: string): boolean {
-    const spec = db.prepare('SELECT standard_part, characteristics FROM part_specs WHERE id = ?').get(id) as Row;
-    if (spec.characteristics && spec.characteristics !== catalogue.known(spec.standard_part)?.characteristics) return true;
-    return (
-      db
-        .prepare(
-          `SELECT 1 FROM part_specs WHERE id = ? AND (coalesce(oem_reference, '') <> '' OR coalesce(part_numbers, '') <> '')
-           UNION ALL SELECT 1 FROM required_parts WHERE part_spec_id = ? AND quantity IS NOT NULL
-           UNION ALL SELECT 1 FROM parts_used WHERE part_spec_id = ?`,
-        )
-        .get(id, id, id) !== undefined
+  function seedTasks(vehicleId: string, build: Build): number {
+    const names = new Set((db.prepare('SELECT name, name_fr FROM maintenance_tasks WHERE vehicle_id = ?').all(vehicleId) as Row[]).flatMap((t) => [looseName(t.name), looseName(t.name_fr)]));
+    const insert = db.prepare(
+      'INSERT INTO maintenance_tasks (id, vehicle_id, name, name_fr, interval_km, interval_months, category, action) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     );
-  }
-
-  /**
-   * Moves a Vehicle's Standard Parts from the older catalogue to the codes of the current one. One with no equivalent
-   * (or whose equivalent is already taken) is kept as a Part named by the user when it holds anything, and dropped
-   * otherwise.
-   */
-  function moveToCatalogue(vehicleId: string, kind: VehicleKind) {
-    const builtIn = BUILT_IN_CATALOGUE.partsOf(kind);
-    const current = new Set<string>(builtIn.map((p) => p.code));
-    const rows = db.prepare('SELECT id, standard_part FROM part_specs WHERE vehicle_id = ? AND standard_part IS NOT NULL').all(vehicleId) as Row[];
-    const taken = new Set(rows.map((r) => r.standard_part as string).filter((key) => current.has(key)));
-    for (const row of rows) {
-      if (current.has(row.standard_part)) continue;
-      const legacy = LEGACY_PARTS[row.standard_part];
-      const code = legacy?.[kind] ?? null;
-      if (code !== null && !taken.has(code)) {
-        taken.add(code);
-        const unit = builtIn.find((p) => p.code === code)!.unit;
-        db.prepare('UPDATE part_specs SET standard_part = ?, name = ?, unit = ? WHERE id = ?').run(code, code, unit, row.id);
-      } else if (partSpecInUse(row.id)) {
-        const name = legacy?.en ?? row.standard_part;
-        db.prepare('UPDATE part_specs SET standard_part = NULL, not_fitted = 0, name = ?, name_fr = ? WHERE id = ?').run(name, legacy?.fr ?? null, row.id);
-      } else {
-        db.prepare('DELETE FROM part_specs WHERE id = ?').run(row.id);
-      }
+    let added = 0;
+    for (const s of catalogue.starterTasks(build)) {
+      if (names.has(looseName(s.name)) || names.has(looseName(s.nameFr))) continue;
+      insert.run(randomUUID(), vehicleId, s.name, s.nameFr, s.intervalKm, s.intervalMonths, s.category, s.action);
+      added++;
     }
-  }
-
-  /**
-   * Gives a Vehicle the Standard Parts that fit its Build and it does not list yet, so each only needs its Part Spec
-   * filled in. When `before` differs from `after`, parts that stopped fitting are marked as not on the Vehicle
-   * (unless they are filled in or used, which the screens then flag) and parts that now fit are put back; a part
-   * whose fit did not change keeps whatever the user chose. With 'all', every part is set by whether it fits.
-   * `was` is the catalogue before a change in Settings, which can change a part's fit just the same.
-   */
-  function syncStandardParts(vehicleId: string, after: Build, before: Build | 'all' = after, was: Catalogue = catalogue) {
-    const rows = new Map(
-      (db.prepare('SELECT id, standard_part FROM part_specs WHERE vehicle_id = ? AND standard_part IS NOT NULL').all(vehicleId) as Row[]).map(
-        (r) => [r.standard_part as string, r.id as string],
-      ),
-    );
-    // A built-in part's name comes from the catalogue; one of the owner's keeps it here too.
-    const storedName = (code: string) => (isBuiltInPart(code) ? code : (catalogue.name(code, 'en') ?? code));
-    const insert = db.prepare('INSERT INTO part_specs (id, vehicle_id, standard_part, name, name_fr, unit, characteristics) VALUES (?, ?, ?, ?, ?, ?, ?)');
-    const setFitted = db.prepare('UPDATE part_specs SET not_fitted = ? WHERE id = ?');
-    // Parts it already lists count too: one taken off the list, or of another kind after a change of kind, no longer fits.
-    const codes = new Set([...catalogue.partsOf(after.kind).map((p) => p.code), ...rows.keys()]);
-    for (const code of codes) {
-      const fits = catalogue.fits(after, code);
-      const id = rows.get(code);
-      if (id === undefined) {
-        // A task that uses nothing has a Task but no Part Spec.
-        if (fits && catalogue.part(code)!.unit !== null) {
-          const part = catalogue.part(code)!;
-          insert.run(randomUUID(), vehicleId, code, storedName(code), part.builtIn ? null : part.fr, part.unit, part.characteristics);
-          rows.set(code, 'new');
-        }
-      } else if (before === 'all' || was.fits(before, code) !== fits) {
-        if (fits) setFitted.run(0, id);
-        else if (!partSpecInUse(id)) setFitted.run(1, id);
-      }
-    }
+    return added;
   }
 
   /** A name compared loosely: case, accents and spacing aside. */
-  const looseName = (name: string | null) =>
-    (name ?? '')
+  function looseName(name: string | null): string {
+    return (name ?? '')
       .normalize('NFD')
       .replace(/\p{Diacritic}/gu, '')
       .replace(/\s+/g, ' ')
       .trim()
       .toLowerCase();
-
-  /** Whether a Task's Interval is the owner's own rather than the catalogue's for its part on this Build. */
-  function isCustomInterval(build: Build, key: string | null, intervalKm: number | null, intervalMonths: number | null): boolean {
-    const d = key !== null ? catalogue.defaultInterval(build, key) : null;
-    return d === null || d.intervalKm !== intervalKm || d.intervalMonths !== intervalMonths;
   }
-
-  /**
-   * Keeps a Vehicle's Tasks on its maintenance schedule: every Standard Part that fits its Build has a Task replacing
-   * it (one that stops fitting is paused, not removed), and an Interval the owner never set follows the Build. With
-   * `adopt`, a Task of the owner's named like a missing schedule Task becomes it, keeping its history and Interval.
-   */
-  function syncSchedule(vehicleId: string, build: Build, adopt = false) {
-    const tasks = db
-      .prepare('SELECT id, name, name_fr, standard_part, custom_interval, interval_km, interval_months FROM maintenance_tasks WHERE vehicle_id = ? ORDER BY created_at')
-      .all(vehicleId) as Row[];
-    const covered = new Set(tasks.map((t) => t.standard_part as string | null));
-    const insert = db.prepare(
-      'INSERT INTO maintenance_tasks (id, vehicle_id, name, name_fr, interval_km, interval_months, standard_part) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    );
-    const link = db.prepare('UPDATE maintenance_tasks SET standard_part = ?, custom_interval = ? WHERE id = ?');
-    const hasParts = db.prepare('SELECT 1 FROM required_parts WHERE task_id = ?');
-    // A schedule Task needs its part (and the oil filter with the oil); how much is left for the owner to fill in.
-    const required = db.prepare(
-      `INSERT INTO required_parts (task_id, part_spec_id, quantity, sort)
-       SELECT ?, id, NULL, ? FROM part_specs WHERE vehicle_id = ? AND standard_part = ?`,
-    );
-    for (const s of catalogue.starterTasks(build)) {
-      if (covered.has(s.standardPart)) continue;
-      const names = [looseName(s.name), looseName(s.nameFr), ...catalogue.legacyTaskNames(s.standardPart).map(looseName)];
-      const own = adopt
-        ? tasks.find((t) => t.standard_part === null && (names.includes(looseName(t.name)) || (t.name_fr && names.includes(looseName(t.name_fr)))))
-        : undefined;
-      let taskId: string;
-      if (own) {
-        own.standard_part = s.standardPart;
-        own.custom_interval = isCustomInterval(build, s.standardPart, own.interval_km, own.interval_months) ? 1 : 0;
-        link.run(s.standardPart, own.custom_interval, own.id);
-        taskId = own.id;
-        if (hasParts.get(taskId) !== undefined) continue;
-      } else {
-        taskId = randomUUID();
-        insert.run(taskId, vehicleId, s.name, s.nameFr, s.intervalKm, s.intervalMonths, s.standardPart);
-      }
-      s.parts.forEach((code, i) => required.run(taskId, i, vehicleId, code));
-    }
-    const follow = db.prepare('UPDATE maintenance_tasks SET interval_km = ?, interval_months = ? WHERE id = ?');
-    for (const t of tasks) {
-      const d = !t.custom_interval && t.standard_part ? catalogue.defaultInterval(build, t.standard_part) : null;
-      if (d) follow.run(d.intervalKm, d.intervalMonths, t.id);
-    }
-  }
-
-  /**
-   * Tasks for a built-in part used to be named after the part ("Brake fluid"); they now say what is to be done
-   * ("Change brake fluid"). A Task still carrying the old name, which the owner never renamed, takes the new one.
-   */
-  function renameDefaultTasks(vehicleId: string) {
-    const rename = db.prepare('UPDATE maintenance_tasks SET name = ?, name_fr = ? WHERE id = ?');
-    const tasks = db.prepare('SELECT id, name, name_fr, standard_part FROM maintenance_tasks WHERE vehicle_id = ? AND standard_part IS NOT NULL').all(vehicleId) as Row[];
-    for (const t of tasks) {
-      const part = catalogue.known(t.standard_part);
-      if (!part?.builtIn || !part.task) continue;
-      const legacy = catalogue.legacyTaskNames(part.code).map(looseName);
-      if (!legacy.includes(looseName(t.name)) || t.name === part.task.en) continue;
-      // A French name the owner wrote stays.
-      const fr = !t.name_fr || legacy.includes(looseName(t.name_fr)) ? part.task.fr : t.name_fr;
-      rename.run(part.task.en, fr, t.id);
-    }
-  }
-
-  /**
-   * Whether a Task is the only one replacing a Standard Part that fits its Vehicle's Build: it cannot be deleted or
-   * unlinked (it would only come back); the owner switches it off by marking the part as not on the Vehicle.
-   */
-  function onlyScheduleTask(task: Row): boolean {
-    if (!task.standard_part || !catalogue.fits(buildOfRow(vehicleOrThrow(task.vehicle_id)), task.standard_part)) return false;
-    return (
-      db.prepare('SELECT 1 FROM maintenance_tasks WHERE vehicle_id = ? AND standard_part = ? AND id <> ?').get(task.vehicle_id, task.standard_part, task.id) ===
-      undefined
-    );
-  }
-
-  // Vehicles added before Standard Parts existed, or after the catalogue grew, get the missing ones that fit. Those
-  // listed for the move to the current catalogue are moved, then have every part set by whether it fits. Owned
-  // Vehicles then get the schedule Tasks they lack; those listed for it first adopt the owner's own Tasks.
-  transaction(() => {
-    const moving = new Set((db.prepare('SELECT vehicle_id FROM part_catalogue_moves').all() as Row[]).map((r) => r.vehicle_id as string));
-    const scheduling = new Set((db.prepare('SELECT vehicle_id FROM schedule_moves').all() as Row[]).map((r) => r.vehicle_id as string));
-    for (const v of db.prepare('SELECT * FROM vehicles WHERE garage_id = ?').all(garageId) as Row[]) {
-      if (moving.has(v.id)) moveToCatalogue(v.id, v.kind);
-      syncStandardParts(v.id, buildOfRow(v), moving.has(v.id) ? 'all' : undefined);
-      if (v.status === 'owned') {
-        syncSchedule(v.id, buildOfRow(v), scheduling.has(v.id));
-        db.prepare('DELETE FROM schedule_moves WHERE vehicle_id = ?').run(v.id);
-      }
-      renameDefaultTasks(v.id);
-    }
-    db.prepare('DELETE FROM part_catalogue_moves WHERE vehicle_id IN (SELECT id FROM vehicles WHERE garage_id = ?)').run(garageId);
-  });
 
   app.onError((error, c) => {
     if (error instanceof HttpError) return c.json({ error: error.message }, error.status);
@@ -816,14 +344,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       v.make,
       v.model,
       v.year,
-      v.registration,
-      v.firstRegistration,
       v.vin,
-      v.version,
-      v.fiscalPower,
-      v.nationalType,
-      v.purchaseDate,
-      v.overnightParking,
       v.fuel,
       v.transmission,
       v.drivetrain,
@@ -848,36 +369,27 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     const id = randomUUID();
     transaction(() => {
       db.prepare(
-        `INSERT INTO vehicles (id, garage_id, kind, name, make, model, year, registration, first_registration,
-           vin, version, fiscal_power, national_type, purchase_date, overnight_parking, ${BUILD_COLUMNS})
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO vehicles (id, garage_id, kind, name, make, model, year, vin, ${BUILD_COLUMNS})
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(id, garageId, ...vehicleValues(v));
-      syncStandardParts(id, v);
-      // A new Vehicle starts with its maintenance schedule: a Task per part it has, at the catalogue's interval.
-      syncSchedule(id, v);
+      // A new Vehicle starts with the plan templates that fit its Build; after that the plan is its own.
+      seedTasks(id, v);
     });
     return c.json(toVehicle(vehicleOrThrow(id)), 201);
   });
 
   app.put('/api/vehicles/:id', async (c) => {
     const id = c.req.param('id');
-    const row = vehicleOrThrow(id);
-    const before = buildOfRow(row);
-    const status = row.status;
+    vehicleOrThrow(id);
     const v = await parse(c, vehicleInput);
     transaction(() => {
       db.prepare(
-        `UPDATE vehicles SET kind = ?, name = ?, make = ?, model = ?, year = ?, registration = ?, first_registration = ?,
-           vin = ?, version = ?, fiscal_power = ?, national_type = ?, purchase_date = ?, overnight_parking = ?,
+        `UPDATE vehicles SET kind = ?, name = ?, make = ?, model = ?, year = ?, vin = ?,
            fuel = ?, transmission = ?, drivetrain = ?, distribution = ?, cooling = ?, final_drive = ?, cylinders = ?,
            has_hydraulic_clutch = ?, has_turbo = ?, has_direct_injection = ?, has_start_stop = ?, has_adblue = ?, has_ac = ?,
            has_air_suspension = ?
          WHERE id = ?`,
       ).run(...vehicleValues(v), id);
-      // A Vehicle of another kind has a different catalogue: everything is set by whether it fits.
-      syncStandardParts(id, v, before.kind === v.kind ? before : 'all');
-      // Parts that now fit get their Task; Intervals the owner never set follow the new Build.
-      if (status === 'owned') syncSchedule(id, v);
     });
     return c.json(toVehicle(vehicleOrThrow(id)));
   });
@@ -898,14 +410,11 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
 
   app.post('/api/vehicles/:id/unsell', (c) => {
     const id = c.req.param('id');
-    const row = vehicleOrThrow(id);
+    vehicleOrThrow(id);
     transaction(() => {
       db.prepare(
         `UPDATE vehicles SET status = 'owned', on_garage_page = 1, sold_date = NULL, sold_odometer = NULL, sold_price = NULL WHERE id = ?`,
       ).run(id);
-      // Owned again, it is back on its maintenance schedule (adopting its own Tasks if it was sold when the schedule came).
-      const waiting = db.prepare('DELETE FROM schedule_moves WHERE vehicle_id = ?').run(id).changes > 0;
-      syncSchedule(id, buildOfRow(row), waiting);
     });
     return c.json(toVehicle(vehicleOrThrow(id)));
   });
@@ -918,163 +427,79 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     return c.json(toVehicle(vehicleOrThrow(id)));
   });
 
-  // --- Maintenance Tasks ---
-
-  /** Whether the Vehicle lists this Standard Part (even set aside), so a Task can say it replaces it. */
-  function hasStandardPart(vehicleId: string, code: string): boolean {
-    // A check or service of the catalogue has no Part Spec: it is on every Vehicle of its kind.
-    const known = catalogue.known(code);
-    if (known?.unit === null) return known.kind === vehicleOrThrow(vehicleId).kind;
-    return db.prepare('SELECT 1 FROM part_specs WHERE vehicle_id = ? AND standard_part = ?').get(vehicleId, code) !== undefined;
-  }
-
-  function standardPartOrThrow(vehicleId: string, code: string | null): string | null {
-    if (code !== null && !hasStandardPart(vehicleId, code)) throw new HttpError(422, 'The part is not one of this vehicle’s Standard Parts');
-    return code;
-  }
+  // --- Maintenance Tasks: the Vehicle's own plan ---
 
   app.post('/api/vehicles/:id/tasks', async (c) => {
     const vehicleId = c.req.param('id');
-    const vehicle = vehicleOrThrow(vehicleId);
+    vehicleOrThrow(vehicleId);
     const t = await parse(c, taskInput);
-    const standardPart = standardPartOrThrow(vehicleId, t.standardPart);
     const id = randomUUID();
     db.prepare(
       `INSERT INTO maintenance_tasks
-         (id, vehicle_id, name, name_fr, interval_km, interval_months, official_interval_km, official_interval_months, baseline_date,
-          baseline_odometer, standard_part, custom_interval, category)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      id,
-      vehicleId,
-      t.name,
-      t.nameFr,
-      t.intervalKm,
-      t.intervalMonths,
-      t.officialIntervalKm,
-      t.officialIntervalMonths,
-      t.baselineDate,
-      t.baselineOdometer,
-      standardPart,
-      isCustomInterval(buildOfRow(vehicle), standardPart, t.intervalKm, t.intervalMonths) ? 1 : 0,
-      t.category,
-    );
+         (id, vehicle_id, name, name_fr, action, interval_km, interval_months, baseline_date, baseline_odometer, category, notes, switched_off)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, vehicleId, t.name, t.nameFr, t.action, t.intervalKm, t.intervalMonths, t.baselineDate, t.baselineOdometer, t.category, t.notes, t.switchedOff ? 1 : 0);
     return c.json(loadTask(id), 201);
+  });
+
+  /** Gives a Vehicle the plan templates that fit its Build and it has no Task named like yet. */
+  app.post('/api/vehicles/:id/add-from-templates', (c) => {
+    const vehicleId = c.req.param('id');
+    const build = buildOfRow(vehicleOrThrow(vehicleId));
+    return c.json({ added: transaction(() => seedTasks(vehicleId, build)) }, 201);
   });
 
   app.post('/api/vehicles/:id/copy-tasks', async (c) => {
     const vehicleId = c.req.param('id');
-    const build = buildOfRow(vehicleOrThrow(vehicleId));
+    vehicleOrThrow(vehicleId);
     const { fromVehicleId } = await parse(c, copyTasksInput);
     vehicleOrThrow(fromVehicleId);
     if (fromVehicleId === vehicleId) throw new HttpError(422, 'Cannot copy a Vehicle onto itself');
-    const source = db.prepare('SELECT * FROM maintenance_tasks WHERE vehicle_id = ? ORDER BY created_at').all(fromVehicleId) as Row[];
+    const source = db.prepare('SELECT * FROM maintenance_tasks WHERE vehicle_id = ? ORDER BY created_at, rowid').all(fromVehicleId) as Row[];
+    const names = new Set((db.prepare('SELECT name, name_fr FROM maintenance_tasks WHERE vehicle_id = ?').all(vehicleId) as Row[]).flatMap((t) => [looseName(t.name), looseName(t.name_fr)]));
     const insert = db.prepare(
-      `INSERT INTO maintenance_tasks (id, vehicle_id, name, name_fr, interval_km, interval_months, official_interval_km, official_interval_months,
-         standard_part, custom_interval, category)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    );
-    const scheduled = db.prepare('SELECT id FROM maintenance_tasks WHERE vehicle_id = ? AND standard_part = ? ORDER BY created_at');
-    const update = db.prepare(
-      `UPDATE maintenance_tasks SET name = ?, name_fr = ?, interval_km = ?, interval_months = ?, official_interval_km = ?,
-         official_interval_months = ?, custom_interval = ?
-       WHERE id = ?`,
+      `INSERT INTO maintenance_tasks (id, vehicle_id, name, name_fr, action, interval_km, interval_months, category, notes, switched_off)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     // History is not copied: the copies start with no baseline, since they were never done on this Vehicle. A Task
-    // replacing a Standard Part this Vehicle already has a Task for gives that Task its name and Intervals instead;
-    // otherwise a copy replaces the same Standard Part only if this Vehicle lists it too.
+    // this Vehicle already has by name keeps its own Interval.
+    let copied = 0;
     transaction(() => {
       for (const t of source) {
-        const standardPart = t.standard_part && hasStandardPart(vehicleId, t.standard_part) ? (t.standard_part as string) : null;
-        const custom = isCustomInterval(build, standardPart, t.interval_km, t.interval_months) ? 1 : 0;
-        const existing = standardPart ? (scheduled.get(vehicleId, standardPart) as Row | undefined) : undefined;
-        if (existing) {
-          update.run(t.name, t.name_fr, t.interval_km, t.interval_months, t.official_interval_km, t.official_interval_months, custom, existing.id);
-        } else {
-          insert.run(
-            randomUUID(),
-            vehicleId,
-            t.name,
-            t.name_fr,
-            t.interval_km,
-            t.interval_months,
-            t.official_interval_km,
-            t.official_interval_months,
-            standardPart,
-            custom,
-            t.category,
-          );
-        }
+        if (names.has(looseName(t.name))) continue;
+        insert.run(randomUUID(), vehicleId, t.name, t.name_fr, t.action, t.interval_km, t.interval_months, t.category, t.notes, t.switched_off);
+        copied++;
       }
     });
-    return c.json({ copied: source.length }, 201);
+    return c.json({ copied }, 201);
   });
-
-  const SCHEDULE_TASK_KEPT =
-    'This task is the vehicle’s only one on its schedule; to stop it, mark its part as not on this vehicle, or switch it off';
 
   app.put('/api/tasks/:id', async (c) => {
     const id = c.req.param('id');
-    const task = taskOrThrow(id);
+    taskOrThrow(id);
     const t = await parse(c, taskInput);
-    const standardPart = standardPartOrThrow(task.vehicle_id, t.standardPart);
-    if (standardPart !== task.standard_part && onlyScheduleTask(task)) throw new HttpError(409, SCHEDULE_TASK_KEPT);
-    const build = buildOfRow(vehicleOrThrow(task.vehicle_id));
     db.prepare(
-      `UPDATE maintenance_tasks SET name = ?, name_fr = ?, interval_km = ?, interval_months = ?, official_interval_km = ?,
-         official_interval_months = ?, baseline_date = ?, baseline_odometer = ?, standard_part = ?, custom_interval = ?, category = ?,
-         switched_off = ?
+      `UPDATE maintenance_tasks SET name = ?, name_fr = ?, action = ?, interval_km = ?, interval_months = ?, baseline_date = ?,
+         baseline_odometer = ?, category = ?, notes = ?, switched_off = ?
        WHERE id = ?`,
-    ).run(
-      t.name,
-      t.nameFr,
-      t.intervalKm,
-      t.intervalMonths,
-      t.officialIntervalKm,
-      t.officialIntervalMonths,
-      t.baselineDate,
-      t.baselineOdometer,
-      standardPart,
-      // An Interval equal to the catalogue's for this Build is not the owner's own: it keeps following the Build.
-      isCustomInterval(build, standardPart, t.intervalKm, t.intervalMonths) ? 1 : 0,
-      t.category,
-      t.switchedOff ? 1 : 0,
-      id,
-    );
+    ).run(t.name, t.nameFr, t.action, t.intervalKm, t.intervalMonths, t.baselineDate, t.baselineOdometer, t.category, t.notes, t.switchedOff ? 1 : 0, id);
     return c.json(loadTask(id));
   });
 
   app.delete('/api/tasks/:id', (c) => {
     const id = c.req.param('id');
-    const task = taskOrThrow(id);
+    taskOrThrow(id);
     const used = db.prepare('SELECT COUNT(*) AS n FROM service_tasks WHERE task_id = ?').get(id) as { n: number };
     if (used.n > 0) throw new HttpError(409, 'This Maintenance Task appears in logged Services and cannot be deleted');
-    if (onlyScheduleTask(task)) throw new HttpError(409, SCHEDULE_TASK_KEPT);
     db.prepare('DELETE FROM maintenance_tasks WHERE id = ?').run(id);
     return c.body(null, 204);
   });
 
-  // --- The parts catalogue (Settings) ---
+  // --- The plan templates (Settings) ---
 
-  /** Takes a change of the catalogue into account: every Vehicle lists what now fits, and owned ones get its Task. */
+  /** A change of the templates only matters to Vehicles added afterwards: the plan of an existing one is its own. */
   function catalogueChanged() {
-    const was = catalogue;
     catalogue = new Catalogue(catalogueEntries(db, garageId));
-    for (const v of db.prepare('SELECT * FROM vehicles WHERE garage_id = ?').all(garageId) as Row[]) {
-      const build = buildOfRow(v);
-      syncStandardParts(v.id, build, build, was);
-      if (v.status === 'owned') syncSchedule(v.id, build);
-    }
-  }
-
-  /** New default details reach the Part Specs still empty or holding the previous default; what the owner wrote stays. */
-  function spreadDetails(code: string, before: string | null, after: string | null) {
-    if (before === after) return;
-    db.prepare(
-      `UPDATE part_specs SET characteristics = ?
-       WHERE standard_part = ? AND coalesce(characteristics, '') IN ('', ?)
-         AND vehicle_id IN (SELECT id FROM vehicles WHERE garage_id = ?)`,
-    ).run(after, code, before ?? '', garageId);
   }
 
   function tidyOrThrow(kind: VehicleKind, conditions: Record<string, string[]>): Conditions {
@@ -1088,9 +513,9 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     const code = `own_${randomUUID()}`;
     transaction(() => {
       db.prepare(
-        `INSERT INTO catalogue_parts (garage_id, code, kind, name, name_fr, unit, category, interval_km, interval_months, conditions, characteristics)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(garageId, code, p.kind, p.name, p.nameFr, p.unit, p.category, p.intervalKm, p.intervalMonths, JSON.stringify(tidyOrThrow(p.kind, p.conditions)), p.characteristics);
+        `INSERT INTO catalogue_parts (garage_id, code, kind, name, name_fr, category, interval_km, interval_months, conditions, action)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(garageId, code, p.kind, p.name, p.nameFr, p.category, p.intervalKm, p.intervalMonths, JSON.stringify(tidyOrThrow(p.kind, p.conditions)), p.action);
       catalogueChanged();
     });
     return c.json({ code }, 201);
@@ -1099,7 +524,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
   app.put('/api/catalogue/:code', async (c) => {
     const code = c.req.param('code');
     const part = catalogue.known(code);
-    if (!part) throw new HttpError(404, 'Part not found');
+    if (!part) throw new HttpError(404, 'Template not found');
     if (part.builtIn) {
       const p = await parse(c, catalogueChangeInput);
       const conditions = tidyOrThrow(part.kind, p.conditions);
@@ -1111,309 +536,93 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       const intervalMonths = p.intervalKm === undefined && p.intervalMonths === undefined ? part.intervalMonths : (p.intervalMonths ?? null);
       const sameInterval = intervalKm === builtIn.intervalKm && intervalMonths === builtIn.intervalMonths;
       transaction(() => {
-        spreadDetails(code, part.characteristics, p.characteristics);
-        // A part set just as it is built in is no change at all.
-        if (kept === null && p.characteristics === null && !p.removed && sameInterval) {
+        // A template set just as it is built in is no change at all.
+        if (kept === null && !p.removed && sameInterval) {
           db.prepare('DELETE FROM catalogue_parts WHERE garage_id = ? AND code = ?').run(garageId, code);
         } else {
           db.prepare(
-            `INSERT INTO catalogue_parts (garage_id, code, conditions, characteristics, removed, interval_set, interval_km, interval_months)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-             ON CONFLICT (garage_id, code) DO UPDATE SET conditions = excluded.conditions, characteristics = excluded.characteristics,
+            `INSERT INTO catalogue_parts (garage_id, code, conditions, removed, interval_set, interval_km, interval_months)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT (garage_id, code) DO UPDATE SET conditions = excluded.conditions,
                removed = excluded.removed, interval_set = excluded.interval_set, interval_km = excluded.interval_km,
                interval_months = excluded.interval_months`,
-          ).run(
-            garageId,
-            code,
-            kept,
-            p.characteristics,
-            p.removed ? 1 : 0,
-            sameInterval ? 0 : 1,
-            sameInterval ? null : intervalKm,
-            sameInterval ? null : intervalMonths,
-          );
+          ).run(garageId, code, kept, p.removed ? 1 : 0, sameInterval ? 0 : 1, sameInterval ? null : intervalKm, sameInterval ? null : intervalMonths);
         }
         catalogueChanged();
       });
     } else {
       const p = await parse(c, ownPartInput);
-      const fr = p.nameFr ?? p.name;
-      // A check has no Part Specs to turn into parts, nor a part into a check.
-      if ((p.unit === null) !== (part.unit === null)) throw new HttpError(422, 'A task that uses nothing cannot start using a part or a fluid, nor the reverse');
       transaction(() => {
-        spreadDetails(code, part.characteristics, p.characteristics);
-        // Its kind stays: a Vehicle's list is made of parts of its own kind.
+        // Its kind stays: a Vehicle's plan is made of templates of its own kind.
         db.prepare(
-          `UPDATE catalogue_parts SET name = ?, name_fr = ?, unit = ?, category = ?, interval_km = ?, interval_months = ?, conditions = ?, characteristics = ?
+          `UPDATE catalogue_parts SET name = ?, name_fr = ?, category = ?, interval_km = ?, interval_months = ?, conditions = ?, action = ?
            WHERE garage_id = ? AND code = ?`,
-        ).run(p.name, p.nameFr, p.unit, p.category, p.intervalKm, p.intervalMonths, JSON.stringify(tidyOrThrow(part.kind, p.conditions)), p.characteristics, garageId, code);
-        const ofGarage = 'vehicle_id IN (SELECT id FROM vehicles WHERE garage_id = ?)';
-        if (p.unit !== null) {
-          db.prepare(`UPDATE part_specs SET name = ?, name_fr = ?, unit = ? WHERE standard_part = ? AND ${ofGarage}`).run(p.name, fr, p.unit, code, garageId);
-        }
-        // A Task still named after the part follows it; one the owner renamed stays.
-        db.prepare(`UPDATE maintenance_tasks SET name = ?, name_fr = ? WHERE standard_part = ? AND name = ? AND ${ofGarage}`).run(p.name, fr, code, part.en, garageId);
+        ).run(p.name, p.nameFr, p.category, p.intervalKm, p.intervalMonths, JSON.stringify(tidyOrThrow(part.kind, p.conditions)), p.action, garageId, code);
         catalogueChanged();
       });
     }
     return c.json({ code });
   });
 
-  /** A part of the owner's leaves the catalogue for good: what was used stays under its name, the rest goes. */
-  function forgetOwnPart(code: string, category: string) {
-    const ofGarage = 'vehicle_id IN (SELECT id FROM vehicles WHERE garage_id = ?)';
-    db.prepare(
-      `DELETE FROM maintenance_tasks WHERE standard_part = ? AND ${ofGarage} AND id NOT IN (SELECT task_id FROM service_tasks)`,
-    ).run(code, garageId);
-    db.prepare(`UPDATE maintenance_tasks SET standard_part = NULL, category = ?, custom_interval = 1 WHERE standard_part = ? AND ${ofGarage}`).run(category, code, garageId);
-    for (const spec of db.prepare(`SELECT id FROM part_specs WHERE standard_part = ? AND ${ofGarage}`).all(code, garageId) as Row[]) {
-      if (partSpecInUse(spec.id)) db.prepare('UPDATE part_specs SET standard_part = NULL, not_fitted = 0 WHERE id = ?').run(spec.id);
-      else db.prepare('DELETE FROM part_specs WHERE id = ?').run(spec.id);
-    }
-  }
-
-  // A built-in part goes back to how it is built in; a part of the owner's is deleted.
+  // A built-in template goes back to how it is built in; a template of the owner's is deleted.
   app.delete('/api/catalogue/:code', (c) => {
     const code = c.req.param('code');
-    const part = catalogue.known(code);
-    if (!part) throw new HttpError(404, 'Part not found');
+    if (!catalogue.known(code)) throw new HttpError(404, 'Template not found');
     transaction(() => {
-      spreadDetails(code, part.characteristics, null);
-      if (!part.builtIn) forgetOwnPart(code, part.category);
       db.prepare('DELETE FROM catalogue_parts WHERE garage_id = ? AND code = ?').run(garageId, code);
       catalogueChanged();
     });
     return c.body(null, 204);
   });
 
-  // --- Workshop data of a Task: replaced as a whole ---
+  // --- Spec lines of the Vehicle Profile (desk work, online only) ---
 
-  app.put('/api/tasks/:id/workshop', async (c) => {
-    const id = c.req.param('id');
-    const task = taskOrThrow(id);
-    const w = await parse(c, workshopInput);
-    const partSpecIds = w.requiredParts.map((p) => p.partSpecId);
-    if (new Set(partSpecIds).size !== partSpecIds.length) throw new HttpError(422, 'A Part Spec is listed twice');
-    for (const partSpecId of partSpecIds) {
-      if (!ownedRows('part_specs', 'x.id = ? AND x.vehicle_id = ?', partSpecId, task.vehicle_id)[0]) {
-        throw new HttpError(422, 'A Required Part refers to a Part Spec of another vehicle');
-      }
+  function saveSpecLine(run: () => void) {
+    try {
+      run();
+    } catch (error) {
+      if ((error as Error).message?.includes('UNIQUE')) throw new HttpError(409, 'This label is already listed for this vehicle');
+      throw error;
     }
-    const specIds = [...new Set(w.specIds)];
-    for (const specId of specIds) {
-      if (!ownedRows('vehicle_specs', 'x.id = ? AND x.vehicle_id = ?', specId, task.vehicle_id)[0]) {
-        throw new HttpError(422, 'A Vehicle Spec of another vehicle cannot be linked');
-      }
-    }
-    transaction(() => {
-      db.prepare('UPDATE maintenance_tasks SET workshop_notes = ? WHERE id = ?').run(w.workshopNotes, id);
-      for (const table of ['required_parts', 'required_tools', 'task_specs']) db.prepare(`DELETE FROM ${table} WHERE task_id = ?`).run(id);
-      const part = db.prepare('INSERT INTO required_parts (task_id, part_spec_id, quantity, sort) VALUES (?, ?, ?, ?)');
-      w.requiredParts.forEach((p, i) => part.run(id, p.partSpecId, p.quantity, i));
-      const tool = db.prepare('INSERT INTO required_tools (task_id, sort, name) VALUES (?, ?, ?)');
-      w.tools.forEach((name, i) => tool.run(id, i, name));
-      const spec = db.prepare('INSERT INTO task_specs (task_id, spec_id) VALUES (?, ?)');
-      for (const specId of specIds) spec.run(id, specId);
-    });
-    return c.json(loadTask(id));
-  });
-
-  // --- Vehicle Specs and Part Specs (desk work, online only) ---
+  }
 
   app.post('/api/vehicles/:id/specs', async (c) => {
     const vehicleId = c.req.param('id');
     vehicleOrThrow(vehicleId);
-    const s = await parse(c, vehicleSpecInput);
+    const s = await parse(c, specLineInput);
     const id = randomUUID();
-    db.prepare('INSERT INTO vehicle_specs (id, vehicle_id, kind, name, value, notes) VALUES (?, ?, ?, ?, ?, ?)').run(
-      id,
-      vehicleId,
-      s.kind,
-      s.name,
-      s.value,
-      s.notes,
-    );
-    return c.json(toVehicleSpec(ownedRowOrThrow('vehicle_specs', id, 'Vehicle Spec')), 201);
+    const next = (db.prepare('SELECT coalesce(max(sort), -1) + 1 AS n FROM spec_lines WHERE vehicle_id = ? AND spec_group = ?').get(vehicleId, s.group) as Row).n;
+    saveSpecLine(() => db.prepare('INSERT INTO spec_lines (id, vehicle_id, label, value, spec_group, sort) VALUES (?, ?, ?, ?, ?, ?)').run(id, vehicleId, s.label, s.value, s.group, next));
+    return c.json(toSpecLine(ownedRowOrThrow('spec_lines', id, 'Spec line')), 201);
   });
 
   app.put('/api/specs/:id', async (c) => {
     const id = c.req.param('id');
-    ownedRowOrThrow('vehicle_specs', id, 'Vehicle Spec');
-    const s = await parse(c, vehicleSpecInput);
-    db.prepare('UPDATE vehicle_specs SET kind = ?, name = ?, value = ?, notes = ? WHERE id = ?').run(s.kind, s.name, s.value, s.notes, id);
-    return c.json(toVehicleSpec(ownedRowOrThrow('vehicle_specs', id, 'Vehicle Spec')));
+    const row = ownedRowOrThrow('spec_lines', id, 'Spec line');
+    const s = await parse(c, specLineInput);
+    saveSpecLine(() => {
+      if (s.group === row.spec_group) db.prepare('UPDATE spec_lines SET label = ?, value = ? WHERE id = ?').run(s.label, s.value, id);
+      else {
+        const next = (db.prepare('SELECT coalesce(max(sort), -1) + 1 AS n FROM spec_lines WHERE vehicle_id = ? AND spec_group = ?').get(row.vehicle_id, s.group) as Row).n;
+        db.prepare('UPDATE spec_lines SET label = ?, value = ?, spec_group = ?, sort = ? WHERE id = ?').run(s.label, s.value, s.group, next, id);
+      }
+    });
+    return c.json(toSpecLine(ownedRowOrThrow('spec_lines', id, 'Spec line')));
   });
 
   app.delete('/api/specs/:id', (c) => {
     const id = c.req.param('id');
-    ownedRowOrThrow('vehicle_specs', id, 'Vehicle Spec');
-    db.prepare('DELETE FROM vehicle_specs WHERE id = ?').run(id);
-    return c.body(null, 204);
-  });
-
-  app.post('/api/vehicles/:id/part-specs', async (c) => {
-    const vehicleId = c.req.param('id');
-    vehicleOrThrow(vehicleId);
-    const p = await parse(c, partSpecInput);
-    const id = randomUUID();
-    db.prepare(
-      `INSERT INTO part_specs (id, vehicle_id, name, name_fr, characteristics, oem_reference, part_numbers, unit)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, vehicleId, p.name, p.nameFr, p.characteristics, p.oemReference, p.partNumbers, p.unit);
-    return c.json(toPartSpec(ownedRowOrThrow('part_specs', id, 'Part Spec')), 201);
-  });
-
-  app.put('/api/part-specs/:id', async (c) => {
-    const id = c.req.param('id');
-    const row = ownedRowOrThrow('part_specs', id, 'Part Spec');
-    const p = await parse(c, partSpecInput);
-    if (row.standard_part) {
-      // A Standard Part's name and unit come from the catalogue: only its Part Spec is edited.
-      db.prepare('UPDATE part_specs SET characteristics = ?, oem_reference = ?, part_numbers = ?, not_fitted = ? WHERE id = ?').run(
-        p.characteristics,
-        p.oemReference,
-        p.partNumbers,
-        p.notFitted ? 1 : 0,
-        id,
-      );
-    } else {
-      db.prepare(
-        'UPDATE part_specs SET name = ?, name_fr = ?, characteristics = ?, oem_reference = ?, part_numbers = ?, unit = ? WHERE id = ?',
-      ).run(p.name, p.nameFr, p.characteristics, p.oemReference, p.partNumbers, p.unit, id);
-    }
-    return c.json(toPartSpec(ownedRowOrThrow('part_specs', id, 'Part Spec')));
-  });
-
-  // Tasks stop requiring it; Parts Used keep their own description, so history is unchanged.
-  app.delete('/api/part-specs/:id', (c) => {
-    const id = c.req.param('id');
-    const row = ownedRowOrThrow('part_specs', id, 'Part Spec');
-    if (row.standard_part) throw new HttpError(409, 'A Standard Part cannot be deleted; mark it as not on this vehicle instead');
-    db.prepare('DELETE FROM part_specs WHERE id = ?').run(id);
-    return c.body(null, 204);
-  });
-
-  // --- Technical Inspections (desk work, online only) ---
-
-  function saveInspection(id: string, vehicleId: string, body: Awaited<ReturnType<typeof inspectionInput.parse>>, isNew: boolean) {
-    // A defect can only be closed by a Service of the same Vehicle.
-    const serviceOf = (serviceId: string | null) =>
-      serviceId !== null && db.prepare('SELECT 1 FROM services WHERE id = ? AND vehicle_id = ?').get(serviceId, vehicleId) !== undefined
-        ? serviceId
-        : null;
-    transaction(() => {
-      if (isNew) {
-        db.prepare(
-          `INSERT INTO technical_inspections (id, vehicle_id, date, odometer, centre, result, next_due_date, notes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        ).run(id, vehicleId, body.date, body.odometer, body.centre, body.result, body.nextDueDate, body.notes);
-      } else {
-        db.prepare(
-          'UPDATE technical_inspections SET date = ?, odometer = ?, centre = ?, result = ?, next_due_date = ?, notes = ? WHERE id = ?',
-        ).run(body.date, body.odometer, body.centre, body.result, body.nextDueDate, body.notes, id);
-      }
-      db.prepare('DELETE FROM inspection_defects WHERE inspection_id = ?').run(id);
-      const defect = db.prepare(
-        'INSERT INTO inspection_defects (inspection_id, sort, description, severity, fixed_service_id) VALUES (?, ?, ?, ?, ?)',
-      );
-      body.defects.forEach((d, i) => defect.run(id, i, d.description, d.severity, serviceOf(d.fixedServiceId)));
-    });
-  }
-
-  app.post('/api/vehicles/:id/inspections', async (c) => {
-    const vehicleId = c.req.param('id');
-    vehicleOrThrow(vehicleId);
-    const body = await parse(c, inspectionInput);
-    const id = randomUUID();
-    saveInspection(id, vehicleId, body, true);
-    return c.json(toInspection(ownedRowOrThrow('technical_inspections', id, 'Technical Inspection')), 201);
-  });
-
-  app.put('/api/inspections/:id', async (c) => {
-    const id = c.req.param('id');
-    const row = ownedRowOrThrow('technical_inspections', id, 'Technical Inspection');
-    const body = await parse(c, inspectionInput);
-    saveInspection(id, row.vehicle_id, body, false);
-    return c.json(toInspection(ownedRowOrThrow('technical_inspections', id, 'Technical Inspection')));
-  });
-
-  app.delete('/api/inspections/:id', (c) => {
-    const id = c.req.param('id');
-    ownedRowOrThrow('technical_inspections', id, 'Technical Inspection');
-    transaction(() => {
-      deleteDocumentsOf('inspection', id);
-      db.prepare('DELETE FROM technical_inspections WHERE id = ?').run(id);
-    });
-    return c.body(null, 204);
-  });
-
-  // --- Modifications (desk work, online only) ---
-
-  app.post('/api/vehicles/:id/modifications', async (c) => {
-    const vehicleId = c.req.param('id');
-    vehicleOrThrow(vehicleId);
-    const m = await parse(c, modificationInput);
-    const id = randomUUID();
-    db.prepare(
-      `INSERT INTO modifications (id, vehicle_id, name, fitted_date, fitted_odometer, removed_date, declared_to_insurer, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      id,
-      vehicleId,
-      m.name,
-      m.fittedDate,
-      m.fittedOdometer,
-      m.removedDate,
-      m.declaredToInsurer ? 1 : 0,
-      m.notes,
-    );
-    return c.json(toModification(ownedRowOrThrow('modifications', id, 'Modification')), 201);
-  });
-
-  app.put('/api/modifications/:id', async (c) => {
-    const id = c.req.param('id');
-    ownedRowOrThrow('modifications', id, 'Modification');
-    const m = await parse(c, modificationInput);
-    db.prepare(
-      `UPDATE modifications SET name = ?, fitted_date = ?, fitted_odometer = ?, removed_date = ?,
-         declared_to_insurer = ?, notes = ? WHERE id = ?`,
-    ).run(
-      m.name,
-      m.fittedDate,
-      m.fittedOdometer,
-      m.removedDate,
-      m.declaredToInsurer ? 1 : 0,
-      m.notes,
-      id,
-    );
-    return c.json(toModification(ownedRowOrThrow('modifications', id, 'Modification')));
-  });
-
-  app.delete('/api/modifications/:id', (c) => {
-    const id = c.req.param('id');
-    ownedRowOrThrow('modifications', id, 'Modification');
-    transaction(() => {
-      deleteDocumentsOf('modification', id);
-      db.prepare('DELETE FROM modifications WHERE id = ?').run(id);
-    });
+    ownedRowOrThrow('spec_lines', id, 'Spec line');
+    db.prepare('DELETE FROM spec_lines WHERE id = ?').run(id);
     return c.body(null, 204);
   });
 
   // --- Documents: details in the database, files in uploadsDir under their id ---
 
-  /** The Vehicle a Document's owner belongs to (none for a Policy), checking the owner is in this Garage. */
-  function ownerVehicle(ownerKind: string, ownerId: string): string | null {
-    const table = { vehicle: 'vehicles', service: 'services', modification: 'modifications', inspection: 'technical_inspections' }[
-      ownerKind
-    ];
+  /** The Vehicle a Document's owner belongs to, checking the owner is in this Garage. */
+  function ownerVehicle(ownerKind: string, ownerId: string): string {
     if (ownerKind === 'vehicle') return vehicleOrThrow(ownerId).id;
-    if (ownerKind === 'policy') {
-      policyOrThrow(ownerId);
-      return null;
-    }
-    if (ownerKind === 'cover') return coverOrThrow(ownerId).vehicle_id;
-    if (ownerKind === 'claim') return policyRowOrThrow('claims', ownerId, 'Claim').vehicle_id;
-    const row = table ? ownedRows(table, 'x.id = ?', ownerId)[0] : undefined;
+    const row = ownerKind === 'service' ? ownedRows('services', 'x.id = ?', ownerId)[0] : undefined;
     if (!row) throw new HttpError(404, 'What this Document is attached to was not found');
     return row.vehicle_id;
   }
@@ -1503,246 +712,6 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     return c.body(null, 204);
   });
 
-  // --- Insurance (desk work, online only) ---
-
-  function coverOrThrow(id: string): Row {
-    const row = db
-      .prepare(
-        `SELECT c.* FROM covers c JOIN policy_terms t ON t.id = c.term_id JOIN insurance_policies p ON p.id = t.policy_id
-         WHERE c.id = ? AND p.garage_id = ?`,
-      )
-      .get(id, garageId) as Row | undefined;
-    if (!row) throw new HttpError(404, 'Cover not found');
-    return row;
-  }
-
-  app.post('/api/drivers', async (c) => {
-    const d = await parse(c, driverInput);
-    const id = randomUUID();
-    db.prepare(
-      `INSERT INTO drivers (id, garage_id, name, birth_date, car_licence_date, motorcycle_licence_date, motorcycle_licence, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, garageId, d.name, d.birthDate, d.carLicenceDate, d.motorcycleLicenceDate, d.motorcycleLicence, d.notes);
-    return c.json(toDriver(driverOrThrow(id)), 201);
-  });
-
-  app.put('/api/drivers/:id', async (c) => {
-    const id = c.req.param('id');
-    driverOrThrow(id);
-    const d = await parse(c, driverInput);
-    db.prepare(
-      `UPDATE drivers SET name = ?, birth_date = ?, car_licence_date = ?, motorcycle_licence_date = ?, motorcycle_licence = ?, notes = ?
-       WHERE id = ?`,
-    ).run(d.name, d.birthDate, d.carLicenceDate, d.motorcycleLicenceDate, d.motorcycleLicence, d.notes, id);
-    return c.json(toDriver(driverOrThrow(id)));
-  });
-
-  // Policies stop listing the Driver; their Claims stay, with nobody named as driving.
-  app.delete('/api/drivers/:id', (c) => {
-    const id = c.req.param('id');
-    driverOrThrow(id);
-    db.prepare('DELETE FROM drivers WHERE id = ?').run(id);
-    return c.body(null, 204);
-  });
-
-  function savePolicyDrivers(policyId: string, driverIds: string[]) {
-    const ids = [...new Set(driverIds)];
-    for (const driverId of ids) driverOrThrow(driverId);
-    db.prepare('DELETE FROM policy_drivers WHERE policy_id = ?').run(policyId);
-    const link = db.prepare('INSERT INTO policy_drivers (policy_id, driver_id) VALUES (?, ?)');
-    for (const driverId of ids) link.run(policyId, driverId);
-  }
-
-  app.post('/api/policies', async (c) => {
-    const p = await parse(c, policyInput);
-    const id = randomUUID();
-    transaction(() => {
-      db.prepare(
-        `INSERT INTO insurance_policies (id, garage_id, insurer, policy_number, start_date, cancelled_date, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      ).run(id, garageId, p.insurer, p.policyNumber, p.startDate, p.cancelledDate, p.notes);
-      savePolicyDrivers(id, p.driverIds);
-    });
-    return c.json(policyOrThrow(id), 201);
-  });
-
-  app.put('/api/policies/:id', async (c) => {
-    const id = c.req.param('id');
-    policyOrThrow(id);
-    const p = await parse(c, policyInput);
-    transaction(() => {
-      db.prepare(
-        'UPDATE insurance_policies SET insurer = ?, policy_number = ?, start_date = ?, cancelled_date = ?, notes = ? WHERE id = ?',
-      ).run(p.insurer, p.policyNumber, p.startDate, p.cancelledDate, p.notes, id);
-      savePolicyDrivers(id, p.driverIds);
-    });
-    return c.json(policyOrThrow(id));
-  });
-
-  app.delete('/api/policies/:id', (c) => {
-    const policy = policyOrThrow(c.req.param('id'));
-    const claimIds = (db.prepare('SELECT id FROM claims WHERE policy_id = ?').all(policy.id) as Row[]).map((r) => r.id as string);
-    transaction(() => {
-      deleteDocumentsOf('policy', policy.id);
-      for (const term of policy.terms) for (const cover of term.covers) deleteDocumentsOf('cover', cover.id);
-      for (const claimId of claimIds) deleteDocumentsOf('claim', claimId);
-      db.prepare('DELETE FROM insurance_policies WHERE id = ?').run(policy.id);
-    });
-    return c.body(null, 204);
-  });
-
-  /** Saves a Term's Covers, keeping each Vehicle's Cover id (and so its Documents) across edits. */
-  function saveCovers(termId: string, covers: TermInput['covers']) {
-    const vehicleIds = covers.map((cover) => cover.vehicleId);
-    if (new Set(vehicleIds).size !== vehicleIds.length) throw new HttpError(422, 'A Vehicle has two Covers in this Term');
-    for (const vehicleId of vehicleIds) vehicleOrThrow(vehicleId);
-    const existing = new Map(
-      (db.prepare('SELECT id, vehicle_id FROM covers WHERE term_id = ?').all(termId) as Row[]).map((r) => [
-        r.vehicle_id as string,
-        r.id as string,
-      ]),
-    );
-    for (const [vehicleId, coverId] of existing) {
-      if (!vehicleIds.includes(vehicleId)) {
-        deleteDocumentsOf('cover', coverId);
-        db.prepare('DELETE FROM covers WHERE id = ?').run(coverId);
-      }
-    }
-    const upsert = db.prepare(
-      `INSERT INTO covers (id, term_id, vehicle_id, level, guarantees, excess, premium, crm, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT (term_id, vehicle_id) DO UPDATE SET level = excluded.level, guarantees = excluded.guarantees,
-         excess = excluded.excess, premium = excluded.premium, crm = excluded.crm, notes = excluded.notes`,
-    );
-    for (const cover of covers) {
-      upsert.run(
-        existing.get(cover.vehicleId) ?? randomUUID(),
-        termId,
-        cover.vehicleId,
-        cover.level,
-        cover.guarantees,
-        cover.excess,
-        cover.premium,
-        cover.crm,
-        cover.notes,
-      );
-    }
-  }
-
-  function loadTerm(id: string): PolicyTerm {
-    const row = policyRowOrThrow('policy_terms', id, 'Policy Term');
-    return policyOrThrow(row.policy_id).terms.find((t) => t.id === id)!;
-  }
-
-  app.post('/api/policies/:id/terms', async (c) => {
-    const policy = policyOrThrow(c.req.param('id'));
-    const body = await parse(c, termInput);
-    const id = randomUUID();
-    transaction(() => {
-      db.prepare('INSERT INTO policy_terms (id, policy_id, start_date, end_date, notes) VALUES (?, ?, ?, ?, ?)').run(
-        id,
-        policy.id,
-        body.startDate,
-        body.endDate,
-        body.notes,
-      );
-      saveCovers(id, body.covers);
-    });
-    return c.json(loadTerm(id), 201);
-  });
-
-  app.put('/api/terms/:id', async (c) => {
-    const id = c.req.param('id');
-    policyRowOrThrow('policy_terms', id, 'Policy Term');
-    const body = await parse(c, termInput);
-    transaction(() => {
-      db.prepare('UPDATE policy_terms SET start_date = ?, end_date = ?, notes = ? WHERE id = ?').run(
-        body.startDate,
-        body.endDate,
-        body.notes,
-        id,
-      );
-      saveCovers(id, body.covers);
-    });
-    return c.json(loadTerm(id));
-  });
-
-  app.delete('/api/terms/:id', (c) => {
-    const term = loadTerm(c.req.param('id'));
-    transaction(() => {
-      for (const cover of term.covers) deleteDocumentsOf('cover', cover.id);
-      db.prepare('DELETE FROM policy_terms WHERE id = ?').run(term.id);
-    });
-    return c.body(null, 204);
-  });
-
-  function claimValues(body: ClaimInput) {
-    vehicleOrThrow(body.vehicleId);
-    if (body.driverId !== null) driverOrThrow(body.driverId);
-    return [body.vehicleId, body.driverId, body.date, body.responsibility, body.amount, body.description, body.notes] as const;
-  }
-
-  app.post('/api/policies/:id/claims', async (c) => {
-    const policy = policyOrThrow(c.req.param('id'));
-    const body = await parse(c, claimInput);
-    const id = randomUUID();
-    db.prepare(
-      `INSERT INTO claims (id, policy_id, vehicle_id, driver_id, date, responsibility, amount, description, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, policy.id, ...claimValues(body));
-    return c.json(toClaim(policyRowOrThrow('claims', id, 'Claim')), 201);
-  });
-
-  app.put('/api/claims/:id', async (c) => {
-    const id = c.req.param('id');
-    policyRowOrThrow('claims', id, 'Claim');
-    const body = await parse(c, claimInput);
-    db.prepare(
-      `UPDATE claims SET vehicle_id = ?, driver_id = ?, date = ?, responsibility = ?, amount = ?, description = ?, notes = ?
-       WHERE id = ?`,
-    ).run(...claimValues(body), id);
-    return c.json(toClaim(policyRowOrThrow('claims', id, 'Claim')));
-  });
-
-  app.delete('/api/claims/:id', (c) => {
-    const id = c.req.param('id');
-    policyRowOrThrow('claims', id, 'Claim');
-    transaction(() => {
-      deleteDocumentsOf('claim', id);
-      db.prepare('DELETE FROM claims WHERE id = ?').run(id);
-    });
-    return c.body(null, 204);
-  });
-
-  app.post('/api/vehicles/:id/quotes', async (c) => {
-    const vehicleId = c.req.param('id');
-    vehicleOrThrow(vehicleId);
-    const q = await parse(c, quoteInput);
-    const id = randomUUID();
-    db.prepare(
-      `INSERT INTO quotes (id, vehicle_id, insurer, date, level, guarantees, excess, premium, valid_until, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, vehicleId, q.insurer, q.date, q.level, q.guarantees, q.excess, q.premium, q.validUntil, q.notes);
-    return c.json(toQuote(ownedRowOrThrow('quotes', id, 'Quote')), 201);
-  });
-
-  app.put('/api/quotes/:id', async (c) => {
-    const id = c.req.param('id');
-    ownedRowOrThrow('quotes', id, 'Quote');
-    const q = await parse(c, quoteInput);
-    db.prepare(
-      `UPDATE quotes SET insurer = ?, date = ?, level = ?, guarantees = ?, excess = ?, premium = ?, valid_until = ?, notes = ?
-       WHERE id = ?`,
-    ).run(q.insurer, q.date, q.level, q.guarantees, q.excess, q.premium, q.validUntil, q.notes, id);
-    return c.json(toQuote(ownedRowOrThrow('quotes', id, 'Quote')));
-  });
-
-  app.delete('/api/quotes/:id', (c) => {
-    const id = c.req.param('id');
-    ownedRowOrThrow('quotes', id, 'Quote');
-    db.prepare('DELETE FROM quotes WHERE id = ?').run(id);
-    return c.body(null, 204);
-  });
-
   // --- Services (offline-capable: idempotent PUT with client id) ---
 
   app.put('/api/services/:id', async (c) => {
@@ -1756,24 +725,19 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       const task = db.prepare('SELECT vehicle_id FROM maintenance_tasks WHERE id = ?').get(taskId) as Row | undefined;
       if (!task || task.vehicle_id !== s.vehicleId) throw new HttpError(422, 'A Maintenance Task in this Service no longer exists');
     }
-    // A Service logged offline may refer to a Part Spec deleted since: keep the Part Used, drop the link.
-    const belongs = (table: string, id: string | null) =>
-      id !== null && db.prepare(`SELECT 1 FROM ${table} WHERE id = ? AND vehicle_id = ?`).get(id, s.vehicleId) !== undefined;
-    const partsUsed = s.partsUsed.map((p) => ({ ...p, partSpecId: belongs('part_specs', p.partSpecId) ? p.partSpecId : null }));
+    const partsUsed = s.partsUsed;
     transaction(() => {
       db.prepare(
-        `INSERT INTO services (id, vehicle_id, date, odometer, notes) VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT (id) DO UPDATE SET date = excluded.date, odometer = excluded.odometer, notes = excluded.notes`,
-      ).run(s.id, s.vehicleId, s.date, s.odometer, s.notes);
+        `INSERT INTO services (id, vehicle_id, date, odometer, notes, performed_by, total_cost) VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (id) DO UPDATE SET date = excluded.date, odometer = excluded.odometer, notes = excluded.notes,
+           performed_by = excluded.performed_by, total_cost = excluded.total_cost`,
+      ).run(s.id, s.vehicleId, s.date, s.odometer, s.notes, s.performedBy, s.totalCost);
       db.prepare('DELETE FROM service_tasks WHERE service_id = ?').run(s.id);
       const link = db.prepare('INSERT INTO service_tasks (service_id, task_id) VALUES (?, ?)');
       for (const taskId of taskIds) link.run(s.id, taskId);
-      db.prepare('DELETE FROM parts_used WHERE service_id = ?').run(s.id);
-      const part = db.prepare(
-        `INSERT INTO parts_used (service_id, sort, part_spec_id, description, part_number, quantity, unit, price, supplier)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      );
-      partsUsed.forEach((p, i) => part.run(s.id, i, p.partSpecId, p.description, p.partNumber, p.quantity, p.unit, p.price, p.supplier));
+      db.prepare('DELETE FROM service_items WHERE service_id = ?').run(s.id);
+      const part = db.prepare('INSERT INTO service_items (service_id, sort, description, part_number, quantity, unit) VALUES (?, ?, ?, ?, ?, ?)');
+      partsUsed.forEach((p, i) => part.run(s.id, i, p.description, p.partNumber, p.quantity, p.unit));
     });
     return c.json({ ...s, taskIds, partsUsed });
   });

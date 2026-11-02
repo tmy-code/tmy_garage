@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DatabaseSync } from 'node:sqlite';
 import type { Hono } from 'hono';
 import { todayIso } from '../shared/dates.ts';
-import type { GarageDocument, InsurancePolicy, MaintenanceTask, Snapshot, Vehicle } from '../shared/types.ts';
+import type { MaintenanceTask, Snapshot, Vehicle } from '../shared/types.ts';
 import { normalizeSnapshot } from '../shared/workshop.ts';
 import { createApp, readSnapshot } from './app.ts';
 import { openDatabase } from './db.ts';
@@ -19,14 +19,7 @@ function vehicle(overrides: Partial<Vehicle> = {}): Vehicle {
     make: null,
     model: null,
     year: null,
-    registration: null,
-    firstRegistration: null,
     vin: null,
-    version: null,
-    fiscalPower: null,
-    nationalType: null,
-    purchaseDate: null,
-    overnightParking: null,
     fuel: null,
     transmission: null,
     drivetrain: null,
@@ -58,85 +51,36 @@ function task(overrides: Partial<MaintenanceTask> = {}): MaintenanceTask {
     nameFr: null,
     intervalKm: null,
     intervalMonths: 12,
-    officialIntervalKm: null,
-    officialIntervalMonths: null,
+    action: 'replace',
     baselineDate: '2025-10-01',
     baselineOdometer: null,
-    workshopNotes: null,
-    standardPart: null,
+    notes: null,
     category: null,
     switchedOff: false,
-    requiredParts: [],
-    tools: [],
-    specIds: [],
     ...overrides,
   };
 }
-
-function document(overrides: Partial<GarageDocument> = {}): GarageDocument {
-  return {
-    id: 'd',
-    vehicleId: 'v',
-    ownerKind: 'vehicle',
-    ownerId: 'v',
-    type: 'insuranceCertificate',
-    title: null,
-    issueDate: null,
-    expiryDate: '2026-11-10',
-    fileName: 'blank.pdf',
-    contentType: 'application/pdf',
-    size: 1,
-    ...overrides,
-  };
-}
-
-const policy: InsurancePolicy = {
-  id: 'p',
-  insurer: 'Assurance Exemple',
-  policyNumber: null,
-  startDate: '2025-12-01',
-  cancelledDate: null,
-  driverIds: [],
-  notes: null,
-  terms: [
-    {
-      id: 'term',
-      policyId: 'p',
-      startDate: '2025-12-01',
-      endDate: '2026-12-01',
-      notes: null,
-      covers: [{ id: 'c', vehicleId: 'v', level: 'thirdParty', guarantees: null, excess: null, premium: 400, crm: 0.5, notes: null }],
-    },
-  ],
-};
 
 function snapshot(data: Partial<Snapshot>): Snapshot {
   return normalizeSnapshot({ vehicles: [vehicle()], tasks: [], services: [], readings: [], ...data } as Snapshot);
 }
 
 describe('currentReminders', () => {
-  it('lists what the dashboard flags: Tasks, the inspection, expiring documents and renewals', () => {
+  it('lists what the dashboard flags: the Tasks due soon or overdue', () => {
     const reminders = currentReminders(
       snapshot({
-        vehicles: [vehicle({ kind: 'car', firstRegistration: '2022-12-01' })],
         tasks: [
           task({ id: 'soon', baselineDate: '2025-11-10' }),
           task({ id: 'late', name: 'Chain', baselineDate: '2025-01-01' }),
           task({ id: 'fine', baselineDate: '2026-09-01' }),
         ],
-        documents: [document()],
-        policies: [policy],
       }),
       TODAY,
     );
     expect(reminders.map((r) => [r.subject.kind, r.status, r.dueDate])).toEqual([
       ['task', 'overdue', '2026-01-01'],
       ['task', 'dueSoon', '2026-11-10'],
-      ['inspection', 'dueSoon', '2026-12-01'],
-      ['document', 'dueSoon', '2026-11-10'],
-      ['renewal', 'dueSoon', '2026-12-01'],
     ]);
-    expect(reminders.find((r) => r.subject.kind === 'renewal')?.vehicleId).toBe('v');
   });
 
   it('starts a new key once the job is done, and ignores sold Vehicles', () => {
@@ -144,7 +88,7 @@ describe('currentReminders', () => {
     const after = currentReminders(
       snapshot({
         tasks: [task({ intervalMonths: 1, baselineDate: '2025-01-01' })],
-        services: [{ id: 's', vehicleId: 'v', date: '2026-09-20', odometer: 1000, notes: null, taskIds: ['t'], partsUsed: [] }],
+        services: [{ id: 's', vehicleId: 'v', date: '2026-09-20', odometer: 1000, notes: null, performedBy: 'diy', totalCost: null, taskIds: ['t'], partsUsed: [] }],
       }),
       TODAY,
     )[0]!;
@@ -175,7 +119,6 @@ describe('reminderMessage', () => {
   const data = snapshot({
     vehicles: [vehicle(), vehicle({ id: 'car', kind: 'car', name: 'Test car' })],
     tasks: [task({ baselineDate: '2025-01-01' }), task({ id: 't2', vehicleId: 'car', name: 'Cabin filter', baselineDate: '2025-11-10' })],
-    documents: [document()],
   });
   const all = currentReminders(data, TODAY);
 
@@ -185,22 +128,13 @@ describe('reminderMessage', () => {
       body: 'overdue since 1 Jan',
       url: '/#/vehicles/v',
     });
-    expect(reminderMessage([all.find((r) => r.subject.kind === 'document')!], data, 'fr', TODAY)).toEqual({
-      title: 'Test bike · Mémo véhicule assuré',
-      body: 'expire le 10 nov.',
-      url: '/#/vehicles/v',
-    });
     expect(reminderMessage([all[0]!], data, 'en', '2027-02-01').body).toBe('overdue since 1 Jan 2026');
   });
 
   it('lists several, overdue first, and opens the dashboard when they span Vehicles', () => {
     const message = reminderMessage([...all].reverse(), data, 'en', TODAY);
-    expect(message.title).toBe('3 reminders');
-    expect(message.body.split('\n')).toEqual([
-      'Test bike · Oil change: overdue since 1 Jan',
-      'Test car · Cabin filter: due 10 Nov',
-      'Test bike · Proof of insurance: expires 10 Nov',
-    ]);
+    expect(message.title).toBe('2 reminders');
+    expect(message.body.split('\n')).toEqual(['Test bike · Oil change: overdue since 1 Jan', 'Test car · Cabin filter: due 10 Nov']);
     expect(message.url).toBe('/#/');
     expect(reminderMessage(all, data, 'fr', TODAY).body).toMatch(/^Test bike · Oil change : en retard depuis le 1 janv\./);
   });

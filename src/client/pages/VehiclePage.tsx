@@ -1,24 +1,23 @@
 import { Fragment, useMemo, useState } from 'react';
 import { todayIso } from '../../shared/dates.ts';
-import { catalogueOf } from '../../shared/catalogue.ts';
 import { vehicleDue, type DueInfo } from '../../shared/due.ts';
-import { nextInspection, openDefects } from '../../shared/inspections.ts';
-import { currentCover, renewal } from '../../shared/insurance.ts';
 import { groupByCategory } from '../../shared/workshop.ts';
+import type { PerformedBy } from '../../shared/schemas.ts';
 import type { MaintenanceTask, PartUsed, Snapshot, Vehicle } from '../../shared/types.ts';
 import { Layout, StatusChip } from '../components.tsx';
-import { describeDue, describeInterval, describeOfficialInterval, formatDate, formatKm, formatMoney, taskName } from '../format.ts';
+import { describeDue, describeInterval, formatDate, formatKm, formatMoney, taskName } from '../format.ts';
 import { useT } from '../i18n.ts';
 import { makeAsName, VehicleIcon } from '../brands.tsx';
 import { Icon } from '../icons.tsx';
-import { useStore } from '../store.ts';
+import { online, useStore } from '../store.ts';
+import { showToast } from '../feedback.ts';
 import { describePart } from './Workshop.tsx';
 
 /** Phones show the latest few History entries; the rest are one tap away. */
 const HISTORY_PREVIEW = 5;
 
 type HistoryEntry =
-  | { kind: 'service'; id: string; date: string; odometer: number | null; text: string; notes: string | null; partsUsed: PartUsed[] }
+  | { kind: 'service'; id: string; date: string; odometer: number | null; text: string; notes: string | null; partsUsed: PartUsed[]; performedBy: PerformedBy; totalCost: number | null }
   | { kind: 'reading'; id: string; date: string; odometer: number };
 
 /** Says a History entry can be changed: the whole row opens its edit form. */
@@ -38,7 +37,6 @@ function TaskList({ due, tasks, owned }: { due: DueInfo[]; tasks: Map<string, Ma
     <ul className="list">
       {due.map((d) => {
         const task = tasks.get(d.taskId)!;
-        const official = describeOfficialInterval(task, t);
         return (
           <li key={d.taskId}>
             <a href={`#/tasks/${task.id}`} className="task-row">
@@ -47,7 +45,6 @@ function TaskList({ due, tasks, owned }: { due: DueInfo[]; tasks: Map<string, Ma
                 <span className="due-name">{taskName(task, t)}</span>
               </div>
               <span className="muted">{describeInterval(task, t)}</span>
-              {official ? <span className="muted">{official}</span> : null}
               {owned ? <span className="due-text">{describeDue(d, t)}</span> : null}
               {d.lastDone ? (
                 <span className="muted">
@@ -70,18 +67,19 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
   const today = todayIso();
   const { usage, due } = useMemo(() => vehicleDue(snapshot, vehicle.id, today), [snapshot, vehicle.id, today]);
   const tasks = new Map(snapshot.tasks.filter((task) => task.vehicleId === vehicle.id).map((task) => [task.id, task]));
-  const groups = groupByCategory(due, tasks, catalogueOf(snapshot));
+  const groups = groupByCategory(due, tasks);
   const pending = new Set(outbox.map((op) => op.data.id));
   const owned = vehicle.status === 'owned';
-  const inspection = nextInspection(snapshot, vehicle, today);
-  const defects = openDefects(snapshot, vehicle).length;
-  const documentCount = snapshot.documents.filter((d) => d.vehicleId === vehicle.id).length;
-  const modificationCount = snapshot.modifications.filter((m) => m.vehicleId === vehicle.id).length;
-  const partSpecCount = snapshot.partSpecs.filter((p) => p.vehicleId === vehicle.id).length;
-  const specCount = snapshot.vehicleSpecs.filter((s) => s.vehicleId === vehicle.id).length;
-  const cover = currentCover(snapshot, vehicle.id, today);
-  const insuranceDue = cover ? renewal(cover.policy, today) : null;
+  const specCount = snapshot.specLines.filter((s) => s.vehicleId === vehicle.id).length;
   const [allHistory, setAllHistory] = useState(false);
+  async function addFromTemplates() {
+    try {
+      const { added } = await online<{ added: number }>('POST', `/api/vehicles/${vehicle.id}/add-from-templates`);
+      showToast(t.vehicle.templatesAdded(added));
+    } catch (e) {
+      showToast((e as Error).message);
+    }
+  }
 
   const history: HistoryEntry[] = [
     ...snapshot.services
@@ -93,13 +91,15 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
         odometer: s.odometer,
         notes: s.notes,
         partsUsed: s.partsUsed,
+        performedBy: s.performedBy,
+        totalCost: s.totalCost,
         text: s.taskIds.map((id) => (tasks.get(id) ? taskName(tasks.get(id)!, t) : t.vehicle.deletedTask)).join(', '),
       })),
     ...snapshot.readings.filter((r) => r.vehicleId === vehicle.id).map((r) => ({ kind: 'reading' as const, ...r })),
   ].sort((a, b) => (a.date === b.date ? (b.odometer ?? 0) - (a.odometer ?? 0) : a.date < b.date ? 1 : -1));
 
   // A motorbike's make is already shown in capitals in front.
-  const subtitle = [makeAsName(vehicle) ? null : vehicle.make, vehicle.model, vehicle.year, vehicle.registration].filter(Boolean).join(' · ');
+  const subtitle = [makeAsName(vehicle) ? null : vehicle.make, vehicle.model, vehicle.year].filter(Boolean).join(' · ');
   const saleDetails = [
     vehicle.soldDate ? t.vehicle.soldDate(formatDate(vehicle.soldDate, t)) : '',
     vehicle.soldOdometer !== null ? t.vehicle.soldAt(formatKm(vehicle.soldOdometer)) : '',
@@ -125,14 +125,6 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
               </p>
             ) : null}
             {vehicle.status === 'sold' ? <p className="banner banner-warn">{t.vehicle.sold(saleDetails)}</p> : null}
-            {owned && (inspection.status === 'overdue' || inspection.status === 'dueSoon') && inspection.dueDate ? (
-              <p className="task-title">
-                <span className={`chip chip-${inspection.status}`}>{t.status[inspection.status]}</span>
-                <a href={`#/vehicles/${vehicle.id}/inspections`}>
-                  {t.papers.nextInspection} · {t.papers.dueBy(formatDate(inspection.dueDate, t))}
-                </a>
-              </p>
-            ) : null}
             <p className="odometer">
               {usage.latest === null ? (
                 t.vehicle.noReading
@@ -197,50 +189,11 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
 
         <div className="split-side">
           <section>
-            <h2>{t.papers.section}</h2>
-            <ul className="list">
-              <li>
-                <a href={`#/vehicles/${vehicle.id}/insurance`} className="history-row">
-                  <span>{t.insurance.title}</span>
-                  <span className="muted">
-                    {cover ? `${cover.policy.insurer} · ${t.insurance.levels[cover.cover.level]}` : t.insurance.notInsured}
-                    {insuranceDue ? ` · ${t.insurance.renewsOn(formatDate(insuranceDue.date, t))}` : ''}
-                  </span>
-                </a>
-              </li>
-              <li>
-                <a href={`#/vehicles/${vehicle.id}/documents`}>
-                  {t.papers.documents} <span className="muted">{t.workshop.count(documentCount)}</span>
-                </a>
-              </li>
-              <li>
-                <a href={`#/vehicles/${vehicle.id}/inspections`} className="history-row">
-                  <span>{t.papers.inspections}</span>
-                  <span className="muted">
-                    {inspection.dueDate ? t.papers.dueBy(formatDate(inspection.dueDate, t)) : t.papers.basis.unknown}
-                    {defects > 0 ? ` · ${t.papers.openDefects(defects)}` : ''}
-                  </span>
-                </a>
-              </li>
-              <li>
-                <a href={`#/vehicles/${vehicle.id}/modifications`}>
-                  {t.papers.modifications} <span className="muted">{t.workshop.count(modificationCount)}</span>
-                </a>
-              </li>
-            </ul>
-          </section>
-
-          <section>
             <h2>{t.workshop.section}</h2>
             <ul className="list">
               <li>
-                <a href={`#/vehicles/${vehicle.id}/parts`}>
-                  {t.workshop.partSpecs} <span className="muted">{t.workshop.count(partSpecCount)}</span>
-                </a>
-              </li>
-              <li>
                 <a href={`#/vehicles/${vehicle.id}/specs`}>
-                  {t.workshop.specs} <span className="muted">{t.workshop.count(specCount)}</span>
+                  {t.workshop.section} <span className="muted">{t.workshop.count(specCount)}</span>
                 </a>
               </li>
             </ul>
@@ -264,6 +217,10 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
                       </span>
                       <span className="with-icon">
                         <Icon name="wrench" /> {h.text}
+                      </span>
+                      <span className="muted">
+                        {t.service.performers[h.performedBy]}
+                        {h.totalCost !== null ? ` · ${formatMoney(h.totalCost, t)}` : ''}
                       </span>
                       {h.partsUsed.length > 0 ? (
                         <span className="muted with-icon">
@@ -295,6 +252,11 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
           </section>
 
           <section className="actions actions-footer">
+            {owned ? (
+              <button type="button" className="button" onClick={() => void addFromTemplates()}>
+                {t.vehicle.addFromTemplates}
+              </button>
+            ) : null}
             {owned && due.length > 0 ? (
               <a className="button" href={`#/vehicles/${vehicle.id}/copy-tasks`}>
                 {t.vehicle.copyTasksShort}

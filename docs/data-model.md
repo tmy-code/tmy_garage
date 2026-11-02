@@ -1,46 +1,35 @@
 # Data model
 
-How TMY Garage's data is organised: what is stored, how the pieces connect, and which rules protect them. The words used here (Vehicle, Service, Part Spec…) are defined in [CONTEXT.md](../CONTEXT.md).
+How TMY Garage's data is organised: what is stored, how the pieces connect, and which rules protect them. The words used here (Vehicle, Service, Spec Line…) are defined in [CONTEXT.md](../CONTEXT.md).
 
-The source of truth is the code: [`src/server/db.ts`](../src/server/db.ts) for the tables, [`src/shared/types.ts`](../src/shared/types.ts) for how the app sees them, and [`src/shared/catalogue.ts`](../src/shared/catalogue.ts) for the built-in parts. If this page and the code disagree, the code is right and this page needs fixing.
+The source of truth is the code: [`src/server/db.ts`](../src/server/db.ts) for the tables, [`src/shared/types.ts`](../src/shared/types.ts) for how the app sees them, and [`src/shared/catalogue.ts`](../src/shared/catalogue.ts) for the built-in plan templates. If this page and the code disagree, the code is right and this page needs fixing.
 
 ## The short version
 
-- A **Garage** holds everything. Each user has one, and today the app runs with a single Garage.
-- A Garage has **Vehicles**, and nearly everything hangs off a Vehicle: its **Maintenance Tasks**, its **Services**, its **Odometer Readings**, its **Part Specs**, its **Technical Inspections** and its **Modifications**.
-- A Vehicle's **Build** (fuel, gearbox, timing drive, options…) and the **Parts Catalogue** decide which **Standard Parts** it has, and which tasks that use nothing to buy. Those bring their Part Specs and Maintenance Tasks with them, each Task at the interval its Build calls for.
-- Logging a **Service** says which Tasks were done and which parts went on. What is due next is worked out from that history and never stored.
-- **Insurance** sits beside the Vehicles: a Policy has yearly Terms, and each Term has one Cover per Vehicle.
-- **Documents** are stored files that can be attached to almost anything.
+The app rests on five parts.
+
+1. **Vehicle Profile**: who the Vehicle is (`vehicles`) and its factory specs, a simple list of labelled values (`spec_lines`).
+2. **Maintenance Plan**: the Vehicle's own Tasks (`maintenance_tasks`), each with an Action, an Interval, a Category and Notes. A new Vehicle starts from the **Plan Templates** that fit its Build; after that the plan is the owner's.
+3. **Service History Log**: Services (`services`) with who did the work, the total cost, the Tasks done (`service_tasks`), the components used (`service_items`) and a receipt (`documents`).
+4. **Mileage Log**: dated odometer values (`odometer_readings`, and each Service's own).
+5. **Status**: never stored. It is worked out from the other four (see [Worked out, not stored](#worked-out-not-stored)).
 
 ```mermaid
 flowchart TD
-  Garage --> Vehicle
-  Garage --> Driver
-  Garage --> Policy[Insurance Policy]
-  Garage --> Catalogue[Parts Catalogue changes]
+  Garage --> Vehicle[1. Vehicle Profile]
+  Vehicle --> Spec[Spec Line]
+  Vehicle --> Task[2. Maintenance Task]
+  Vehicle --> Service[3. Service]
+  Vehicle --> Reading[4. Odometer Reading]
 
-  Catalogue -. decides parts, with the Build .-> Vehicle
-
-  Vehicle --> Task[Maintenance Task]
-  Vehicle --> Service
-  Vehicle --> Reading[Odometer Reading]
-  Vehicle --> PartSpec[Part Spec]
-  Vehicle --> VSpec[Vehicle Spec]
-  Vehicle --> Inspection[Technical Inspection]
-  Vehicle --> Modification
-  Vehicle --> Quote
-
+  Template[Plan Templates, by Build] -. seeds a new Vehicle .-> Task
   Service -- did --> Task
-  Service -- fitted --> PartUsed[Part Used]
-  Task -- needs --> PartSpec
+  Service --> Item[Component Used]
+  Service --> Receipt[Receipt, a Document]
 
-  Policy --> Term[Policy Term]
-  Term --> Cover
-  Cover -- for --> Vehicle
-  Policy --> Claim
-  Claim -- about --> Vehicle
-  Policy -- declares --> Driver
+  Task --> Status{{5. Status}}
+  Service --> Status
+  Reading --> Status
 ```
 
 ## Where the data lives
@@ -56,7 +45,7 @@ Everything below sits in the folder set by the `DATA_DIR` environment variable. 
 
 Two more places hold data:
 
-- **The code** holds the built-in Parts Catalogue. It is not in the database, so a new release can improve it. See [The Parts Catalogue](#the-parts-catalogue).
+- **The code** holds the built-in Plan Templates. They are not in the database, so a new release can improve them. See [Plan Templates](#plan-templates).
 - **The phone** holds an offline copy. See [The offline copy](#the-offline-copy).
 
 ## Conventions
@@ -73,22 +62,19 @@ These apply to every table, and the tables below don't repeat them.
 
 In the column tables, **required** means the database refuses an empty value, and **→ `table`** means the column points at a row of that table.
 
-## Garage and Vehicles
+## 1. Vehicle Profile
 
 ```mermaid
 erDiagram
   garages ||--o{ vehicles : has
-  vehicles ||--o{ odometer_readings : logs
-  vehicles ||--o{ vehicle_specs : describes
+  vehicles ||--o{ spec_lines : describes
 ```
 
 ### `garages`
 
 | Column | Meaning |
 | --- | --- |
-| `name` | Required. The Garage's name. |
-
-The first Garage is created with the id `default`.
+| `name` | Required. |
 
 ### `vehicles`
 
@@ -99,24 +85,17 @@ A Vehicle is never deleted from the database. It is sold, hidden from the garage
 | `garage_id` | Required. → `garages`. |
 | `kind` | Required. `car` or `motorcycle`. |
 | `name` | Required. The owner's name for it. |
-| `make` | Manufacturer. |
+| `make` | Brand. |
 | `model` | Model. |
 | `year` | Year. |
-| `registration` | Plate number. |
-| `first_registration` | Carte grise field B. Sets when the first Technical Inspection is due. |
-| `vin` | Carte grise field E. |
-| `version` | Carte grise field D.2. |
-| `fiscal_power` | Carte grise field P.6. |
-| `national_type` | Carte grise field J.1. |
-| `purchase_date` | When the owner bought it. |
-| `overnight_parking` | For a Quote Pack: `closedGarage`, `privateParking` or `street`. |
+| `vin` | Vehicle identification number. |
 | `status` | Required. `owned` or `sold`, `owned` by default. A sold Vehicle keeps its history and has nothing due. |
 | `sold_date` | Set when sold. |
 | `sold_odometer` | Set when sold. |
 | `sold_price` | Set when sold. |
 | `on_garage_page` | Required. Whether it has a card on the garage page, whatever its status. Selling hides it, and the owner can change that. |
 
-The Build columns decide which Standard Parts the Vehicle has:
+The Build columns decide which Plan Templates a new Vehicle gets:
 
 | Column | Applies to | Values |
 | --- | --- | --- |
@@ -135,7 +114,127 @@ The Build columns decide which Standard Parts the Vehicle has:
 | `has_ac` | Cars | Required, yes/no. |
 | `has_air_suspension` | Cars | Required, yes/no. |
 
-A new Vehicle must give its whole Build, and the server refuses impossible combinations (a hybrid with a manual gearbox, for example). A Vehicle added before this rule may still have gaps. An empty fuel counts as a combustion engine, so such a Vehicle keeps its engine parts.
+A new Vehicle must give its whole Build, and the server refuses impossible combinations (a hybrid with a manual gearbox, for example). A Vehicle added before this rule may still have gaps; an empty fuel counts as a combustion engine.
+
+### `spec_lines`
+
+A Vehicle's factory specs, one labelled value per row (for example "Engine oil: 10W-40, 3.2 L", "Front tyre: 120/70 ZR17, 2.5 bar", "Drain plug: 30 Nm"). Tasks do not link to them: a Task names what it needs in its Notes.
+
+| Column | Meaning |
+| --- | --- |
+| `vehicle_id` | Required. → `vehicles`. |
+| `label` | Required. What it is. Each label appears once per Vehicle. |
+| `value` | Required. The figure or reference. |
+| `spec_group` | Required. `fluids`, `parts`, `torque` or `other`. |
+| `sort` | Required. Position within its group. |
+
+## 2. Maintenance Plan
+
+### `maintenance_tasks`
+
+| Column | Meaning |
+| --- | --- |
+| `vehicle_id` | Required. → `vehicles`. |
+| `name` | Required. Names the job, in English. |
+| `name_fr` | The French name, shown instead in French. |
+| `action` | Required. `replace`, `inspect`, `clean` or `adjust`. |
+| `interval_km` | Distance Interval. |
+| `interval_months` | Time Interval. At least one of the two is required: a distance only, a time only, or both (whichever comes first). |
+| `baseline_date` | When it was last done before the garage tracked it. Any Service supersedes it. |
+| `baseline_odometer` | The odometer at that time. Needs a baseline date. |
+| `category` | `engine`, `transmission`, `brakes`, `chassis`, `electrical`, `cooling_climate` or `other`. Empty means `other`. |
+| `notes` | Instructions, torque values, fluid reminders, standard part codes, links. |
+| `switched_off` | Required, yes/no. Paused on this Vehicle: no Due Date, no Reminder. |
+
+### Plan Templates
+
+The Templates are the built-in list in [`catalogue.ts`](../src/shared/catalogue.ts) (name in both languages, Action, Category, Interval, and the Build details it applies to), plus the owner's changes in `catalogue_parts`.
+
+- A **new Vehicle** gets the Templates that fit its Build as Tasks, at the Template's Interval (shorter engine oil distance with a turbo).
+- After that the Vehicle's Tasks are its own. Changing a Template, or the Vehicle's Build, never changes them.
+- **Add missing tasks from templates** (on the Vehicle page) gives an existing Vehicle the Templates it has no Task named like yet.
+- **Settings** edits the Templates: a built-in one's Interval, Build details or removal, and the owner's own Templates (name, Action, Category, Interval, Build details).
+
+### `catalogue_parts`
+
+The key is `garage_id` and `code`. This table has no `id`. The columns `unit` and `characteristics` are no longer used.
+
+| Column | Meaning |
+| --- | --- |
+| `garage_id` | Required. → `garages`. |
+| `code` | Required. A built-in code, or `own_<uuid>` for the owner's own Template. |
+| `kind` | `car` or `motorcycle`. **Empty means the row changes a built-in Template**, and filled means it is a whole Template of the owner's. |
+| `name`, `name_fr` | Own Templates only. |
+| `category` | Own Templates only. |
+| `action` | Own Templates only. A built-in Template's Action comes from its name. |
+| `interval_km`, `interval_months` | The default Interval: for an own Template always, for a built-in one only when `interval_set` is 1. |
+| `interval_set` | Required, yes/no. A built-in Template whose default Interval is the owner's. |
+| `conditions` | JSON: for each detail of the Build, the values allowed. Empty keeps a built-in Template's own conditions. |
+| `removed` | Required, yes/no. A built-in Template taken off the list. |
+
+For example, conditions of `{"fuel":["diesel"],"hasTurbo":["true"]}` mean a Vehicle gets the Template only if it runs on diesel and has a turbo. A detail that isn't listed doesn't matter.
+
+## 3. Service History Log
+
+```mermaid
+erDiagram
+  services ||--o{ service_tasks : did
+  maintenance_tasks ||--o{ service_tasks : done_in
+  services ||--o{ service_items : used
+  services ||--o{ documents : receipt
+```
+
+### `services`
+
+| Column | Meaning |
+| --- | --- |
+| `vehicle_id` | Required. → `vehicles`. |
+| `date` | Required. |
+| `odometer` | Required only when a Task done counts distance; time-based Tasks alone may leave it out. |
+| `performed_by` | Required. `diy`, `garage` (independent garage) or `dealership`. `diy` by default. |
+| `total_cost` | Parts and labour in one amount. |
+| `notes` | Free text. |
+
+Logging a Service restarts the count of each Task it did. A logged Service can be edited.
+
+### `service_tasks`
+
+The Tasks done in a Service. The key is `service_id` and `task_id`.
+
+| Column | Meaning |
+| --- | --- |
+| `service_id` | Required. → `services`. |
+| `task_id` | Required. → `maintenance_tasks`. |
+
+### `service_items`
+
+The components used in a Service. The key is `service_id` and `sort`.
+
+| Column | Meaning |
+| --- | --- |
+| `service_id` | Required. → `services`. |
+| `description` | Required. Brand and variant, such as "Motul 7100 10W-40". |
+| `part_number` | |
+| `quantity` | Required. |
+| `unit` | Required. `piece` or `litre`. |
+
+### `documents`
+
+A Document belongs to one owner, named by `owner_kind` and `owner_id`. Only those of a Service (its receipt) and of a Vehicle are shown. Documents of removed features (insurance, inspections) stay stored, unshown. The server checks the owner exists and removes a Service's Documents, files included, when it is deleted.
+
+| Column | Meaning |
+| --- | --- |
+| `garage_id` | Required. → `garages`. |
+| `vehicle_id` | → `vehicles`. |
+| `owner_kind` | Required. `service` or `vehicle` (older rows may hold other kinds). |
+| `owner_id` | Required. The owner's `id`. |
+| `type` | Required. `invoice` for a receipt. |
+| `title`, `issue_date`, `expiry_date` | Not used for receipts. |
+| `file_name` | Required. The original name. |
+| `content_type` | Required. Such as `application/pdf`. |
+| `size` | Required. In bytes. |
+
+## 4. Mileage Log
 
 ### `odometer_readings`
 
@@ -145,367 +244,22 @@ A new Vehicle must give its whole Build, and the server refuses impossible combi
 | `date` | Required. |
 | `odometer` | Required. |
 
-### `vehicle_specs`
+The Mileage Log of a Vehicle is its readings together with its Services' odometer values.
 
-Reference data from the manuals, such as a torque value or a tyre pressure.
+## 5. Worked out, not stored
 
-| Column | Meaning |
+These values are always calculated from the records above, so they can't drift out of step with the history. The code is in [`src/shared`](../src/shared).
+
+| Value | How it is worked out |
 | --- | --- |
-| `vehicle_id` | Required. → `vehicles`. |
-| `kind` | Required. `torque` or `other`. |
-| `name` | Required. |
-| `value` | Required. Free text, such as "30 Nm". |
-| `notes` | |
-
-## Maintenance
-
-```mermaid
-erDiagram
-  vehicles ||--o{ maintenance_tasks : has
-  vehicles ||--o{ services : has
-  services ||--o{ service_tasks : did
-  maintenance_tasks ||--o{ service_tasks : "done in"
-  services ||--o{ parts_used : fitted
-  maintenance_tasks ||--o{ required_parts : needs
-  part_specs ||--o{ required_parts : "needed by"
-  maintenance_tasks ||--o{ required_tools : needs
-  maintenance_tasks ||--o{ task_specs : involves
-  vehicle_specs ||--o{ task_specs : "used by"
-```
-
-### `maintenance_tasks`
-
-The database refuses a Task with neither a distance nor a time interval.
-
-| Column | Meaning |
-| --- | --- |
-| `vehicle_id` | Required. → `vehicles`. |
-| `name` | Required. The English name. A Task for a built-in part says what is to be done ("Change brake fluid"), not the part's name. One still carrying its part's name from an earlier release is renamed when the server starts. |
-| `name_fr` | The French name, when there is one. |
-| `interval_km` | The owner's distance interval. |
-| `interval_months` | The owner's time interval. |
-| `official_interval_km` | The Official Interval from the Service Schedule. The stricter of this and `interval_km` applies. |
-| `official_interval_months` | The same, for time. |
-| `baseline_date` | When the job was last done before tracking started. Any Service replaces it. |
-| `baseline_odometer` | The odometer at that time. |
-| `workshop_notes` | Free-text steps and warnings. |
-| `standard_part` | The code of the Standard Part this Task replaces. The Task is paused while that part is not on the Vehicle. |
-| `custom_interval` | Required, yes/no. No means the interval follows the Build (shorter with a turbo, for example). Yes means the owner set it. |
-| `category` | The category the owner placed the Task in: `engine`, `transmission`, `brakes`, `chassis`, `electrical`, `cooling_climate` or `other`. Empty follows the Task's part's category, or `other` when it has no part. |
-| `switched_off` | Required, yes/no. A task of the schedule that uses nothing, switched off by the owner on this Vehicle, which pauses it. |
-
-### `services`
-
-| Column | Meaning |
-| --- | --- |
-| `vehicle_id` | Required. → `vehicles`. |
-| `date` | Required. |
-| `odometer` | May be left out only when all the Service's Tasks are time-based. The Service form checks this; the server accepts either. |
-| `notes` | |
-
-### `service_tasks`
-
-Which Tasks a Service did. The key is the pair of columns.
-
-| Column | Meaning |
-| --- | --- |
-| `service_id` | Required. → `services`. |
-| `task_id` | Required. → `maintenance_tasks`. |
-
-### `parts_used`
-
-What actually went on during a Service. A line keeps its own description, so the history stays readable if the linked Part Spec is deleted. The key is `service_id` and `sort`.
-
-| Column | Meaning |
-| --- | --- |
-| `service_id` | Required. → `services`. |
-| `sort` | Required. |
-| `part_spec_id` | → `part_specs`. The Part Spec this line fulfils. |
-| `description` | Required. Brand and product as bought. |
-| `part_number` | |
-| `quantity` | Required. |
-| `unit` | Required. `piece` or `litre`. |
-| `price` | |
-| `supplier` | |
-
-### `required_parts`
-
-The parts a Task needs. The key is `task_id` and `part_spec_id`.
-
-| Column | Meaning |
-| --- | --- |
-| `task_id` | Required. → `maintenance_tasks`. |
-| `part_spec_id` | Required. → `part_specs`. |
-| `quantity` | Above 0. Empty until the owner says how much, and the Shopping List then says to check it. |
-| `sort` | Required. |
-
-### `required_tools`
-
-A Task's tool checklist. The key is `task_id` and `sort`.
-
-| Column | Meaning |
-| --- | --- |
-| `task_id` | Required. → `maintenance_tasks`. |
-| `sort` | Required. |
-| `name` | Required. Such as "torque wrench 5–60 Nm". |
-
-### `task_specs`
-
-The Vehicle Specs a Task involves. The key is the pair of columns.
-
-| Column | Meaning |
-| --- | --- |
-| `task_id` | Required. → `maintenance_tasks`. |
-| `spec_id` | Required. → `vehicle_specs`. |
-
-## Parts
-
-```mermaid
-erDiagram
-  vehicles ||--o{ part_specs : takes
-  part_specs ||--o{ parts_used : "fulfilled by"
-  garages ||--o{ catalogue_parts : changes
-```
-
-### `part_specs`
-
-What a Vehicle takes for one Part. A Vehicle has at most one row per Standard Part.
-
-| Column | Meaning |
-| --- | --- |
-| `vehicle_id` | Required. → `vehicles`. |
-| `standard_part` | The Standard Part's code. Empty for a part the owner named. |
-| `name` | Required. Used on screen for a part with no catalogue code. A Standard Part is named by the catalogue instead. |
-| `name_fr` | The French name. |
-| `characteristics` | Such as "10W-40, JASO MA2". |
-| `oem_reference` | The manufacturer's own part number. |
-| `part_numbers` | Equivalents that also fit. |
-| `unit` | Required. `piece` or `litre`. |
-| `not_fitted` | Required, yes/no. A Standard Part set aside as not on this Vehicle. |
-
-### The Parts Catalogue
-
-The catalogue is two lists merged by the `Catalogue` class in [`catalogue.ts`](../src/shared/catalogue.ts):
-
-1. **Built-in parts**, in `PART_TEMPLATES` in the code, each with a code, names, unit, category, default interval, conditions on the Build and, for engine oil, a shorter distance with a turbo (not editable).
-2. **The owner's changes**, in the `catalogue_parts` table: one row per changed or added entry, for each Garage. An entry is a part to replace, or a task that uses nothing to buy (chain lubrication, valve clearance), chosen in Settings as "Nothing" next to "A part" and "A fluid".
-
-An entry with no row is used exactly as built in, so a Garage with no changes has an empty table. Standard Part codes are not foreign keys, because most of them point at the code rather than at a table.
-
-**Intervals.** Each entry has one default interval, which is the code's for a built-in entry until the owner sets theirs. It is a distance, a duration, or both. A Task on a Vehicle follows it until the owner sets that Vehicle's own interval on the Task; the only difference by Build is the turbo's shorter engine oil distance.
-
-### `catalogue_parts`
-
-The key is `garage_id` and `code`. This table has no `id`.
-
-| Column | Meaning |
-| --- | --- |
-| `garage_id` | Required. → `garages`. |
-| `code` | Required. A built-in code, or `own_<uuid>` for the owner's own part. |
-| `kind` | `car` or `motorcycle`. **Empty means the row changes a built-in part**, and filled means it is a whole part of the owner's. |
-| `name` | Own parts only. |
-| `name_fr` | Own parts only. |
-| `unit` | Own entries only: `piece` for fitted, `litre` for a fluid, **empty for a task that uses nothing**, which has no Part Spec. |
-| `category` | Own entries only; the same seven values as a Task's. A built-in entry's category is in the code. |
-| `interval_km` | The default distance interval: for an own entry always, for a built-in one only when `interval_set` is 1. |
-| `interval_months` | The same, for time. |
-| `interval_set` | Required, yes/no. A built-in entry whose default interval is the owner's. |
-| `conditions` | JSON: for each detail of the Build, the values allowed. Empty keeps a built-in part's own conditions. |
-| `characteristics` | Default details for matching Vehicles' Part Specs. Parts only. |
-| `removed` | Required, yes/no. A built-in entry taken off the list. |
-
-For example, conditions of `{"fuel":["diesel"],"hasTurbo":["true"]}` mean a Vehicle has the part only if it runs on diesel and has a turbo. A detail that isn't listed doesn't matter.
-
-### What follows from the Build and the catalogue
-
-When a Vehicle is added, its Build changes or the catalogue changes, the server (`syncStandardParts`, `syncSchedule`) brings the Vehicle's rows into line:
-
-| Situation | What happens |
-| --- | --- |
-| A part now fits | The Vehicle gets its Part Spec, and an owned Vehicle gets its Task. A part set aside earlier comes back. |
-| A part no longer fits, and is untouched | Its Part Spec is marked `not_fitted`, which pauses its Task. |
-| A part no longer fits, but is in use | It stays on the Vehicle, and the screens flag it. |
-| A part's fit did not change | The owner's own "not on this vehicle" choice is left alone. |
-| A task that uses nothing now fits | An owned Vehicle gets its Task, and no Part Spec. |
-| A task that uses nothing no longer fits | Its Task stays and is paused, since the Task is kept for its history. |
-| The catalogue's interval changes | Every Task of an owned Vehicle whose `custom_interval` is no takes the interval its Build now calls for. Intervals the owner set stay. |
-| The owner switches such a task off on a Vehicle | Its Task is paused (`switched_off`), and no change in the catalogue brings it back. |
-
-A part is **in use** when its Part Spec has been filled in, a Task gives a quantity for it, or a Part Used refers to it. Default details and required parts with no quantity don't count.
-
-## Inspections and Modifications
-
-```mermaid
-erDiagram
-  vehicles ||--o{ technical_inspections : has
-  technical_inspections ||--o{ inspection_defects : found
-  services |o--o{ inspection_defects : fixes
-  vehicles ||--o{ modifications : has
-```
-
-### `technical_inspections`
-
-| Column | Meaning |
-| --- | --- |
-| `vehicle_id` | Required. → `vehicles`. |
-| `date` | Required. |
-| `odometer` | Required. |
-| `centre` | |
-| `result` | Required. `passed`, `majorDefects` or `criticalDefects`. |
-| `next_due_date` | As printed on the report. When empty, the app estimates it from the regulatory rhythm. |
-| `notes` | |
-
-### `inspection_defects`
-
-The key is `inspection_id` and `sort`.
-
-| Column | Meaning |
-| --- | --- |
-| `inspection_id` | Required. → `technical_inspections`. |
-| `sort` | Required. |
-| `description` | Required. |
-| `severity` | Required. `minor`, `major` or `critical`. |
-| `fixed_service_id` | → `services`. The Service that fixed it. |
-
-### `modifications`
-
-| Column | Meaning |
-| --- | --- |
-| `vehicle_id` | Required. → `vehicles`. |
-| `name` | Required. |
-| `fitted_date` | Required. |
-| `fitted_odometer` | |
-| `removed_date` | |
-| `declared_to_insurer` | Required, yes/no. |
-| `notes` | |
-
-## Insurance
-
-```mermaid
-erDiagram
-  garages ||--o{ insurance_policies : has
-  garages ||--o{ drivers : has
-  insurance_policies ||--o{ policy_terms : "runs for"
-  policy_terms ||--o{ covers : fixes
-  vehicles ||--o{ covers : "covered by"
-  insurance_policies ||--o{ policy_drivers : declares
-  drivers ||--o{ policy_drivers : "declared on"
-  insurance_policies ||--o{ claims : has
-  vehicles ||--o{ claims : about
-  drivers |o--o{ claims : driving
-  vehicles ||--o{ quotes : "priced by"
-```
-
-A Quote is deliberately not linked to a Policy. It uses the same terms as a Cover so that the two can be compared.
-
-### `drivers`
-
-| Column | Meaning |
-| --- | --- |
-| `garage_id` | Required. → `garages`. |
-| `name` | Required. |
-| `birth_date` | |
-| `car_licence_date` | |
-| `motorcycle_licence_date` | |
-| `motorcycle_licence` | `A1`, `A2` or `A`. The server checks this. |
-| `notes` | |
-
-### `insurance_policies`
-
-| Column | Meaning |
-| --- | --- |
-| `garage_id` | Required. → `garages`. |
-| `insurer` | Required. |
-| `policy_number` | |
-| `start_date` | Required. |
-| `cancelled_date` | |
-| `notes` | |
-
-### `policy_drivers`
-
-Which Drivers a Policy declares. The key is the pair of columns.
-
-| Column | Meaning |
-| --- | --- |
-| `policy_id` | Required. → `insurance_policies`. |
-| `driver_id` | Required. → `drivers`. |
-
-### `policy_terms`
-
-The end date must be after the start date.
-
-| Column | Meaning |
-| --- | --- |
-| `policy_id` | Required. → `insurance_policies`. |
-| `start_date` | Required. |
-| `end_date` | Required. The renewal date (échéance). |
-| `notes` | |
-
-### `covers`
-
-One row per Vehicle in each Term.
-
-| Column | Meaning |
-| --- | --- |
-| `term_id` | Required. → `policy_terms`. |
-| `vehicle_id` | Required. → `vehicles`. |
-| `level` | Required. `thirdParty`, `thirdPartyExtended` or `comprehensive`. |
-| `guarantees` | Optional guarantees, as free text. |
-| `excess` | Franchise. |
-| `premium` | Yearly premium. |
-| `crm` | The bonus-malus coefficient of this Vehicle on this Policy. |
-| `notes` | |
-
-### `claims`
-
-| Column | Meaning |
-| --- | --- |
-| `policy_id` | Required. → `insurance_policies`. |
-| `vehicle_id` | Required. → `vehicles`. |
-| `driver_id` | → `drivers`. |
-| `date` | Required. |
-| `responsibility` | Required. `notAtFault`, `partlyAtFault` or `atFault`. |
-| `amount` | |
-| `description` | Required. |
-| `notes` | |
-
-### `quotes`
-
-| Column | Meaning |
-| --- | --- |
-| `vehicle_id` | Required. → `vehicles`. |
-| `insurer` | Required. |
-| `date` | Required. |
-| `level` | Required. The same values as a Cover. |
-| `guarantees` | |
-| `excess` | |
-| `premium` | Required. |
-| `valid_until` | |
-| `notes` | |
-
-## Documents
-
-### `documents`
-
-A Document belongs to one owner, named by `owner_kind` and `owner_id`. The database can't check that this owner exists, because it could be in any of seven tables, so the server checks it and removes a record's Documents when the record is deleted.
-
-| Column | Meaning |
-| --- | --- |
-| `garage_id` | Required. → `garages`. |
-| `vehicle_id` | → `vehicles`. Empty for a Policy's Document, since a Policy can cover several Vehicles. |
-| `owner_kind` | Required. `vehicle`, `service`, `modification`, `inspection`, `policy`, `cover` or `claim`. |
-| `owner_id` | Required. The owner's `id`. |
-| `type` | Required. `registration`, `invoice`, `inspectionReport`, `manual`, `photo`, `policySchedule`, `insuranceCertificate`, `claimsStatement`, `claimReport` or `other`. |
-| `title` | |
-| `issue_date` | |
-| `expiry_date` | Reminders use it. |
-| `file_name` | Required. The original name. |
-| `content_type` | Required. Such as `application/pdf`. |
-| `size` | Required. In bytes. |
+| Current odometer | The latest value logged in a reading or a Service. It is never estimated. |
+| Daily distance | The rate between logged values, using the last 180 days where possible and at least 14 days of history. |
+| Due Date | From the last Service (or the baseline): the time Interval added to its date, and the distance Interval added to its odometer, projected to a date with the daily distance. The earlier of the two. A date from a distance is a projection, and the screens mark it "≈". |
+| Status | `overdue` when either Interval is used up. `dueSoon` when 10% or less of either is left (of the distance, or of the days between the last Service and the time due date). `ok` otherwise. `unknown` when the Task was never done, and `paused` when it is switched off. |
 
 ## Reminders
 
-These tables are for the server only and never reach the phone's offline copy.
+These tables are for the server only and never reach the phone's offline copy. A Reminder is sent when a Task becomes Due soon or Overdue.
 
 ### `push_subscriptions`
 
@@ -526,7 +280,7 @@ What has already gone out, so that each Reminder is sent once per status, and we
 | Column | Meaning |
 | --- | --- |
 | `garage_id` | Required. → `garages`. |
-| `key` | Required. Names one occurrence, such as a Task since it was last done. Doing the job starts a new key. |
+| `key` | Required. Names one occurrence: a Task since it was last done. Doing the job starts a new key. |
 | `status` | Required. `dueSoon` or `overdue`. |
 | `sent_on` | Required. |
 
@@ -539,28 +293,6 @@ The day's run is recorded here so that it happens once. The key is `garage_id`.
 | `garage_id` | → `garages`. |
 | `last_date` | Required. |
 
-## One-off update lists
-
-The server finishes two past updates itself, because they need the catalogue, which the database can't see. Each table lists the Vehicles still waiting, and each is empty once the work is done.
-
-| Table | Column | Purpose |
-| --- | --- | --- |
-| `part_catalogue_moves` | `vehicle_id` → `vehicles` | Vehicles whose Standard Parts still have to move to the current catalogue codes. |
-| `schedule_moves` | `vehicle_id` → `vehicles` | Vehicles whose Tasks still have to join the maintenance schedule. A sold Vehicle waits here until it is no longer sold. |
-
-## Worked out, not stored
-
-These values are always calculated from the records above, so they can't drift out of step with the history. The code is in [`src/shared`](../src/shared).
-
-| Value | How it is worked out |
-| --- | --- |
-| Current odometer | The latest value logged in a reading, a Service or an inspection. It is never estimated. |
-| Monthly distance | The rate between logged values, using the last 180 days where possible and at least 14 days of history. |
-| Due Date and status | From the last Service or the baseline, the stricter interval and the distance rate. The status is `overdue`, `dueSoon`, `ok`, `unknown` or `paused`. A date from a distance is a projection, and the screens mark it "≈". |
-| A Task's category | The owner's choice, otherwise the part's category if it replaces one, otherwise `other`. |
-| Shopping List | The Required Parts of the Tasks coming due, added up per Part Spec. No stock is tracked. |
-| Next Technical Inspection | The date on the last report, otherwise the regulatory rhythm from first registration. |
-
 ## Deleting things
 
 Foreign keys stop anything from being deleted while other rows still need it, except in the cases below. The server adds its own rules on top.
@@ -568,26 +300,38 @@ Foreign keys stop anything from being deleted while other rows still need it, ex
 | Deleting | What happens |
 | --- | --- |
 | Vehicle | Not possible. It can be sold or hidden instead. |
-| Maintenance Task | Refused if a Service used it, or if it is the only Task for a part still on the Vehicle (the owner switches that off through the part). Otherwise its required parts, tools and spec links go too. |
-| Service | Its Task links, Parts Used and Documents go too. A defect it fixed loses that link, so it no longer shows as fixed. |
-| Part Spec | Refused for a Standard Part, which is marked as not on the Vehicle instead. Otherwise Tasks stop requiring it, and Parts Used keep their description and lose the link. |
-| Technical Inspection | Its defects and Documents go too. |
-| Modification | Its Documents go too. |
-| Driver | Policies stop listing them. Their Claims stay, with nobody named as driving. |
-| Insurance Policy | Its Terms, Covers, Claims, driver links and all their Documents go too. |
-| Policy Term | Its Covers and their Documents go too. |
-| Claim | Its Documents go too. |
-| The owner's own part or check | What was never used is removed. Anything with history stays on the Vehicle under its name, no longer linked to the catalogue. |
-| A built-in part | It can't be deleted. It can only be taken off the list, or set back to the built-in version. |
+| Maintenance Task | Refused if a Service used it. Otherwise it goes. |
+| Service | Its Task links, components and Documents go too. |
+| Spec Line | Goes. |
+| A Plan Template of the owner's | Goes. Vehicles keep their Tasks. |
+| A built-in Plan Template | It can't be deleted. It can only be taken off the list, or set back to the built-in version. |
 
 ## The offline copy
 
 The phone keeps one `Snapshot` (defined in [`types.ts`](../src/shared/types.ts)) so it works in the garage with no signal. This design is explained in [ADR 0001](adr/0001-offline-service-logging-via-send-queue.md).
 
-- The snapshot holds Vehicles, Tasks, Services, readings, Vehicle Specs, Part Specs, inspections, Modifications, Drivers, Policies, Claims, Quotes and the catalogue changes. It holds Document details, but not the files.
-- It groups data the way screens use it, not the way tables store it. For example, a Task carries its `requiredParts`, `tools` and `specIds` as lists.
+- The snapshot holds Vehicles, Tasks, Services, readings, Spec Lines and the Template changes. It holds Document details, but not the files.
+- It groups data the way screens use it, not the way tables store it. For example, a Service carries its `taskIds` and `partsUsed` as lists.
 - Services and Odometer Readings can be logged offline. They wait in a queue on the phone and are sent when the connection returns. Everything else needs a connection.
-- A phone may hold a snapshot saved by an older version of the app. `normalizeSnapshot` in [`workshop.ts`](../src/shared/workshop.ts) fills in what it lacks.
+- A phone may hold a snapshot saved by an older version of the app. `normalizeSnapshot` in [`workshop.ts`](../src/shared/workshop.ts) fills in what it lacks, and drops fields that no longer exist.
+
+## The rework onto these five parts
+
+The update that introduced this model ran once, after a backup, in [`five-parts.ts`](../src/server/five-parts.ts). Nothing the owner entered was lost:
+
+| Before | Now |
+| --- | --- |
+| Insurance (Policies, Terms, Covers, Claims, Drivers), Quotes, Technical Inspections, Modifications | Removed with their tables. Their Documents stay stored but are no longer shown. |
+| Vehicle columns for registration, first registration, version, fiscal power, national type, purchase date, parking | Dropped. VIN stays. |
+| Part Specs and Vehicle Specs | One Spec Line each (label and value from the name and details; a part set aside, or one with nothing filled in, has nothing to keep). |
+| Required Parts, Required Tools, linked specs, Workshop Notes | Written into the Task's Notes. |
+| A Task whose part was set aside, or no longer fitting the Build | Switched off, as it was paused before. |
+| A Task named after its part | Named for the job, with its Category. |
+| Official Interval | Folded into the Interval (the stricter of the two applied). |
+| Parts Used (with price, supplier) | Components Used; the supplier goes into the description, and the prices are summed into the Service's total cost. |
+| Tasks' Action | Guessed from the name; Replace when unsure. |
+| Who did a Service | `diy` for every Service already logged. |
+| Shopping List | Removed. |
 
 ## Changing the data model
 
@@ -595,4 +339,4 @@ The phone keeps one `Snapshot` (defined in [`types.ts`](../src/shared/types.ts))
 2. **Update the rest of the chain** as needed: `types.ts`, `schemas.ts` for what the server accepts, `app.ts`, and `normalizeSnapshot` for any new field in the snapshot.
 3. **Add a migration test** that starts from the version just before the new migration.
 4. **Update this page**, and [CONTEXT.md](../CONTEXT.md) if a term's meaning changed.
-5. **Keep it fake.** This repository is public, so examples and test data must never contain real vehicle or insurance details (see [CLAUDE.md](../CLAUDE.md)).
+5. **Keep it fake.** This repository is public, so examples and test data must never contain real vehicle details (see [CLAUDE.md](../CLAUDE.md)).

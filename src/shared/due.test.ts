@@ -11,23 +11,18 @@ function task(overrides: Partial<MaintenanceTask> = {}): MaintenanceTask {
     nameFr: null,
     intervalKm: 6000,
     intervalMonths: 12,
-    officialIntervalKm: null,
-    officialIntervalMonths: null,
+    action: 'replace',
     baselineDate: null,
     baselineOdometer: null,
-    workshopNotes: null,
-    standardPart: null,
+    notes: null,
     category: null,
     switchedOff: false,
-    requiredParts: [],
-    tools: [],
-    specIds: [],
     ...overrides,
   };
 }
 
 function service(date: string, odometer: number, taskIds = ['oil']): Service {
-  return { id: `s-${date}`, vehicleId: 'bike', date, odometer, taskIds, notes: null, partsUsed: [] };
+  return { id: `s-${date}`, vehicleId: 'bike', date, odometer, taskIds, notes: null, performedBy: 'diy', totalCost: null, partsUsed: [] };
 }
 
 const noUsage: Usage = { latest: null, kmPerDay: null };
@@ -193,23 +188,28 @@ describe('Official Interval', () => {
   const services = [service('2026-01-01', 10_000)];
   const usage = estimateUsage([{ date: '2026-01-01', odometer: 10_000 }]);
 
-  it('applies the stricter interval for distance and time separately', () => {
-    // Air filter: yours "1 year", official "19 200 km or 2 years" → 19 200 km or 1 year.
-    const t = task({ intervalKm: null, intervalMonths: 12, officialIntervalKm: 19_200, officialIntervalMonths: 24 });
+  it('takes distance and time as given, and the earlier of the two decides', () => {
+    const t = task({ intervalKm: 19_200, intervalMonths: 12 });
     expect(effectiveInterval(t)).toEqual({ km: 19_200, months: 12 });
     const due = computeDue(t, services, usage, '2026-01-01');
     expect(due.dueOdometer).toBe(29_200);
     expect(due.timeDueDate).toBe('2027-01-01');
   });
 
-  it('keeps your interval when it is stricter than the official one', () => {
-    const t = task({ intervalKm: 10_000, intervalMonths: 12, officialIntervalKm: 30_000, officialIntervalMonths: 24 });
-    expect(effectiveInterval(t)).toEqual({ km: 10_000, months: 12 });
-  });
-
-  it('uses the official interval when it is stricter', () => {
-    const t = task({ intervalKm: 48_000, intervalMonths: null, officialIntervalKm: 38_400 });
-    expect(computeDue(t, services, usage, '2026-01-01').dueOdometer).toBe(48_400);
+  it('is Due Soon once a tenth of the interval is left, by distance or by time', () => {
+    // Done at 10 000 km on 2025-09-01 with a 10 000 km interval: due at 20 000 km.
+    const byKm = task({ intervalKm: 10_000, intervalMonths: null });
+    const done = [service('2025-09-01', 10_000)];
+    const at = (odometer: number) => estimateUsage([{ date: '2026-01-01', odometer }]);
+    expect(computeDue(byKm, done, at(18_900), '2026-01-01').status).toBe('ok');
+    expect(computeDue(byKm, done, at(19_000), '2026-01-01').status).toBe('dueSoon');
+    expect(computeDue(byKm, done, at(20_001), '2026-01-01').status).toBe('overdue');
+    // A 12-month interval is 365 days: Due Soon in the last 36 days.
+    const byTime = task({ intervalKm: null, intervalMonths: 12 });
+    const yearAgo = [service('2025-01-01', 5000)];
+    expect(computeDue(byTime, yearAgo, noUsage, '2025-11-25').status).toBe('ok');
+    expect(computeDue(byTime, yearAgo, noUsage, '2025-11-30').status).toBe('dueSoon');
+    expect(computeDue(byTime, yearAgo, noUsage, '2026-01-02').status).toBe('overdue');
   });
 });
 
@@ -224,15 +224,8 @@ describe('vehicleDue', () => {
       ],
       services: [service('2025-09-01', 15_000, ['oil', 'brake-fluid'])],
       readings: [{ id: 'r1', vehicleId: 'bike', date: '2026-10-01', odometer: 21_500 }],
-      vehicleSpecs: [],
-      partSpecs: [],
-      inspections: [],
-      modifications: [],
+      specLines: [],
       documents: [],
-      drivers: [],
-      policies: [],
-      claims: [],
-      quotes: [],
       catalogue: [],
     };
     const { usage, due } = vehicleDue(snapshot, 'bike', '2026-10-01');
@@ -244,41 +237,20 @@ describe('vehicleDue', () => {
     ]);
   });
 
-  it('pauses a Task whose part is not on the vehicle, last of all, keeping when it was last done', () => {
-    const spec = (id: string, notFitted: boolean) => ({
-      id,
-      vehicleId: 'bike',
-      standardPart: id === 'oil-spec' ? ('moto_engine_oil' as const) : ('moto_chain' as const),
-      notFitted,
-      name: id,
-      nameFr: null,
-      characteristics: null,
-      oemReference: null,
-      partNumbers: null,
-      unit: 'piece' as const,
-    });
+  it('pauses a Task the owner switched off, last of all, keeping when it was last done', () => {
     const snapshot: Snapshot = {
       vehicles: [],
-      tasks: [task({ id: 'oil', standardPart: 'moto_engine_oil' }), task({ id: 'chain', standardPart: 'moto_chain' }), task({ id: 'belt', standardPart: 'moto_drive_belt' })],
+      tasks: [task({ id: 'oil' }), task({ id: 'chain', switchedOff: true })],
       services: [service('2025-09-01', 15_000, ['oil', 'chain'])],
       readings: [],
-      vehicleSpecs: [],
-      partSpecs: [spec('oil-spec', false), spec('chain-spec', true)],
-      inspections: [],
-      modifications: [],
+      specLines: [],
       documents: [],
-      drivers: [],
-      policies: [],
-      claims: [],
-      quotes: [],
       catalogue: [],
     };
     const { due } = vehicleDue(snapshot, 'bike', '2026-10-01');
-    // The chain is set aside; the vehicle does not list a drive belt at all.
     expect(due.map((d) => [d.taskId, d.status])).toEqual([
       ['oil', 'overdue'],
       ['chain', 'paused'],
-      ['belt', 'paused'],
     ]);
     expect(due[1]).toMatchObject({ lastDone: { date: '2025-09-01' }, dueDate: null });
   });

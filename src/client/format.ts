@@ -1,7 +1,5 @@
-import { BUILT_IN_CATALOGUE, type Catalogue } from '../shared/catalogue.ts';
 import { effectiveInterval, type DueInfo } from '../shared/due.ts';
-import type { PartUnit } from '../shared/schemas.ts';
-import type { MaintenanceTask, PartSpec } from '../shared/types.ts';
+import type { MaintenanceTask } from '../shared/types.ts';
 import { messages, type Messages } from './i18n.ts';
 
 // Distances use French digit grouping ("24 000 km") in both languages.
@@ -35,31 +33,6 @@ export function taskName(task: MaintenanceTask, m: Messages = messages()): strin
   return localName(task, m);
 }
 
-let catalogue: Catalogue = BUILT_IN_CATALOGUE;
-
-/** The catalogue parts are named from, set whenever the garage's data changes. */
-export function nameFrom(current: Catalogue) {
-  catalogue = current;
-}
-
-/** A Standard Part is named in the interface language; another Part by the name the user gave it. */
-export function partName(spec: PartSpec, m: Messages = messages()): string {
-  return (spec.standardPart && catalogue.name(spec.standardPart, m.lang)) || localName(spec, m);
-}
-
-/** The OEM reference then the acceptable equivalents, e.g. "OEM 15410-MFJ-D01 · HF204, KN-204"; null when neither is set. */
-export function partReferences(spec: PartSpec, m: Messages = messages()): string | null {
-  const refs = [spec.oemReference ? m.workshop.oem(spec.oemReference) : null, spec.partNumbers].filter(Boolean);
-  return refs.length > 0 ? refs.join(' · ') : null;
-}
-
-/** A Part quantity in its unit, e.g. "3.2 L" or "2 pcs" ("3,2 L", "2 pièces" in French). */
-export function formatQuantity(quantity: number | null, unit: PartUnit, m: Messages = messages()): string {
-  if (quantity === null) return m.workshop.quantityToCheck;
-  const n = new Intl.NumberFormat(m.locale, { maximumFractionDigits: 2 }).format(quantity);
-  return `${n} ${m.workshop.units[unit](quantity)}`;
-}
-
 function formatMonths(months: number, m: Messages): string {
   return months % 12 === 0 ? m.due.years(months / 12) : m.due.months(months);
 }
@@ -68,7 +41,7 @@ function intervalParts(km: number | null, months: number | null, m: Messages): s
   return [km !== null ? formatKm(km) : null, months !== null ? formatMonths(months, m) : null].filter((p): p is string => p !== null);
 }
 
-/** The Interval that applies (the stricter of yours and the official one), e.g. "Every 10 000 km or 1 year". */
+/** The Interval, e.g. "Every 10 000 km or 1 year". */
 export function describeInterval(task: MaintenanceTask, m: Messages = messages()): string {
   const { km, months } = effectiveInterval(task);
   return describeEvery(km, months, m);
@@ -77,12 +50,6 @@ export function describeInterval(task: MaintenanceTask, m: Messages = messages()
 /** An Interval given as distance and months, e.g. "Every 10 000 km or 1 year". */
 export function describeEvery(km: number | null, months: number | null, m: Messages = messages()): string {
   return m.due.every(intervalParts(km, months, m));
-}
-
-/** The Official Interval, e.g. "Official: every 30 000 km or 2 years", or null when the Task has none. */
-export function describeOfficialInterval(task: MaintenanceTask, m: Messages = messages()): string | null {
-  const parts = intervalParts(task.officialIntervalKm, task.officialIntervalMonths, m);
-  return parts.length > 0 ? m.due.official(parts) : null;
 }
 
 /** One line saying when the task is due, e.g. "Due 14 Mar 2027 (in 141 days) · at 24 000 km (1 200 km left)". */

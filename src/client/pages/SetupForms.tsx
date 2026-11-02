@@ -14,12 +14,11 @@ import {
   type SpecFlag,
 } from '../../shared/catalogue.ts';
 import { todayIso } from '../../shared/dates.ts';
-import { partSpecsOf } from '../../shared/workshop.ts';
-import type { Cooling, Distribution, Drivetrain, FinalDrive, FuelType, OvernightParking, Transmission } from '../../shared/schemas.ts';
+import type { Cooling, Distribution, Drivetrain, FinalDrive, FuelType, TaskAction, Transmission } from '../../shared/schemas.ts';
 import type { MaintenanceTask, Snapshot, Vehicle } from '../../shared/types.ts';
 import { confirmDelete, Field, FormError, IntervalFields, Layout, NeedsConnection } from '../components.tsx';
 import { showToast } from '../feedback.ts';
-import { describeEvery, parseNumber, partName, taskName } from '../format.ts';
+import { parseNumber, taskName } from '../format.ts';
 import { messages, useT, type Messages } from '../i18n.ts';
 import { KNOWN_MAKES } from '../brands.tsx';
 import { Icon } from '../icons.tsx';
@@ -105,14 +104,7 @@ export function VehicleForm({ existing, returnTo }: { existing?: Vehicle; return
   const [make, setMake] = useState(existing?.make ?? '');
   const [model, setModel] = useState(existing?.model ?? '');
   const [year, setYear] = useState(existing?.year ? String(existing.year) : '');
-  const [registration, setRegistration] = useState(existing?.registration ?? '');
-  const [firstRegistration, setFirstRegistration] = useState(existing?.firstRegistration ?? '');
   const [vin, setVin] = useState(existing?.vin ?? '');
-  const [version, setVersion] = useState(existing?.version ?? '');
-  const [nationalType, setNationalType] = useState(existing?.nationalType ?? '');
-  const [fiscalPower, setFiscalPower] = useState(existing?.fiscalPower ? String(existing.fiscalPower) : '');
-  const [purchaseDate, setPurchaseDate] = useState(existing?.purchaseDate ?? '');
-  const [overnightParking, setOvernightParking] = useState<OvernightParking | ''>(existing?.overnightParking ?? '');
   const [fuel, setFuel] = useState<FuelType | ''>(existing?.fuel ?? '');
   const [transmission, setTransmission] = useState<Transmission | ''>(existing?.transmission ?? '');
   const [drivetrain, setDrivetrain] = useState<Drivetrain | ''>(existing?.drivetrain ?? '');
@@ -142,14 +134,7 @@ export function VehicleForm({ existing, returnTo }: { existing?: Vehicle; return
         make,
         model,
         year: optionalNumber(year, t.setup.year, t),
-        registration,
-        firstRegistration: firstRegistration || null,
         vin,
-        version,
-        nationalType,
-        fiscalPower: optionalNumber(fiscalPower, t.insurance.fiscalPower, t),
-        purchaseDate: purchaseDate || null,
-        overnightParking: overnightParking || null,
         fuel: fuelValue || null,
         transmission: transmissionValue || null,
         drivetrain: drivetrain || null,
@@ -201,11 +186,8 @@ export function VehicleForm({ existing, returnTo }: { existing?: Vehicle; return
         <Field label={t.setup.year}>
           <input inputMode="numeric" value={year} onChange={(e) => setYear(e.target.value)} maxLength={4} />
         </Field>
-        <Field label={t.setup.registration}>
-          <input value={registration} onChange={(e) => setRegistration(e.target.value.toUpperCase())} maxLength={20} />
-        </Field>
-        <Field label={t.setup.firstRegistration} hint={t.setup.firstRegistrationHint}>
-          <input type="date" value={firstRegistration} onChange={(e) => setFirstRegistration(e.target.value)} />
+        <Field label={t.setup.vin}>
+          <input value={vin} onChange={(e) => setVin(e.target.value.toUpperCase())} maxLength={17} />
         </Field>
         <fieldset className="field">
           <legend className="field-label">{t.setup.builtWith}</legend>
@@ -274,39 +256,6 @@ export function VehicleForm({ existing, returnTo }: { existing?: Vehicle; return
             </>
           ) : null}
         </fieldset>
-        <details className="part-details" open={Boolean(existing?.vin || existing?.fiscalPower || existing?.overnightParking)}>
-          <summary>{t.insurance.factsSection}</summary>
-          <p className="muted">{t.insurance.factsHint}</p>
-          <Field label={t.insurance.vin}>
-            <input value={vin} onChange={(e) => setVin(e.target.value.toUpperCase())} maxLength={17} />
-          </Field>
-          <Field label={t.insurance.version}>
-            <input value={version} onChange={(e) => setVersion(e.target.value)} maxLength={80} />
-          </Field>
-          <div className="row">
-            <Field label={t.insurance.nationalType} hint={t.insurance.nationalTypeHint}>
-              <input value={nationalType} onChange={(e) => setNationalType(e.target.value.toUpperCase())} maxLength={10} />
-            </Field>
-            <Field label={t.insurance.fiscalPower}>
-              <input inputMode="numeric" value={fiscalPower} onChange={(e) => setFiscalPower(e.target.value)} maxLength={3} />
-            </Field>
-          </div>
-          <div className="row">
-            <Field label={t.insurance.purchaseDate}>
-              <input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} />
-            </Field>
-            <Field label={t.insurance.parking}>
-              <select value={overnightParking} onChange={(e) => setOvernightParking(e.target.value as OvernightParking | '')}>
-                <option value="">—</option>
-                {(['closedGarage', 'privateParking', 'street'] as const).map((k) => (
-                  <option key={k} value={k}>
-                    {t.insurance.parkings[k]}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
-        </details>
         <FormError error={error} />
         <Submit disabled={disabled}>{existing ? t.setup.save : t.setup.addVehicle}</Submit>
       </form>
@@ -375,30 +324,12 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
   const [nameFr, setNameFr] = useState(existing?.nameFr ?? '');
   const [intervalKm, setIntervalKm] = useState(String(existing?.intervalKm ?? ''));
   const [intervalMonths, setIntervalMonths] = useState(String(existing?.intervalMonths ?? ''));
-  const [officialKm, setOfficialKm] = useState(String(existing?.officialIntervalKm ?? ''));
-  const [officialMonths, setOfficialMonths] = useState(String(existing?.officialIntervalMonths ?? ''));
+  const [action, setAction] = useState<TaskAction>(existing?.action ?? 'replace');
   const [baselineDate, setBaselineDate] = useState(existing?.baselineDate ?? '');
   const [baselineOdometer, setBaselineOdometer] = useState(String(existing?.baselineOdometer ?? ''));
-  const [standardPart, setStandardPart] = useState<string>(existing?.standardPart ?? '');
-  // Null follows the part's category (or 'other'); the owner's pick is kept only when it differs from that.
+  const [notes, setNotes] = useState(existing?.notes ?? '');
   const [category, setCategory] = useState<PartCategory | null>(existing?.category ?? null);
   const [switchedOff, setSwitchedOff] = useState(existing?.switchedOff ?? false);
-  // The Vehicle's Standard Parts, in catalogue order; one set aside is offered only if the Task already replaces it.
-  const standardParts = partSpecsOf(snapshot, vehicle, { notFitted: true }).filter(
-    (p) => p.standardPart !== null && (!p.notFitted || p.standardPart === existing?.standardPart),
-  );
-  const catalogue = catalogueOf(snapshot);
-  const defaultCategory: PartCategory = standardPart ? catalogue.category(standardPart) : 'other';
-  // A check or service of the schedule has no part to mark as not on the Vehicle: it is switched off here instead.
-  const scheduledCheck = existing?.standardPart != null && catalogue.known(existing.standardPart)?.unit === null;
-  const fallback = standardPart ? catalogue.defaultInterval(vehicle, standardPart) : null;
-  const atDefault =
-    fallback !== null && intervalKm === String(fallback.intervalKm ?? '') && intervalMonths === String(fallback.intervalMonths ?? '');
-  // The only Task for a part the Vehicle has stays on its schedule: switching it off is done on the part.
-  const scheduled =
-    existing?.standardPart != null &&
-    catalogue.fits(vehicle, existing.standardPart) &&
-    !snapshot.tasks.some((task) => task.id !== existing.id && task.vehicleId === vehicle.id && task.standardPart === existing.standardPart);
   const { error, disabled, run } = useSubmit();
   const back = `/vehicles/${vehicle.id}`;
 
@@ -410,13 +341,12 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
         nameFr,
         intervalKm: optionalNumber(intervalKm, t.setup.distanceLabel, t),
         intervalMonths: optionalNumber(intervalMonths, t.setup.monthsLabel, t),
-        officialIntervalKm: optionalNumber(officialKm, t.setup.distanceLabel, t),
-        officialIntervalMonths: optionalNumber(officialMonths, t.setup.monthsLabel, t),
+        action,
         baselineDate: baselineDate || null,
         baselineOdometer: optionalNumber(baselineOdometer, t.setup.odometerLabel, t),
-        standardPart: standardPart || null,
         category,
-        switchedOff: scheduledCheck && switchedOff,
+        notes,
+        switchedOff,
       };
       if (body.intervalKm === null && body.intervalMonths === null) throw new Error(t.setup.needInterval);
       if (body.baselineOdometer !== null && body.baselineDate === null) throw new Error(t.setup.needBaselineDate);
@@ -444,20 +374,17 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
         <Field label={t.setup.taskFr} hint={t.setup.taskFrHint}>
           <input value={nameFr} onChange={(e) => setNameFr(e.target.value)} maxLength={120} lang="fr" />
         </Field>
-        {standardParts.length > 0 && !scheduledCheck ? (
-          <Field label={t.setup.taskPart} hint={t.setup.taskPartHint}>
-            <select value={standardPart} onChange={(e) => setStandardPart(e.target.value)} disabled={scheduled}>
-              <option value="">{t.setup.noTaskPart}</option>
-              {standardParts.map((p) => (
-                <option key={p.id} value={p.standardPart!}>
-                  {partName(p, t)}
-                </option>
-              ))}
-            </select>
-          </Field>
-        ) : null}
+        <Field label={t.setup.action}>
+          <select value={action} onChange={(e) => setAction(e.target.value as TaskAction)}>
+            {(['replace', 'inspect', 'clean', 'adjust'] as const).map((a) => (
+              <option key={a} value={a}>
+                {t.setup.actions[a]}
+              </option>
+            ))}
+          </select>
+        </Field>
         <Field label={t.setup.taskCategory} hint={t.setup.taskCategoryHint}>
-          <select value={category ?? defaultCategory} onChange={(e) => setCategory(e.target.value === defaultCategory ? null : (e.target.value as PartCategory))}>
+          <select value={category ?? 'other'} onChange={(e) => setCategory(e.target.value === 'other' ? null : (e.target.value as PartCategory))}>
             {PART_CATEGORIES.map((c) => (
               <option key={c} value={c}>
                 {t.workshop.partCategories[c]}
@@ -474,36 +401,6 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
           kmPlaceholder="6000"
           monthsPlaceholder="12"
         />
-        {fallback ? (
-          <div className="actions">
-            <p className="muted">
-              {atDefault ? t.setup.followsVehicle : t.setup.yourInterval}{' '}
-              {describeEvery(fallback.intervalKm, fallback.intervalMonths, t)}
-            </p>
-            {atDefault ? null : (
-              <button
-                type="button"
-                className="button button-small"
-                onClick={() => {
-                  setIntervalKm(String(fallback.intervalKm ?? ''));
-                  setIntervalMonths(String(fallback.intervalMonths ?? ''));
-                }}
-              >
-                {t.setup.useDefault}
-              </button>
-            )}
-          </div>
-        ) : null}
-        <p className="field-label">{t.setup.official}</p>
-        <div className="row">
-          <Field label={t.setup.everyKm}>
-            <input inputMode="numeric" value={officialKm} onChange={(e) => setOfficialKm(e.target.value)} />
-          </Field>
-          <Field label={t.setup.everyMonths}>
-            <input inputMode="numeric" value={officialMonths} onChange={(e) => setOfficialMonths(e.target.value)} />
-          </Field>
-        </div>
-        <p className="muted">{t.setup.officialHint}</p>
         <p className="field-label">{t.setup.baseline}</p>
         <div className="row">
           <Field label={t.setup.baselineDate}>
@@ -514,7 +411,10 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
           </Field>
         </div>
         <p className="muted">{t.setup.baselineHint}</p>
-        {scheduledCheck ? (
+        <Field label={t.workshop.notesTitle} hint={t.setup.notesHint}>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={5} maxLength={20_000} />
+        </Field>
+        {existing ? (
           <label className={`check ${switchedOff ? 'check-on' : ''}`}>
             <input type="checkbox" checked={switchedOff} onChange={(e) => setSwitchedOff(e.target.checked)} />
             <span>
@@ -525,8 +425,7 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
         ) : null}
         <FormError error={error} />
         <Submit disabled={disabled}>{existing ? t.setup.save : t.setup.addTask}</Submit>
-        {existing && scheduled ? <p className="muted">{scheduledCheck ? t.setup.scheduledCheck : t.setup.scheduledTask}</p> : null}
-        {existing && !scheduled ? (
+        {existing ? (
           <button type="button" className="button button-danger button-block" onClick={remove} disabled={disabled}>
             {t.setup.deleteTask}
           </button>

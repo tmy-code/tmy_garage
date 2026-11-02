@@ -1,4 +1,4 @@
-import type { Cooling, Distribution, Drivetrain, FinalDrive, FuelType, PartUnit, Transmission, VehicleKind } from './schemas.ts';
+import type { Cooling, Distribution, Drivetrain, FinalDrive, FuelType, PartUnit, TaskAction, Transmission, VehicleKind } from './schemas.ts';
 
 /**
  * What a Vehicle is built with, as the parts catalogue needs it (its Build). Null is not filled in yet, which only
@@ -303,6 +303,7 @@ export interface OwnPart extends Interval {
   nameFr: string | null;
   unit: PartUnit | null;
   category: PartCategory;
+  action: TaskAction;
 }
 
 /** What the owner changed in the catalogue for one part: a built-in one's conditions, details or removal, or a part of their own. */
@@ -329,6 +330,7 @@ export interface CataloguePart {
   /** Null for a task that uses nothing to buy: it has a Task but no Part Spec. */
   unit: PartUnit | null;
   category: PartCategory;
+  action: TaskAction;
   intervalKm: number | null;
   intervalMonths: number | null;
   /** A shorter distance interval when the engine has a turbo. */
@@ -349,10 +351,8 @@ export interface StarterTask {
   nameFr: string;
   intervalKm: number | null;
   intervalMonths: number | null;
-  /** The part the Task replaces. */
-  standardPart: StandardPartKey;
-  /** Its Required Parts: the part itself, then those that go with it. */
-  parts: StandardPartKey[];
+  category: PartCategory;
+  action: TaskAction;
 }
 
 const BUILT_IN_CODES = new Set<string>(PART_TEMPLATES.map((t) => t.code));
@@ -380,6 +380,7 @@ export class Catalogue {
         intervalMonths: change?.interval ? change.interval.intervalMonths : t.intervalMonths,
         conditions: change?.conditions ?? conditionsOf(t.kind, t.when ?? []),
         characteristics: change?.characteristics ?? null,
+        action: actionOfName(t.task?.en ?? t.en),
         builtIn: true,
         changed: change !== undefined,
         removed: change?.removed ?? false,
@@ -395,6 +396,7 @@ export class Catalogue {
           fr: e.own!.nameFr ?? e.own!.name,
           unit: e.own!.unit,
           category: e.own!.category,
+          action: e.own!.action,
           intervalKm: e.own!.intervalKm,
           intervalMonths: e.own!.intervalMonths,
           conditions: e.conditions ?? {},
@@ -476,8 +478,8 @@ export class Catalogue {
         name: p.task ? p.task.en : p.en,
         nameFr: p.task ? p.task.fr : p.fr,
         ...this.defaultInterval(build, p.code)!,
-        standardPart: p.code,
-        parts: [p.code, ...fitting.filter((other) => other.goesWith === p.code).map((other) => other.code)],
+        category: p.category,
+        action: p.action,
       }));
   }
 }
@@ -495,4 +497,13 @@ export function catalogueOf(snapshot: { catalogue: readonly CatalogueEntry[] }):
     bySnapshot.set(snapshot.catalogue, catalogue);
   }
   return catalogue;
+}
+
+/** What a Task named for a job does to its part: "Check…" inspects, "Clean…" cleans, "Adjust…" and "Lubricate…" adjust, otherwise replace. */
+export function actionOfName(name: string): 'replace' | 'inspect' | 'clean' | 'adjust' {
+  const n = name.trim().toLowerCase();
+  if (/^(check|inspect|test|verify)/.test(n)) return 'inspect';
+  if (/^clean/.test(n)) return 'clean';
+  if (/^(adjust|lubricate|tension|align|set|bleed)/.test(n)) return 'adjust';
+  return 'replace';
 }

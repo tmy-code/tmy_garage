@@ -1,9 +1,10 @@
 import { addDays, addMonths, daysBetween, minDate, type IsoDate } from './dates.ts';
-import { catalogueOf } from './catalogue.ts';
 import type { MaintenanceTask, Service, Snapshot } from './types.ts';
 
 /** Only the last months of readings are used, so the projection follows seasonal use. */
 const USAGE_WINDOW_DAYS = 180;
+/** A Task is Due Soon once this share of its Interval is left (10%), by distance or by time. */
+export const DUE_SOON_SHARE = 0.1;
 /** Readings closer together than this give an unreliable rate. */
 const MIN_USAGE_SPAN_DAYS = 14;
 
@@ -14,13 +15,13 @@ export interface OdometerPoint {
 
 /** What was logged about a Vehicle's distance: never a guess at today's odometer. */
 export interface Usage {
-  /** The latest odometer value logged (a reading, a Service or an inspection). */
+  /** The latest odometer value logged (a reading or a Service). */
   latest: OdometerPoint | null;
   /** The recent rate, from logged values, for projecting distance-based Due Dates. */
   kmPerDay: number | null;
 }
 
-/** 'paused': the Task replaces a Standard Part that is not on the Vehicle, so it is not due at all. */
+/** 'paused': the owner switched the Task off on this Vehicle, so it is not due at all. */
 export type DueStatus = 'overdue' | 'dueSoon' | 'ok' | 'unknown' | 'paused';
 
 export interface DueInfo {
@@ -69,24 +70,13 @@ export function usageOf(snapshot: Snapshot, vehicleId: string): Usage {
     ...snapshot.readings.filter((r) => r.vehicleId === vehicleId),
     // A Service may have left the odometer out.
     ...snapshot.services.filter((s): s is Service & { odometer: number } => s.vehicleId === vehicleId && s.odometer !== null),
-    // A Technical Inspection records the odometer too.
-    ...snapshot.inspections.filter((i) => i.vehicleId === vehicleId),
   ].map(({ date, odometer }) => ({ date, odometer }));
   return estimateUsage(points);
 }
 
-function stricter(a: number | null, b: number | null): number | null {
-  if (a === null) return b;
-  if (b === null) return a;
-  return Math.min(a, b);
-}
-
-/** The Interval that applies: for distance and time separately, the stricter of the user's and the Official Interval. */
+/** The Interval that applies, for distance and time separately. */
 export function effectiveInterval(task: MaintenanceTask): { km: number | null; months: number | null } {
-  return {
-    km: stricter(task.intervalKm, task.officialIntervalKm),
-    months: stricter(task.intervalMonths, task.officialIntervalMonths),
-  };
+  return { km: task.intervalKm, months: task.intervalMonths };
 }
 
 function lastDoneOf(task: MaintenanceTask, services: Service[]): DueInfo['lastDone'] {
@@ -128,8 +118,8 @@ export function computeDue(task: MaintenanceTask, services: Service[], usage: Us
   } else if ((timeDueDate !== null && timeDueDate < today) || (kmRemaining !== null && kmRemaining < 0)) {
     status = 'overdue';
   } else if (
-    (timeDueDate !== null && daysBetween(today, timeDueDate) <= Math.min(30, interval.months! * 3)) ||
-    (kmRemaining !== null && kmRemaining <= Math.min(1000, interval.km! * 0.1))
+    (timeDueDate !== null && daysBetween(today, timeDueDate) <= DUE_SOON_SHARE * daysBetween(lastDone!.date, timeDueDate)) ||
+    (kmRemaining !== null && kmRemaining <= DUE_SOON_SHARE * interval.km!)
   ) {
     status = 'dueSoon';
   } else {
@@ -139,19 +129,9 @@ export function computeDue(task: MaintenanceTask, services: Service[], usage: Us
   return { taskId: task.id, status, lastDone, timeDueDate, dueOdometer, distanceDueDate, dueDate, kmRemaining, daysRemaining };
 }
 
-/**
- * Whether a Task is not due on its Vehicle: it replaces a Standard Part the Vehicle does not have (set aside, or
- * never on its Build), it is a check or service of the schedule its Build no longer has, or the owner switched it off.
- */
-export function isPaused(snapshot: Snapshot, task: MaintenanceTask): boolean {
-  if (task.switchedOff) return true;
-  if (task.standardPart === null) return false;
-  const part = catalogueOf(snapshot).known(task.standardPart);
-  if (part?.unit === null) {
-    const vehicle = snapshot.vehicles.find((v) => v.id === task.vehicleId);
-    return !vehicle || !catalogueOf(snapshot).fits(vehicle, task.standardPart);
-  }
-  return !snapshot.partSpecs.some((p) => p.vehicleId === task.vehicleId && p.standardPart === task.standardPart && !p.notFitted);
+/** Whether the owner paused a Task on its Vehicle. */
+export function isPaused(_snapshot: Snapshot, task: MaintenanceTask): boolean {
+  return task.switchedOff;
 }
 
 function pausedDue(task: MaintenanceTask, services: Service[]): DueInfo {
