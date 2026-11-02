@@ -103,7 +103,6 @@ export function VehicleForm({ existing, returnTo }: { existing?: Vehicle; return
   const [name, setName] = useState(existing?.name ?? '');
   const [make, setMake] = useState(existing?.make ?? '');
   const [model, setModel] = useState(existing?.model ?? '');
-  const [year, setYear] = useState(existing?.year ? String(existing.year) : '');
   const [vin, setVin] = useState(existing?.vin ?? '');
   const [firstRegistrationDate, setFirstRegistrationDate] = useState(existing?.firstRegistrationDate ?? '');
   const [purchaseDate, setPurchaseDate] = useState(existing?.purchaseDate ?? '');
@@ -135,7 +134,6 @@ export function VehicleForm({ existing, returnTo }: { existing?: Vehicle; return
         name,
         make,
         model,
-        year: firstRegistrationDate ? Number(firstRegistrationDate.slice(0, 4)) : optionalNumber(year, t.setup.year, t),
         vin,
         firstRegistrationDate: firstRegistrationDate || null,
         purchaseDate: purchaseDate || null,
@@ -193,11 +191,6 @@ export function VehicleForm({ existing, returnTo }: { existing?: Vehicle; return
         <Field label={t.setup.firstRegistrationDate}>
           <input type="date" value={firstRegistrationDate} onChange={(e) => setFirstRegistrationDate(e.target.value)} />
         </Field>
-        {firstRegistrationDate ? null : (
-          <Field label={t.setup.year} hint={t.setup.yearHint}>
-            <input inputMode="numeric" value={year} onChange={(e) => setYear(e.target.value)} maxLength={4} />
-          </Field>
-        )}
         <Field label={t.setup.purchaseDate}>
           <input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} />
         </Field>

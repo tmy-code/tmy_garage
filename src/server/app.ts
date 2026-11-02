@@ -422,7 +422,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     const v = await parse(c, vehicleInput);
     transaction(() => {
       db.prepare(
-        `UPDATE vehicles SET kind = ?, name = ?, make = ?, model = ?, year = ?, vin = ?,
+        `UPDATE vehicles SET kind = ?, name = ?, make = ?, model = ?, year = COALESCE(?, year), vin = ?,
            first_registration_date = ?, purchase_date = ?,
            fuel = ?, transmission = ?, drivetrain = ?, distribution = ?, cooling = ?, final_drive = ?, cylinders = ?,
            has_hydraulic_clutch = ?, has_turbo = ?, has_direct_injection = ?, has_start_stop = ?, has_adblue = ?, has_ac = ?,

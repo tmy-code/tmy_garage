@@ -49,13 +49,6 @@ export const vehicleInput = z
     name: z.string().trim().min(1).max(80),
     make: z.string().trim().min(1).max(60),
     model: z.string().trim().min(1).max(60),
-    year: z
-      .number()
-      .int()
-      .min(1900)
-      .max(2100)
-      .nullish()
-      .transform((v) => v ?? null),
     vin: optionalText(17),
     firstRegistrationDate: isoDate.nullish().transform((v) => v ?? null),
     purchaseDate: isoDate.nullish().transform((v) => v ?? null),
@@ -81,10 +74,10 @@ export const vehicleInput = z
     hasAc: flag,
     hasAirSuspension: flag,
   })
-  // The year is the one of the first registration date when there is one.
+  // The year is the one of the first registration date; null when there is no date (or an implausible one).
   .transform((v) => {
     const fromDate = v.firstRegistrationDate ? Number(v.firstRegistrationDate.slice(0, 4)) : null;
-    return fromDate !== null && fromDate >= 1900 && fromDate <= 2100 ? { ...v, year: fromDate } : v;
+    return { ...v, year: fromDate !== null && fromDate >= 1900 && fromDate <= 2100 ? fromDate : null };
   })
   .transform(cleanSpecs)
   .superRefine((v, ctx) => {
