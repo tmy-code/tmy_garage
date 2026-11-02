@@ -182,7 +182,7 @@ The database refuses a Task with neither a distance nor a time interval.
 | Column | Meaning |
 | --- | --- |
 | `vehicle_id` | Required. → `vehicles`. |
-| `name` | Required. The English name. |
+| `name` | Required. The English name. A Task for a built-in part says what is to be done ("Change brake fluid"), not the part's name. One still carrying its part's name from an earlier release is renamed when the server starts. |
 | `name_fr` | The French name, when there is one. |
 | `interval_km` | The owner's distance interval. |
 | `interval_months` | The owner's time interval. |

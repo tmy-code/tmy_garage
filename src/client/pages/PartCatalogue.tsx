@@ -55,6 +55,11 @@ function describeConditions(kind: VehicleKind, conditions: Conditions, t: Messag
   return lines.length > 0 ? lines.join(' · ') : null;
 }
 
+/** What the list shows: the task to do ("Replace front brake pads"), or the name of a part replaced with another's task. */
+function listName(part: CataloguePart, t: Messages): string {
+  return part.task?.[t.lang] ?? part[t.lang];
+}
+
 function PartRow({ part, t }: { part: CataloguePart; t: Messages }) {
   const conditions = describeConditions(part.kind, part.conditions, t);
   const interval = part.goesWith ? null : describeEvery(part.intervalKm, part.intervalMonths, t);
@@ -62,7 +67,7 @@ function PartRow({ part, t }: { part: CataloguePart; t: Messages }) {
     <li>
       <a className="history-row" href={`#${LIST}/${part.code}`}>
         <span>
-          <strong>{part[t.lang]}</strong>
+          <strong>{listName(part, t)}</strong>
           {part.unit === null ? <span className="chip chip-unknown">{t.settings.checkChip}</span> : null}
           {part.builtIn ? null : <span className="chip chip-unknown">{t.settings.ownPart}</span>}
           {part.changed && !part.removed ? <span className="chip chip-unknown">{t.settings.changed}</span> : null}
@@ -266,7 +271,7 @@ export function PartForm({ part, kind }: { part?: CataloguePart; kind: VehicleKi
   }
 
   return (
-    <Layout title={part ? part[t.lang] : t.settings.newPart(t.setup[kind])} back={LIST}>
+    <Layout title={part ? listName(part, t) : t.settings.newPart(t.setup[kind])} back={LIST}>
       <NeedsConnection />
       <form onSubmit={submit} className="form">
         {part?.removed ? <p className="banner banner-warn">{t.settings.removedNotice}</p> : null}

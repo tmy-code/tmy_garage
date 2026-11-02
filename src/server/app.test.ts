@@ -376,21 +376,45 @@ describe('workshop data', () => {
   it('starts a new vehicle with a Maintenance Task per part, at the catalogue interval', async () => {
     const car = await create({ ...CAR, hasTurbo: true });
     const tasks = (await snapshot()).tasks.filter((t) => t.vehicleId === car.id);
-    // Oil and filter are changed together, sooner with a turbo.
-    expect(tasks.find((t) => t.name === 'Engine oil and filter')).toMatchObject({
-      nameFr: 'Huile moteur et filtre',
+    // Tasks say what is to be done; oil and filter are changed together, sooner with a turbo.
+    expect(tasks.find((t) => t.name === 'Change engine oil and filter')).toMatchObject({
+      nameFr: 'Vidange huile moteur et filtre',
       intervalKm: 10_000,
       intervalMonths: 12,
       officialIntervalKm: null,
     });
     expect(tasks.find((t) => t.name === 'Oil filter')).toBeUndefined();
-    expect(tasks.find((t) => t.name === 'Brake fluid')).toMatchObject({ intervalKm: null, intervalMonths: 24 });
+    expect(tasks.find((t) => t.name === 'Change brake fluid')).toMatchObject({ nameFr: 'Remplacer le liquide de frein', intervalKm: null, intervalMonths: 24 });
+    expect(tasks.find((t) => t.name === 'Replace front brake pads')).toMatchObject({ nameFr: 'Remplacer les plaquettes avant' });
+    expect(tasks.find((t) => t.name === 'Brake fluid')).toBeUndefined();
     expect(tasks).toHaveLength((await fittedParts(car.id)).length - 1);
     // Parts that fit after an edit get their Task too: four-wheel drive adds two differentials and a transfer case.
     await call('PUT', `/api/vehicles/${car.id}`, { ...CAR, name: 'Test vehicle', drivetrain: 'awd' });
     const after = (await snapshot()).tasks.filter((t) => t.vehicleId === car.id);
     expect(after).toHaveLength(tasks.length + 3);
     expect(after.map((t) => t.standardPart)).toEqual(expect.arrayContaining(['diff_oil_front', 'diff_oil_rear', 'transfer_case_oil']));
+  });
+
+  it('renames Tasks still named after their part when the server starts, and leaves the owner’s names alone', async () => {
+    const car = await create(CAR);
+    const sold = await create({ ...CAR, name: 'Sold car' });
+    await call('POST', `/api/vehicles/${sold.id}/sell`, { date: '2026-10-01' });
+    // As an earlier release left them: named after the part, and one renamed by the owner.
+    db.prepare(`UPDATE maintenance_tasks SET name = 'Brake fluid', name_fr = 'Liquide de frein' WHERE standard_part = 'brake_fluid'`).run();
+    db.prepare(`UPDATE maintenance_tasks SET name = 'Engine oil and filter', name_fr = 'Huile moteur et filtre' WHERE standard_part = 'engine_oil'`).run();
+    db.prepare(`UPDATE maintenance_tasks SET name = 'Tyres', name_fr = 'Mes pneus d’hiver' WHERE standard_part = 'tires' AND vehicle_id = ?`).run(car.id);
+    db.prepare(`UPDATE maintenance_tasks SET name = 'Winter tyres' WHERE standard_part = 'tires' AND vehicle_id = ?`).run(sold.id);
+
+    const later = createApp(db);
+    const tasks = ((await (await later.request('/api/snapshot')).json()) as Snapshot).tasks;
+    const of = (vehicleId: string, code: string) => tasks.find((t) => t.vehicleId === vehicleId && t.standardPart === code)!;
+    for (const id of [car.id, sold.id]) {
+      expect(of(id, 'brake_fluid')).toMatchObject({ name: 'Change brake fluid', nameFr: 'Remplacer le liquide de frein' });
+      expect(of(id, 'engine_oil')).toMatchObject({ name: 'Change engine oil and filter', nameFr: 'Vidange huile moteur et filtre' });
+    }
+    // A French name the owner wrote stays; a name they changed stays.
+    expect(of(car.id, 'tires')).toMatchObject({ name: 'Replace tyres', nameFr: 'Mes pneus d’hiver' });
+    expect(of(sold.id, 'tires')).toMatchObject({ name: 'Winter tyres' });
   });
 
   it('keeps an Interval following the build until the owner sets their own', async () => {

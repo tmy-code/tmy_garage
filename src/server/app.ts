@@ -764,7 +764,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     );
     for (const s of catalogue.starterTasks(build)) {
       if (covered.has(s.standardPart)) continue;
-      const names = [looseName(s.name), looseName(s.nameFr)];
+      const names = [looseName(s.name), looseName(s.nameFr), ...catalogue.legacyTaskNames(s.standardPart).map(looseName)];
       const own = adopt
         ? tasks.find((t) => t.standard_part === null && (names.includes(looseName(t.name)) || (t.name_fr && names.includes(looseName(t.name_fr)))))
         : undefined;
@@ -785,6 +785,24 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     for (const t of tasks) {
       const d = !t.custom_interval && t.standard_part ? catalogue.defaultInterval(build, t.standard_part) : null;
       if (d) follow.run(d.intervalKm, d.intervalMonths, t.id);
+    }
+  }
+
+  /**
+   * Tasks for a built-in part used to be named after the part ("Brake fluid"); they now say what is to be done
+   * ("Change brake fluid"). A Task still carrying the old name, which the owner never renamed, takes the new one.
+   */
+  function renameDefaultTasks(vehicleId: string) {
+    const rename = db.prepare('UPDATE maintenance_tasks SET name = ?, name_fr = ? WHERE id = ?');
+    const tasks = db.prepare('SELECT id, name, name_fr, standard_part FROM maintenance_tasks WHERE vehicle_id = ? AND standard_part IS NOT NULL').all(vehicleId) as Row[];
+    for (const t of tasks) {
+      const part = catalogue.known(t.standard_part);
+      if (!part?.builtIn || !part.task) continue;
+      const legacy = catalogue.legacyTaskNames(part.code).map(looseName);
+      if (!legacy.includes(looseName(t.name)) || t.name === part.task.en) continue;
+      // A French name the owner wrote stays.
+      const fr = !t.name_fr || legacy.includes(looseName(t.name_fr)) ? part.task.fr : t.name_fr;
+      rename.run(part.task.en, fr, t.id);
     }
   }
 
@@ -813,6 +831,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
         syncSchedule(v.id, buildOfRow(v), scheduling.has(v.id));
         db.prepare('DELETE FROM schedule_moves WHERE vehicle_id = ?').run(v.id);
       }
+      renameDefaultTasks(v.id);
     }
     db.prepare('DELETE FROM part_catalogue_moves WHERE vehicle_id IN (SELECT id FROM vehicles WHERE garage_id = ?)').run(garageId);
   });

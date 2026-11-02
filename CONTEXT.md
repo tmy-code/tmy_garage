@@ -19,7 +19,7 @@ The app speaks English and French. French screens use: Vehicle → véhicule, Ma
 ## Maintenance
 
 **Maintenance Task**:
-A recurring job defined for one Vehicle (e.g. "engine oil and filter change"), with an Interval saying how often it must be done. A Task may say which Standard Part it replaces; while that part is not on the Vehicle (set aside after a Build change, or marked by the user), the Task is paused: it has no Due Date, sends no Reminder and adds nothing to the Shopping List. A Vehicle's Tasks are listed by category: a Task replacing a Standard Part takes the part's category, any other the one the owner picks ("other" until then); paused Tasks are listed apart.
+A recurring job defined for one Vehicle, named for what is to be done (e.g. "Change engine oil and filter", "Replace front brake pads"), with an Interval saying how often it must be done. A Task may say which Standard Part it replaces; while that part is not on the Vehicle (set aside after a Build change, or marked by the user), the Task is paused: it has no Due Date, sends no Reminder and adds nothing to the Shopping List. A Vehicle's Tasks are listed by category: a Task replacing a Standard Part takes the part's category, any other the one the owner picks ("other" until then); paused Tasks are listed apart.
 _Avoid_: Job, service item, schedule entry
 
 **Interval**:
