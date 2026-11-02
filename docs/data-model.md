@@ -191,11 +191,14 @@ erDiagram
 | `vehicle_id` | Required. → `vehicles`. |
 | `date` | Required. |
 | `odometer` | Required only when a Task done counts distance; time-based Tasks alone may leave it out. |
+| `kind` | Required. `maintenance` (it did Tasks of the plan) or `repair` (outside the plan). `maintenance` by default. |
+| `title` | A repair's title, such as "New starter motor". Required for a repair, empty for maintenance. |
+| `category` | A repair's category, same values as a Task's. Empty means `other`. |
 | `performed_by` | Required. `diy`, `garage` (independent garage) or `dealership`. `diy` by default. |
 | `total_cost` | Parts and labour in one amount. |
 | `notes` | Free text. |
 
-Logging a Service restarts the count of each Task it did. A logged Service can be edited.
+A maintenance Service did at least one Task; a repair needs a title and may have none. Logging a Service restarts the count of each Task it did. A logged Service can be edited.
 
 ### `service_tasks`
 

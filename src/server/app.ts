@@ -102,6 +102,7 @@ const toSpecLine = (r: Row): SpecLine => ({
   label: r.label,
   value: r.value,
   group: r.spec_group,
+  category: r.category,
   sort: r.sort,
 });
 
@@ -200,6 +201,9 @@ function garageReader(db: DatabaseSync, garageId: string) {
       date: r.date,
       odometer: r.odometer,
       notes: r.notes,
+      kind: r.kind,
+      title: r.title,
+      category: r.category,
       performedBy: r.performed_by,
       totalCost: r.total_cost,
       taskIds: taskIdsByService.get(r.id) ?? [],
@@ -592,7 +596,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     const s = await parse(c, specLineInput);
     const id = randomUUID();
     const next = (db.prepare('SELECT coalesce(max(sort), -1) + 1 AS n FROM spec_lines WHERE vehicle_id = ? AND spec_group = ?').get(vehicleId, s.group) as Row).n;
-    saveSpecLine(() => db.prepare('INSERT INTO spec_lines (id, vehicle_id, label, value, spec_group, sort) VALUES (?, ?, ?, ?, ?, ?)').run(id, vehicleId, s.label, s.value, s.group, next));
+    saveSpecLine(() => db.prepare('INSERT INTO spec_lines (id, vehicle_id, label, value, spec_group, category, sort) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, vehicleId, s.label, s.value, s.group, s.category, next));
     return c.json(toSpecLine(ownedRowOrThrow('spec_lines', id, 'Spec line')), 201);
   });
 
@@ -601,10 +605,10 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     const row = ownedRowOrThrow('spec_lines', id, 'Spec line');
     const s = await parse(c, specLineInput);
     saveSpecLine(() => {
-      if (s.group === row.spec_group) db.prepare('UPDATE spec_lines SET label = ?, value = ? WHERE id = ?').run(s.label, s.value, id);
+      if (s.group === row.spec_group) db.prepare('UPDATE spec_lines SET label = ?, value = ?, category = ? WHERE id = ?').run(s.label, s.value, s.category, id);
       else {
         const next = (db.prepare('SELECT coalesce(max(sort), -1) + 1 AS n FROM spec_lines WHERE vehicle_id = ? AND spec_group = ?').get(row.vehicle_id, s.group) as Row).n;
-        db.prepare('UPDATE spec_lines SET label = ?, value = ?, spec_group = ?, sort = ? WHERE id = ?').run(s.label, s.value, s.group, next, id);
+        db.prepare('UPDATE spec_lines SET label = ?, value = ?, spec_group = ?, category = ?, sort = ? WHERE id = ?').run(s.label, s.value, s.group, s.category, next, id);
       }
     });
     return c.json(toSpecLine(ownedRowOrThrow('spec_lines', id, 'Spec line')));
@@ -728,10 +732,12 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     const partsUsed = s.partsUsed;
     transaction(() => {
       db.prepare(
-        `INSERT INTO services (id, vehicle_id, date, odometer, notes, performed_by, total_cost) VALUES (?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO services (id, vehicle_id, date, odometer, notes, performed_by, total_cost, kind, title, category)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (id) DO UPDATE SET date = excluded.date, odometer = excluded.odometer, notes = excluded.notes,
-           performed_by = excluded.performed_by, total_cost = excluded.total_cost`,
-      ).run(s.id, s.vehicleId, s.date, s.odometer, s.notes, s.performedBy, s.totalCost);
+           performed_by = excluded.performed_by, total_cost = excluded.total_cost, kind = excluded.kind, title = excluded.title,
+           category = excluded.category`,
+      ).run(s.id, s.vehicleId, s.date, s.odometer, s.notes, s.performedBy, s.totalCost, s.kind, s.kind === 'repair' ? s.title : null, s.kind === 'repair' ? s.category : null);
       db.prepare('DELETE FROM service_tasks WHERE service_id = ?').run(s.id);
       const link = db.prepare('INSERT INTO service_tasks (service_id, task_id) VALUES (?, ?)');
       for (const taskId of taskIds) link.run(s.id, taskId);

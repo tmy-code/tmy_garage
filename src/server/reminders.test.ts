@@ -88,7 +88,7 @@ describe('currentReminders', () => {
     const after = currentReminders(
       snapshot({
         tasks: [task({ intervalMonths: 1, baselineDate: '2025-01-01' })],
-        services: [{ id: 's', vehicleId: 'v', date: '2026-09-20', odometer: 1000, notes: null, performedBy: 'diy', totalCost: null, taskIds: ['t'], partsUsed: [] }],
+        services: [{ id: 's', vehicleId: 'v', date: '2026-09-20', odometer: 1000, notes: null, kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null, taskIds: ['t'], partsUsed: [] }],
       }),
       TODAY,
     )[0]!;

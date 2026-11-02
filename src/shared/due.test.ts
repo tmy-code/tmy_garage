@@ -22,7 +22,7 @@ function task(overrides: Partial<MaintenanceTask> = {}): MaintenanceTask {
 }
 
 function service(date: string, odometer: number, taskIds = ['oil']): Service {
-  return { id: `s-${date}`, vehicleId: 'bike', date, odometer, taskIds, notes: null, performedBy: 'diy', totalCost: null, partsUsed: [] };
+  return { id: `s-${date}`, vehicleId: 'bike', date, odometer, taskIds, notes: null, kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null, partsUsed: [] };
 }
 
 const noUsage: Usage = { latest: null, kmPerDay: null };

@@ -89,7 +89,7 @@ describe('normalizeSnapshot', () => {
     const old = { vehicles: [], tasks: [{ id: 't' }], services: [{ id: 's', partsUsed: [{ description: 'Oil', quantity: 1, unit: 'litre', price: 5 }] }], readings: [] } as unknown as Snapshot;
     const s = normalizeSnapshot(old);
     expect(s.tasks[0]).toMatchObject({ notes: null, category: null, action: 'replace', switchedOff: false });
-    expect(s.services[0]).toMatchObject({ performedBy: 'diy', totalCost: null });
+    expect(s.services[0]).toMatchObject({ kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null });
     expect(s.services[0]!.partsUsed).toEqual([{ description: 'Oil', partNumber: null, quantity: 1, unit: 'litre' }]);
     expect(s.specLines).toEqual([]);
   });

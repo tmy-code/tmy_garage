@@ -28,6 +28,8 @@ export const partUnit = z.enum(['piece', 'litre']);
 export const taskAction = z.enum(['replace', 'inspect', 'clean', 'adjust']);
 /** Who did the work of a Service. */
 export const performedBy = z.enum(['diy', 'garage', 'dealership']);
+/** Maintenance of the plan, or a repair outside it. */
+export const serviceKind = z.enum(['maintenance', 'repair']);
 const quantity = z.number().positive().max(10_000);
 
 const flag = z
@@ -185,6 +187,11 @@ export const specLineInput = z.object({
   label: z.string().trim().min(1).max(80),
   value: z.string().trim().min(1).max(200),
   group: specGroup,
+  /** Empty is 'other'. */
+  category: z
+    .enum(PART_CATEGORIES)
+    .nullish()
+    .transform((v) => v ?? null),
 });
 
 /** A component used in a Service, with its brand and variant in the description. Older phones also send a price, a supplier and a link to a Part Spec: those are ignored. */
@@ -195,13 +202,21 @@ export const partUsedInput = z.object({
   unit: partUnit,
 });
 
-export const serviceInput = z.object({
+export const serviceInput = z
+  .object({
   id: clientId,
   vehicleId: z.string().min(1),
   date: isoDate,
   // Left out when the Service's Tasks are all time-based; the form asks for it when one counts distance.
   odometer: odometer.nullish().transform((v) => v ?? null),
-  taskIds: z.array(z.string().min(1)).min(1, 'A Service completes at least one Maintenance Task'),
+  taskIds: z.array(z.string().min(1)).default([]),
+  // A repair outside the plan has a title and a category instead of Tasks.
+  kind: serviceKind.default('maintenance'),
+  title: optionalText(120),
+  category: z
+    .enum(PART_CATEGORIES)
+    .nullish()
+    .transform((v) => v ?? null),
   notes: optionalText(2000),
   // Services queued on a phone before these existed arrive without them.
   performedBy: performedBy.default('diy'),
@@ -212,7 +227,13 @@ export const serviceInput = z.object({
     .nullish()
     .transform((v) => v ?? null),
   partsUsed: z.array(partUsedInput).max(100).default([]),
-});
+})
+  .superRefine((s, ctx) => {
+    if (s.kind === 'maintenance' && s.taskIds.length === 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['taskIds'], message: 'A Service completes at least one Maintenance Task' });
+    }
+    if (s.kind === 'repair' && !s.title) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['title'], message: 'A repair needs a title' });
+  });
 
 export const odometerReadingInput = z.object({
   id: clientId,
@@ -253,6 +274,7 @@ export type SpecGroup = z.infer<typeof specGroup>;
 export type PartUnit = z.infer<typeof partUnit>;
 export type TaskAction = z.infer<typeof taskAction>;
 export type PerformedBy = z.infer<typeof performedBy>;
+export type ServiceKind = z.infer<typeof serviceKind>;
 export type VehicleInput = z.infer<typeof vehicleInput>;
 export type SellInput = z.infer<typeof sellInput>;
 export type TaskInput = z.infer<typeof taskInput>;

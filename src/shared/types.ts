@@ -1,6 +1,6 @@
 import type { IsoDate } from './dates.ts';
 import type { CatalogueEntry, PartCategory, VehicleSpecs } from './catalogue.ts';
-import type { DocumentOwnerKind, DocumentType, PartUnit, PerformedBy, SpecGroup, TaskAction, VehicleKind } from './schemas.ts';
+import type { DocumentOwnerKind, DocumentType, PartUnit, PerformedBy, ServiceKind, SpecGroup, TaskAction, VehicleKind } from './schemas.ts';
 /** A car or motorcycle; what it is built with (its Build) comes from VehicleSpecs. */
 export interface Vehicle extends VehicleSpecs {
   id: string;
@@ -47,6 +47,8 @@ export interface SpecLine {
   label: string;
   value: string;
   group: SpecGroup;
+  /** The category it is listed under; empty is 'other'. */
+  category: PartCategory | null;
   sort: number;
 }
 
@@ -66,6 +68,12 @@ export interface Service {
   odometer: number | null;
   taskIds: string[];
   notes: string | null;
+  /** Maintenance of the plan, or a repair outside it. */
+  kind: ServiceKind;
+  /** What a repair was, in a few words. */
+  title: string | null;
+  /** The category a repair is filed under; empty is 'other'. */
+  category: PartCategory | null;
   /** Who did the work. */
   performedBy: PerformedBy;
   /** Parts and labour, in one amount. */

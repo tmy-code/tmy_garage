@@ -104,12 +104,25 @@ describe('vehicles and tasks', () => {
     expect((await call('PUT', `/api/tasks/${task.id}`, { name: 'x', intervalMonths: 1, action: 'burn' })).status).toBe(422);
   });
 
+  it('logs a repair outside the plan: a title and a category instead of Tasks, which stay optional', async () => {
+    const bike = await createVehicle();
+    const repair = { id: 'svc-00007', vehicleId: bike.id, date: '2026-10-01', kind: 'repair', title: 'New starter motor', category: 'electrical', totalCost: 180, performedBy: 'garage' };
+    expect((await call('PUT', '/api/services/svc-00007', { ...repair, title: '' })).status).toBe(422);
+    expect((await call('PUT', '/api/services/svc-00007', repair)).status).toBe(200);
+    expect((await snapshot()).services[0]).toMatchObject({ kind: 'repair', title: 'New starter motor', category: 'electrical', taskIds: [], totalCost: 180 });
+    // Maintenance still needs a Task, and drops a title it was sent.
+    expect((await call('PUT', '/api/services/svc-00008', { id: 'svc-00008', vehicleId: bike.id, date: '2026-10-02', taskIds: [] })).status).toBe(422);
+    const task = await createTask(bike.id);
+    await call('PUT', '/api/services/svc-00009', { id: 'svc-00009', vehicleId: bike.id, date: '2026-10-03', odometer: 100, taskIds: [task.id], title: 'ignored' });
+    expect((await snapshot()).services.find((x) => x.id === 'svc-00009')).toMatchObject({ kind: 'maintenance', title: null });
+  });
+
   it('stores who did a Service and what it cost, and defaults to DIY with no cost', async () => {
     const bike = await createVehicle();
     const task = await createTask(bike.id);
     const body = { id: 'svc-00001', vehicleId: bike.id, date: '2026-10-01', odometer: 18000, taskIds: [task.id] };
     await call('PUT', '/api/services/svc-00001', body);
-    expect((await snapshot()).services[0]).toMatchObject({ performedBy: 'diy', totalCost: null });
+    expect((await snapshot()).services[0]).toMatchObject({ kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null });
     await call('PUT', '/api/services/svc-00001', { ...body, performedBy: 'dealership', totalCost: 249.9 });
     expect((await snapshot()).services[0]).toMatchObject({ performedBy: 'dealership', totalCost: 249.9 });
     expect((await call('PUT', '/api/services/svc-00001', { ...body, performedBy: 'neighbour' })).status).toBe(422);
@@ -184,7 +197,7 @@ describe('services and readings (replayed by the offline send queue)', () => {
     expect((await call('PUT', '/api/services/svc-00001', body)).status).toBe(200);
     expect((await call('PUT', '/api/services/svc-00001', body)).status).toBe(200);
     const s = await snapshot();
-    expect(s.services).toEqual([{ ...body, performedBy: 'diy', totalCost: null, partsUsed: [] }]);
+    expect(s.services).toEqual([{ ...body, kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null, partsUsed: [] }]);
   });
 
   it('stores a Service without an odometer value, for time-based tasks', async () => {
@@ -192,7 +205,7 @@ describe('services and readings (replayed by the offline send queue)', () => {
     const coolant = await createTask(bike.id, { name: 'Coolant', intervalKm: null, intervalMonths: 36 });
     const body = { id: 'svc-00002', vehicleId: bike.id, date: '2026-07-14', taskIds: [coolant.id], notes: null };
     expect((await call('PUT', '/api/services/svc-00002', body)).status).toBe(200);
-    expect((await snapshot()).services).toEqual([{ ...body, odometer: null, performedBy: 'diy', totalCost: null, partsUsed: [] }]);
+    expect((await snapshot()).services).toEqual([{ ...body, odometer: null, kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null, partsUsed: [] }]);
   });
 
   it('updates a Service and its tasks on a later PUT', async () => {
@@ -263,6 +276,15 @@ describe('spec lines and the plan templates', () => {
     expect((await snapshot()).specLines).toEqual([{ ...line, value: '10W-40, 3.0 L', group: 'torque', sort: 0 }]);
     expect((await call('DELETE', `/api/specs/${line.id}`)).status).toBe(204);
     expect((await snapshot()).specLines).toEqual([]);
+  });
+
+  it('files a spec line under a category, empty meaning other, and refuses an unknown one', async () => {
+    const bike = await createVehicle();
+    const line = (await (await call('POST', `/api/vehicles/${bike.id}/specs`, { label: 'Spark plug', value: 'NGK CR8E', group: 'parts', category: 'engine' })).json()) as SpecLine;
+    expect(line.category).toBe('engine');
+    await call('PUT', `/api/specs/${line.id}`, { label: 'Spark plug', value: 'NGK CR8E', group: 'parts' });
+    expect((await snapshot()).specLines[0]!.category).toBeNull();
+    expect((await call('POST', `/api/vehicles/${bike.id}/specs`, { label: 'X', value: 'x', group: 'parts', category: 'garden' })).status).toBe(422);
   });
 
   it('gives a new vehicle the templates of its build, each with an action and category, then leaves its plan alone', async () => {
@@ -680,6 +702,29 @@ describe('migrations', () => {
     expect(tasks.find((t) => t.id === 't-own')).toMatchObject({ name: 'Wash', switched_off: 0, category: null });
     expect(migrated.prepare('SELECT description, quantity FROM service_items').all()).toEqual([{ description: 'Motul 7100 (Shop)', quantity: 3 }]);
     expect(migrated.prepare('SELECT total_cost FROM services').get()).toEqual({ total_cost: 40 });
+    migrated.close();
+  });
+
+  it('guesses the category of the spec lines already there from their label', () => {
+    const path = join(dir, 'garage.sqlite');
+    const old = openDatabase(path, undefined, 25);
+    old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v1', 'default', 'motorcycle', 'Old bike')`);
+    old.exec(`INSERT INTO spec_lines (id, vehicle_id, label, value, spec_group, sort) VALUES
+      ('a', 'v1', 'Engine oil', '10W-40', 'fluids', 0), ('b', 'v1', 'Front tyre', '120/70', 'parts', 0), ('c', 'v1', 'Brake fluid', 'DOT 4', 'fluids', 1),
+      ('d', 'v1', 'Chain', '520', 'parts', 1), ('e', 'v1', 'Battery', '12 V', 'parts', 2), ('f', 'v1', 'Coolant', '50/50', 'fluids', 2),
+      ('g', 'v1', 'Drain plug', '30 Nm', 'torque', 0), ('h', 'v1', 'Roof rack', 'Thule', 'parts', 3)`);
+    old.close();
+    const migrated = openDatabase(path);
+    expect(migrated.prepare('SELECT id, category FROM spec_lines ORDER BY id').all()).toEqual([
+      { id: 'a', category: 'engine' },
+      { id: 'b', category: 'chassis' },
+      { id: 'c', category: 'brakes' },
+      { id: 'd', category: 'transmission' },
+      { id: 'e', category: 'electrical' },
+      { id: 'f', category: 'cooling_climate' },
+      { id: 'g', category: null },
+      { id: 'h', category: null },
+    ]);
     migrated.close();
   });
 });

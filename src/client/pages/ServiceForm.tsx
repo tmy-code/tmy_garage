@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { todayIso } from '../../shared/dates.ts';
 import { effectiveInterval, vehicleDue } from '../../shared/due.ts';
-import type { PartUnit, PerformedBy } from '../../shared/schemas.ts';
+import { PART_CATEGORIES, type PartCategory } from '../../shared/catalogue.ts';
+import type { PartUnit, PerformedBy, ServiceKind } from '../../shared/schemas.ts';
 import type { OdometerReading, PartUsed, Service, Snapshot, Vehicle } from '../../shared/types.ts';
 import { newId } from '../api.ts';
 import { confirmDelete, Field, FormError, Layout, StatusChip } from '../components.tsx';
@@ -72,6 +73,10 @@ export function ServiceForm({
     () => new Set(existing?.taskIds ?? due.filter((d) => d.taskId === preselect).map((d) => d.taskId)),
   );
   const [notes, setNotes] = useState(existing?.notes ?? '');
+  const [kind, setKind] = useState<ServiceKind>(existing?.kind ?? 'maintenance');
+  const [title, setTitle] = useState(existing?.title ?? '');
+  const [category, setCategory] = useState<PartCategory | null>(existing?.category ?? null);
+  const [titleError, setTitleError] = useState<string | null>(null);
   const [performedBy, setPerformedBy] = useState<PerformedBy>(existing?.performedBy ?? 'diy');
   const [costText, setCostText] = useState(existing?.totalCost != null ? String(existing.totalCost) : '');
   const [parts, setParts] = useState<PartDraft[]>(() => (existing?.partsUsed ?? []).map(toDraft));
@@ -124,16 +129,20 @@ export function ServiceForm({
     const badOdometer =
       odometer === null ? needsOdometer : Number.isNaN(odometer) || odometer < 0 || !Number.isInteger(odometer);
     setOdometerError(badOdometer ? (odometer === null ? t.service.needsOdometer : t.service.errorOdometer) : null);
-    setTasksError(selected.size === 0 ? t.service.errorTasks : null);
+    const noTasks = kind === 'maintenance' && selected.size === 0;
+    setTasksError(noTasks ? t.service.errorTasks : null);
+    const noTitle = kind === 'repair' && !title.trim();
+    setTitleError(noTitle ? t.service.errorTitle : null);
     if (badOdometer) {
       odometerInput.current?.focus();
       odometerInput.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       return;
     }
-    if (selected.size === 0) {
+    if (noTasks) {
       tasksField.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       return;
     }
+    if (noTitle) return;
     const totalCost = parseNumber(costText);
     if (totalCost !== null && (Number.isNaN(totalCost) || totalCost < 0)) {
       setError(t.service.totalCostError);
@@ -154,6 +163,9 @@ export function ServiceForm({
         date,
         odometer,
         taskIds: [...selected],
+        kind,
+        title: kind === 'repair' ? title.trim() : null,
+        category: kind === 'repair' ? category : null,
         notes: notes.trim() || null,
         performedBy,
         totalCost,
@@ -209,6 +221,29 @@ export function ServiceForm({
               />
             </Field>
 
+            <div className="segmented" role="radiogroup" aria-label={t.service.kind}>
+              {(['maintenance', 'repair'] as const).map((k) => (
+                <button type="button" key={k} role="radio" aria-checked={kind === k} className={kind === k ? 'on' : ''} onClick={() => setKind(k)}>
+                  {t.service.kinds[k]}
+                </button>
+              ))}
+            </div>
+            {kind === 'repair' ? (
+              <>
+                <Field label={t.service.repairTitle} hint={t.service.repairTitleHint} error={titleError}>
+                  <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} />
+                </Field>
+                <Field label={t.setup.taskCategory}>
+                  <select value={category ?? 'other'} onChange={(e) => setCategory(e.target.value === 'other' ? null : (e.target.value as PartCategory))}>
+                    {PART_CATEGORIES.map((c) => (
+                      <option key={c} value={c}>
+                        {t.workshop.partCategories[c]}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </>
+            ) : null}
             <div className="row">
               <Field label={t.service.performedBy}>
                 <select value={performedBy} onChange={(e) => setPerformedBy(e.target.value as PerformedBy)}>

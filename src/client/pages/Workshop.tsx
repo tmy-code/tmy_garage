@@ -1,4 +1,5 @@
 import { Fragment, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { PART_CATEGORIES, type PartCategory } from '../../shared/catalogue.ts';
 import { todayIso } from '../../shared/dates.ts';
 import { vehicleDue } from '../../shared/due.ts';
 import type { SpecGroup } from '../../shared/schemas.ts';
@@ -6,6 +7,7 @@ import type { MaintenanceTask, PartUsed, Snapshot, SpecLine, Vehicle } from '../
 import { confirmDelete, Field, FormError, Layout, NeedsConnection, StatusChip } from '../components.tsx';
 import { describeDue, describeInterval, taskName } from '../format.ts';
 import { VehicleIcon } from '../brands.tsx';
+import { Icon } from '../icons.tsx';
 import { messages, useT } from '../i18n.ts';
 import { online } from '../store.ts';
 import { useSubmit } from './SetupForms.tsx';
@@ -114,7 +116,8 @@ function SpecEditor({ vehicle, existing, editor }: { vehicle: Vehicle; existing?
   const [group, setGroup] = useState<SpecGroup>(existing?.group ?? 'fluids');
   const [label, setLabel] = useState(existing?.label ?? '');
   const [value, setValue] = useState(existing?.value ?? '');
-  const body = { group, label, value };
+  const [category, setCategory] = useState<PartCategory | null>(existing?.category ?? null);
+  const body = { group, label, value, category };
   return (
     <InlineEditor
       onSubmit={() =>
@@ -137,6 +140,15 @@ function SpecEditor({ vehicle, existing, editor }: { vehicle: Vehicle; existing?
       <Field label={t.workshop.specLabel} hint={t.workshop.specLabelHint}>
         <input value={label} onChange={(e) => setLabel(e.target.value)} required maxLength={80} autoFocus />
       </Field>
+      <Field label={t.setup.taskCategory}>
+        <select value={category ?? 'other'} onChange={(e) => setCategory(e.target.value === 'other' ? null : (e.target.value as PartCategory))}>
+          {PART_CATEGORIES.map((c) => (
+            <option key={c} value={c}>
+              {t.workshop.partCategories[c]}
+            </option>
+          ))}
+        </select>
+      </Field>
       <Field label={t.workshop.specValue} hint={t.workshop.specValueHint}>
         <input value={value} onChange={(e) => setValue(e.target.value)} required maxLength={200} />
       </Field>
@@ -144,18 +156,20 @@ function SpecEditor({ vehicle, existing, editor }: { vehicle: Vehicle; existing?
   );
 }
 
-/** A Vehicle's spec lines, by group, in the order they were entered. */
-export function specGroupsOf(snapshot: Snapshot, vehicleId: string): [SpecGroup, SpecLine[]][] {
+/** A Vehicle's spec lines, by category in screen order (what is in none is under Other), in the order they were entered. */
+export function specCategoriesOf(snapshot: Snapshot, vehicleId: string): [PartCategory, SpecLine[]][] {
   const lines = snapshot.specLines.filter((s) => s.vehicleId === vehicleId);
-  return GROUPS.map((g) => [g, lines.filter((s) => s.group === g).sort((a, b) => a.sort - b.sort)] as [SpecGroup, SpecLine[]]).filter(
-    ([, items]) => items.length > 0,
-  );
+  return PART_CATEGORIES.map(
+    (c) =>
+      [c, lines.filter((s) => (s.category ?? 'other') === c).sort((a, b) => GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group) || a.sort - b.sort)] as [PartCategory, SpecLine[]],
+  ).filter(([, items]) => items.length > 0);
 }
 
 function SpecText({ spec }: { spec: SpecLine }) {
+  const t = useT();
   return (
     <span>
-      <strong>{spec.label}</strong> · {spec.value}
+      <strong>{spec.label}</strong> · {spec.value} <span className="muted">({t.workshop.specGroups[spec.group]})</span>
     </span>
   );
 }
@@ -163,7 +177,7 @@ function SpecText({ spec }: { spec: SpecLine }) {
 export function SpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: Snapshot }) {
   const t = useT();
   const editor = useEditor();
-  const groups = specGroupsOf(snapshot, vehicle.id);
+  const groups = specCategoriesOf(snapshot, vehicle.id);
   return (
     <Layout title={t.workshop.specsTitle(vehicle.name)} back={`/vehicles/${vehicle.id}`} titleAction={<AddButton editor={editor} />}>
       <NeedsConnection />
@@ -172,7 +186,7 @@ export function SpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: S
       {groups.length === 0 && editor.editing !== 'new' ? <p className="empty">{t.workshop.noSpecs}</p> : null}
       {groups.map(([group, items]) => (
         <section key={group}>
-          <h2>{t.workshop.specGroups[group]}</h2>
+          <h2>{t.workshop.partCategories[group]}</h2>
           <ul className="list list-grid">
             {items.map((spec) =>
               editor.editing === spec.id ? (
@@ -206,7 +220,15 @@ export function TaskPage({ task, vehicle, snapshot }: { task: MaintenanceTask; v
   const owned = vehicle.status === 'owned';
 
   return (
-    <Layout title={taskName(task, t)} back={`/vehicles/${vehicle.id}`}>
+    <Layout
+      title={taskName(task, t)}
+      back={`/vehicles/${vehicle.id}`}
+      titleAction={
+        <a className="button button-small" href={`#/tasks/${task.id}/edit`} aria-label={t.workshop.editTask}>
+          <Icon name="pencil" /> {t.vehicle.editShort}
+        </a>
+      }
+    >
       <section className="card">
         <p className="muted">
           {vehicle.name} · {t.setup.actions[task.action]}
@@ -235,11 +257,6 @@ export function TaskPage({ task, vehicle, snapshot }: { task: MaintenanceTask; v
         <p className="empty">{t.workshop.emptyCard}</p>
       )}
 
-      <section className="actions actions-footer">
-        <a className="button" href={`#/tasks/${task.id}/edit`}>
-          {t.workshop.editTask}
-        </a>
-      </section>
     </Layout>
   );
 }
@@ -262,7 +279,7 @@ export function WorkshopPage({ snapshot }: { snapshot: Snapshot }) {
       ) : null}
       <div className="card-grid">
         {shown.map((v) => {
-          const groups = specGroupsOf(snapshot, v.id);
+          const groups = specCategoriesOf(snapshot, v.id);
           return (
             <section key={v.id}>
               <div className="heading-row">
@@ -276,7 +293,7 @@ export function WorkshopPage({ snapshot }: { snapshot: Snapshot }) {
               {groups.length === 0 ? <p className="muted">{t.workshop.noSpecs}</p> : null}
               {groups.map(([group, items]) => (
                 <Fragment key={group}>
-                  <h3 className="due-group">{t.workshop.specGroups[group]}</h3>
+                  <h3 className="due-group">{t.workshop.partCategories[group]}</h3>
                   <ul className="list">
                     {items.map((spec) => (
                       <li key={spec.id}>

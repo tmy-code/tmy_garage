@@ -17,7 +17,7 @@ import { describePart } from './Workshop.tsx';
 const HISTORY_PREVIEW = 5;
 
 type HistoryEntry =
-  | { kind: 'service'; id: string; date: string; odometer: number | null; text: string; notes: string | null; partsUsed: PartUsed[]; performedBy: PerformedBy; totalCost: number | null }
+  | { kind: 'service'; id: string; date: string; odometer: number | null; text: string; notes: string | null; partsUsed: PartUsed[]; performedBy: PerformedBy; totalCost: number | null; repair: string | null }
   | { kind: 'reading'; id: string; date: string; odometer: number };
 
 /** Says a History entry can be changed: the whole row opens its edit form. */
@@ -93,6 +93,7 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
         partsUsed: s.partsUsed,
         performedBy: s.performedBy,
         totalCost: s.totalCost,
+        repair: s.kind === 'repair' ? s.title : null,
         text: s.taskIds.map((id) => (tasks.get(id) ? taskName(tasks.get(id)!, t) : t.vehicle.deletedTask)).join(', '),
       })),
     ...snapshot.readings.filter((r) => r.vehicleId === vehicle.id).map((r) => ({ kind: 'reading' as const, ...r })),
@@ -216,7 +217,7 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
                         <EditHint />
                       </span>
                       <span className="with-icon">
-                        <Icon name="wrench" /> {h.text}
+                        <Icon name="wrench" /> {[h.repair, h.text].filter(Boolean).join(' · ')}
                       </span>
                       <span className="muted">
                         {t.service.performers[h.performedBy]}

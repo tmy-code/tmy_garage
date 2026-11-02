@@ -567,6 +567,23 @@ const MIGRATIONS: (string | ((db: DatabaseSync) => void))[] = [
   UPDATE services SET total_cost = (SELECT sum(price) FROM parts_used WHERE parts_used.service_id = services.id AND price IS NOT NULL);
 `,
   convertToFiveParts,
+  `
+  -- Spec lines are listed by category, like Tasks. The category is guessed from the label of the lines already there.
+  ALTER TABLE spec_lines ADD COLUMN category TEXT CHECK (category IN ('engine', 'transmission', 'brakes', 'chassis', 'electrical', 'cooling_climate', 'other'));
+  UPDATE spec_lines SET category = 'brakes' WHERE spec_group <> 'torque' AND (lower(label) LIKE '%brake%' OR lower(label) LIKE '%frein%' OR lower(label) LIKE '%pad%' OR lower(label) LIKE '%plaquette%' OR lower(label) LIKE '%disc%' OR lower(label) LIKE '%disque%');
+  UPDATE spec_lines SET category = 'cooling_climate' WHERE category IS NULL AND spec_group <> 'torque' AND (lower(label) LIKE '%coolant%' OR lower(label) LIKE '%refroidissement%' OR lower(label) LIKE '%antifreeze%' OR lower(label) LIKE '%a/c%' OR lower(label) LIKE '%climatisation%');
+  UPDATE spec_lines SET category = 'transmission' WHERE category IS NULL AND spec_group <> 'torque' AND (lower(label) LIKE '%chain%' OR lower(label) LIKE '%chaîne%' OR lower(label) LIKE '%sprocket%' OR lower(label) LIKE '%clutch%' OR lower(label) LIKE '%embrayage%' OR lower(label) LIKE '%gear%' OR lower(label) LIKE '%boîte%' OR lower(label) LIKE '%differential%' OR lower(label) LIKE '%cardan%');
+  UPDATE spec_lines SET category = 'chassis' WHERE category IS NULL AND spec_group <> 'torque' AND (lower(label) LIKE '%tyre%' OR lower(label) LIKE '%tire%' OR lower(label) LIKE '%pneu%' OR lower(label) LIKE '%fork%' OR lower(label) LIKE '%fourche%' OR lower(label) LIKE '%shock%' OR lower(label) LIKE '%suspension%' OR lower(label) LIKE '%wiper%');
+  UPDATE spec_lines SET category = 'electrical' WHERE category IS NULL AND spec_group <> 'torque' AND (lower(label) LIKE '%batter%' OR lower(label) LIKE '%fuse%' OR lower(label) LIKE '%fusible%' OR lower(label) LIKE '%bulb%' OR lower(label) LIKE '%ampoule%');
+  UPDATE spec_lines SET category = 'engine' WHERE category IS NULL AND spec_group <> 'torque' AND (lower(label) LIKE '%oil%' OR lower(label) LIKE '%huile%' OR lower(label) LIKE '%spark%' OR lower(label) LIKE '%bougie%' OR lower(label) LIKE '%filter%' OR lower(label) LIKE '%filtre%' OR lower(label) LIKE '%fuel%' OR lower(label) LIKE '%timing%' OR lower(label) LIKE '%distribution%' OR lower(label) LIKE '%valve%' OR lower(label) LIKE '%soupape%');
+`,
+  `
+  -- A Service is either maintenance (it did Tasks of the plan) or a repair outside the plan: a title and a category
+  -- instead of Tasks, though it may also have done some.
+  ALTER TABLE services ADD COLUMN kind TEXT NOT NULL DEFAULT 'maintenance' CHECK (kind IN ('maintenance', 'repair'));
+  ALTER TABLE services ADD COLUMN title TEXT;
+  ALTER TABLE services ADD COLUMN category TEXT CHECK (category IN ('engine', 'transmission', 'brakes', 'chassis', 'electrical', 'cooling_climate', 'other'));
+`,
 ];
 
 function schemaVersion(db: DatabaseSync): number {

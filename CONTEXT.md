@@ -55,6 +55,10 @@ _Avoid_: Catalogue, Standard Part, schedule
 One occasion on which one or more Tasks were done on a Vehicle, on a date and at an odometer reading (optional when all its Tasks are time-based). It records who did it (Performed by: DIY, Independent garage or Dealership), the Total cost of parts and labour in one amount, the components used, notes, and a receipt. Logging a Service restarts the count of each Task it did.
 _Avoid_: Maintenance (as a noun for an occasion), intervention, visit
 
+**Repair**:
+A Service outside the plan: a title and a Category instead of Tasks (a Task can still be ticked if one was done too). It never changes a Status.
+_Avoid_: Fix, breakdown
+
 **Component Used**:
 A line of a Service naming what went in, with brand and variant ("Motul 7100 10W-40"), a part number, and a quantity in pieces or litres.
 _Avoid_: Part Used, Part Spec
