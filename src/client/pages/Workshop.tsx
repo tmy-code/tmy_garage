@@ -5,7 +5,7 @@ import { vehicleDue } from '../../shared/due.ts';
 import type { SpecGroup } from '../../shared/schemas.ts';
 import type { MaintenanceTask, PartUsed, Snapshot, SpecLine, Vehicle } from '../../shared/types.ts';
 import { confirmDelete, Field, FormError, Layout, NeedsConnection, StatusChip } from '../components.tsx';
-import { describeDue, describeInterval, taskName } from '../format.ts';
+import { describeDue, describeInterval, formatDate, formatKm, formatMoney, taskName } from '../format.ts';
 import { VehicleIcon } from '../brands.tsx';
 import { Icon } from '../icons.tsx';
 import { messages, useT } from '../i18n.ts';
@@ -218,6 +218,9 @@ export function TaskPage({ task, vehicle, snapshot }: { task: MaintenanceTask; v
     [snapshot, vehicle.id, today, task.id],
   );
   const owned = vehicle.status === 'owned';
+  const history = snapshot.services
+    .filter((s) => s.taskIds.includes(task.id))
+    .sort((a, b) => (a.date === b.date ? (b.odometer ?? 0) - (a.odometer ?? 0) : a.date < b.date ? 1 : -1));
 
   return (
     <Layout
@@ -256,6 +259,40 @@ export function TaskPage({ task, vehicle, snapshot }: { task: MaintenanceTask; v
       ) : (
         <p className="empty">{t.workshop.emptyCard}</p>
       )}
+
+      <section>
+        <h2>{t.vehicle.history}</h2>
+        {history.length === 0 && task.baselineDate === null ? <p className="empty">{t.workshop.noTaskHistory}</p> : null}
+        <ul className="list">
+          {history.map((s) => (
+            <li key={s.id}>
+              <a href={`#/services/${s.id}/edit`} className="history-row">
+                <span>
+                  <strong>{formatDate(s.date, t)}</strong>
+                  {s.odometer !== null ? ` · ${formatKm(s.odometer)}` : ''}
+                </span>
+                <span className="muted">
+                  {t.service.performers[s.performedBy]}
+                  {s.totalCost !== null ? ` · ${formatMoney(s.totalCost, t)}` : ''}
+                </span>
+                {s.partsUsed.length > 0 ? <span className="muted">{s.partsUsed.map(describePart).join(', ')}</span> : null}
+                {s.notes ? <span className="muted">{s.notes}</span> : null}
+              </a>
+            </li>
+          ))}
+          {task.baselineDate !== null ? (
+            <li>
+              <div className="history-row">
+                <span>
+                  <strong>{formatDate(task.baselineDate, t)}</strong>
+                  {task.baselineOdometer !== null ? ` · ${formatKm(task.baselineOdometer)}` : ''}
+                </span>
+                <span className="muted">{t.vehicle.beforeTracking.replace(/^[\s(·]+|[)\s]+$/g, '')}</span>
+              </div>
+            </li>
+          ) : null}
+        </ul>
+      </section>
 
     </Layout>
   );
