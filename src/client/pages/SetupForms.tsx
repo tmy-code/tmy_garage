@@ -380,6 +380,7 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
     <Layout title={existing ? t.setup.editTask : t.setup.newTask(vehicle.name)} back={back}>
       <NeedsConnection />
       <form onSubmit={submit} className="form">
+        {existing?.templateCode ? <p className="muted">{t.setup.standardTaskHint}</p> : null}
         <Field label={t.setup.task} hint={t.setup.taskHint}>
           <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} lang="en" />
         </Field>

@@ -72,6 +72,15 @@ describe('vehicles and tasks', () => {
     expect(s.tasks[0]).toMatchObject({ vehicleId: bike.id, intervalKm: 6000, intervalMonths: 12 });
   });
 
+  it('flags template tasks in the snapshot and leaves hand-added ones empty', async () => {
+    const car = await createVehicle('Flagged');
+    await call('POST', `/api/vehicles/${car.id}/add-from-templates`);
+    const hand = await createTask(car.id, { name: 'Wash by hand' });
+    const tasks = (await snapshot()).tasks.filter((t) => t.vehicleId === car.id);
+    expect(tasks.find((t) => t.id === hand.id)!.templateCode).toBeNull();
+    expect(tasks.some((t) => t.templateCode)).toBe(true);
+  });
+
   it('rejects a task without any interval', async () => {
     const bike = await createVehicle();
     const res = await call('POST', `/api/vehicles/${bike.id}/tasks`, { name: 'Wash', intervalKm: null, intervalMonths: null });

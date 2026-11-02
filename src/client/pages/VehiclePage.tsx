@@ -43,6 +43,7 @@ function TaskList({ due, tasks, owned }: { due: DueInfo[]; tasks: Map<string, Ma
               <div className="task-title">
                 {owned ? <StatusChip status={d.status} /> : null}
                 <span className="due-name">{taskName(task, t)}</span>
+                {task.templateCode ? <span className="chip chip-standard">{t.vehicle.standardTask}</span> : null}
               </div>
               <span className="muted">{describeInterval(task, t)}</span>
               {owned ? <span className="due-text">{describeDue(d, t)}</span> : null}

@@ -38,6 +38,8 @@ export interface MaintenanceTask {
   category: PartCategory | null;
   /** Paused on this Vehicle: no status and no reminder. */
   switchedOff: boolean;
+  /** Set when the Task comes from a standard Plan Template; null for a Task the owner added. */
+  templateCode?: string | null;
 }
 
 /** One line of a Vehicle's factory specs: a fluid capacity or grade, a part size or reference, a torque value. */

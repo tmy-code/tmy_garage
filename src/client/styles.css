@@ -509,6 +509,12 @@ section {
   background: var(--unknown-bg);
 }
 
+.chip-standard {
+  color: var(--unknown);
+  background: var(--unknown-bg);
+  margin-left: 8px;
+}
+
 .chip-pending {
   color: var(--pending);
   background: var(--pending-bg);

@@ -145,7 +145,7 @@ A Vehicle's factory specs, one labelled value per row (for example "Engine oil: 
 | `category` | `engine`, `transmission`, `brakes`, `chassis`, `electrical`, `cooling_climate` or `other`. Empty means `other`. |
 | `notes` | Instructions, torque values, fluid reminders, standard part codes, links. |
 | `switched_off` | Required, yes/no. Paused on this Vehicle: no Due Date, no Reminder. |
-| `template_code` | The Plan Template (part code) the Task came from, empty for the owner's own Tasks. Unique per Vehicle, so adding templates again never doubles a Task, whatever it was renamed to. |
+| `template_code` | The Plan Template (part code) the Task came from, empty for the owner's own Tasks. Shown as a "Standard" badge on the Vehicle page and the Task form. Unique per Vehicle, so adding templates again never doubles a Task, whatever it was renamed to. |
 
 ### Plan Templates
 

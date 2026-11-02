@@ -93,6 +93,7 @@ const toTask = (r: Row): MaintenanceTask => ({
   notes: r.notes,
   category: r.category,
   switchedOff: r.switched_off === 1,
+  templateCode: r.template_code,
 });
 
 const toReading = (r: Row): OdometerReading => ({ id: r.id, vehicleId: r.vehicle_id, date: r.date, odometer: r.odometer });
