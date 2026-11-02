@@ -149,7 +149,7 @@ A Vehicle's factory specs, one labelled value per row (for example "Engine oil: 
 
 ### Plan Templates
 
-The Templates are the built-in list in [`catalogue.ts`](../src/shared/catalogue.ts) (name in both languages, Action, Category, Interval, and the Build details it applies to), plus the owner's changes in `catalogue_parts`.
+The Templates are the built-in list in [`catalogue.ts`](../src/shared/catalogue.ts) (listed in [plan-templates.md](plan-templates.md)) (name in both languages, Action, Category, Interval, and the Build details it applies to), plus the owner's changes in `catalogue_parts`.
 
 - A **new Vehicle** gets the Templates that fit its Build as Tasks, at the Template's Interval (shorter engine oil distance with a turbo).
 - A Template can **include** another (`includes` in the catalogue): logging a Service for the fork seals also logs the fork oil, since the seals are never done without it, while the oil can be done alone. The server adds the included Task to the Service when it is saved.
