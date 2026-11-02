@@ -595,6 +595,8 @@ const MIGRATIONS: (string | ((db: DatabaseSync) => void))[] = [
   (db) => splitCatalogueEntry(db, 'tires', ['tires_front', 'tires_rear']),
   // Likewise the fork oil and seals: the seals are never done without the oil, but the oil can be done alone.
   (db) => splitCatalogueEntry(db, 'moto_fork_oil_seals', ['moto_fork_oil', 'moto_fork_seals']),
+  // And the car shock absorbers, front and rear.
+  (db) => splitCatalogueEntry(db, 'shock_absorbers', ['shock_absorbers_front', 'shock_absorbers_rear']),
 ];
 
 /** Replaces what the owner changed on a template that was split by the same change on each of the new ones. */

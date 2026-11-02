@@ -610,7 +610,7 @@ describe('migrations', () => {
     const latest = openDatabase(join(dir, 'latest.sqlite'));
     const version = (latest.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
     latest.close();
-    const old = openDatabase(path, undefined, version - 2);
+    const old = openDatabase(path, undefined, version - 3);
     old.exec(`INSERT INTO catalogue_parts (garage_id, code, conditions, removed) VALUES ('default', 'tires', '{}', 1)`);
     old.close();
     const migrated = openDatabase(path);
@@ -626,13 +626,29 @@ describe('migrations', () => {
     const latest = openDatabase(join(dir, 'latest.sqlite'));
     const version = (latest.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
     latest.close();
-    const old = openDatabase(path, undefined, version - 1);
+    const old = openDatabase(path, undefined, version - 2);
     old.exec(`INSERT INTO catalogue_parts (garage_id, code, conditions, removed) VALUES ('default', 'moto_fork_oil_seals', '{}', 1)`);
     old.close();
     const migrated = openDatabase(path);
     expect(migrated.prepare('SELECT code, removed FROM catalogue_parts ORDER BY code').all()).toEqual([
       { code: 'moto_fork_oil', removed: 1 },
       { code: 'moto_fork_seals', removed: 1 },
+    ]);
+    migrated.close();
+  });
+
+  it('turns what the owner changed on the car shock absorbers template into the same change on front and rear', () => {
+    const path = join(dir, 'garage.sqlite');
+    const latest = openDatabase(join(dir, 'latest.sqlite'));
+    const version = (latest.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
+    latest.close();
+    const old = openDatabase(path, undefined, version - 1);
+    old.exec(`INSERT INTO catalogue_parts (garage_id, code, conditions, removed) VALUES ('default', 'shock_absorbers', '{}', 1)`);
+    old.close();
+    const migrated = openDatabase(path);
+    expect(migrated.prepare('SELECT code, removed FROM catalogue_parts ORDER BY code').all()).toEqual([
+      { code: 'shock_absorbers_front', removed: 1 },
+      { code: 'shock_absorbers_rear', removed: 1 },
     ]);
     migrated.close();
   });
