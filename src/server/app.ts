@@ -10,6 +10,7 @@ import {
   catalogueChangeInput,
   copyTasksInput,
   addStandardSpecsInput,
+  vehiclePartInput,
   mergeTaskInput,
   documentInput,
   documentOwner,
@@ -29,6 +30,7 @@ import type {
   MaintenanceTask,
   OdometerReading,
   PartUsed,
+  VehiclePart,
   Service,
   Snapshot,
   Vehicle,
@@ -140,6 +142,19 @@ const toPartUsed = (r: Row): PartUsed => ({
   partNumber: r.part_number,
   quantity: r.quantity,
   unit: r.unit,
+  price: r.price,
+  partId: r.part_id,
+});
+
+const toVehiclePart = (r: Row): VehiclePart => ({
+  id: r.id,
+  vehicleId: r.vehicle_id,
+  name: r.name,
+  partNumber: r.part_number,
+  unit: r.unit,
+  quantity: r.quantity,
+  price: r.price,
+  taskId: r.task_id,
 });
 
 /** Groups rows by a key column, keeping their order. */
@@ -227,6 +242,7 @@ function garageReader(db: DatabaseSync, garageId: string) {
       services,
       readings,
       specLines: ownedRows('spec_lines').map(toSpecLine),
+      vehicleParts: ownedRows('vehicle_parts').map(toVehiclePart),
       documents: (db.prepare("SELECT * FROM documents WHERE garage_id = ? AND owner_kind IN ('vehicle', 'service') ORDER BY created_at").all(garageId) as Row[]).map(toDocument),
       catalogue: catalogueEntries(db, garageId),
     };
@@ -521,6 +537,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       // A Service that lists both Tasks keeps the kept one only.
       db.prepare('UPDATE OR IGNORE service_tasks SET task_id = ? WHERE task_id = ?').run(intoTaskId, id);
       db.prepare('DELETE FROM service_tasks WHERE task_id = ?').run(id);
+      db.prepare('UPDATE vehicle_parts SET task_id = ? WHERE task_id = ?').run(intoTaskId, id);
       if (duplicate.baseline_date && (!kept.baseline_date || duplicate.baseline_date > kept.baseline_date)) {
         db.prepare('UPDATE maintenance_tasks SET baseline_date = ?, baseline_odometer = ? WHERE id = ?').run(
           duplicate.baseline_date,
@@ -714,6 +731,52 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     return c.body(null, 204);
   });
 
+  // --- The parts list of a Vehicle (desk work, online only; Services read it from the snapshot) ---
+
+  /** The part already on this Vehicle's list with this name and part number, ignoring case and accents. */
+  function samePart(vehicleId: string, name: string, partNumber: string | null, exceptId = ''): Row | undefined {
+    const rows = db.prepare('SELECT * FROM vehicle_parts WHERE vehicle_id = ? AND id <> ?').all(vehicleId, exceptId) as Row[];
+    return rows.find((r) => looseName(r.name) === looseName(name) && looseName(r.part_number) === looseName(partNumber));
+  }
+
+  function checkPartTask(vehicleId: string, taskId: string | null) {
+    if (taskId === null) return;
+    const task = db.prepare('SELECT vehicle_id FROM maintenance_tasks WHERE id = ?').get(taskId) as Row | undefined;
+    if (!task || task.vehicle_id !== vehicleId) throw new HttpError(422, 'That task is not on this vehicle');
+  }
+
+  app.post('/api/vehicles/:id/parts', async (c) => {
+    const vehicleId = c.req.param('id');
+    vehicleOrThrow(vehicleId);
+    const p = await parse(c, vehiclePartInput);
+    checkPartTask(vehicleId, p.taskId);
+    if (samePart(vehicleId, p.name, p.partNumber)) throw new HttpError(409, 'This part is already on the list');
+    const id = randomUUID();
+    db.prepare('INSERT INTO vehicle_parts (id, vehicle_id, name, part_number, unit, quantity, price, task_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+      id, vehicleId, p.name, p.partNumber, p.unit, p.quantity, p.price, p.taskId,
+    );
+    return c.json(toVehiclePart(ownedRowOrThrow('vehicle_parts', id, 'Part')), 201);
+  });
+
+  app.put('/api/parts/:id', async (c) => {
+    const id = c.req.param('id');
+    const row = ownedRowOrThrow('vehicle_parts', id, 'Part');
+    const p = await parse(c, vehiclePartInput);
+    checkPartTask(row.vehicle_id, p.taskId);
+    if (samePart(row.vehicle_id, p.name, p.partNumber, id)) throw new HttpError(409, 'This part is already on the list');
+    db.prepare('UPDATE vehicle_parts SET name = ?, part_number = ?, unit = ?, quantity = ?, price = ?, task_id = ? WHERE id = ?').run(
+      p.name, p.partNumber, p.unit, p.quantity, p.price, p.taskId, id,
+    );
+    return c.json(toVehiclePart(ownedRowOrThrow('vehicle_parts', id, 'Part')));
+  });
+
+  app.delete('/api/parts/:id', (c) => {
+    const id = c.req.param('id');
+    ownedRowOrThrow('vehicle_parts', id, 'Part');
+    db.prepare('DELETE FROM vehicle_parts WHERE id = ?').run(id);
+    return c.body(null, 204);
+  });
+
   // --- Documents: details in the database, files in uploadsDir under their id ---
 
   /** The Vehicle a Document's owner belongs to, checking the owner is in this Garage. */
@@ -843,8 +906,23 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       const link = db.prepare('INSERT INTO service_tasks (service_id, task_id) VALUES (?, ?)');
       for (const taskId of taskIds) link.run(s.id, taskId);
       db.prepare('DELETE FROM service_items WHERE service_id = ?').run(s.id);
-      const part = db.prepare('INSERT INTO service_items (service_id, sort, description, part_number, quantity, unit) VALUES (?, ?, ?, ?, ?, ?)');
-      partsUsed.forEach((p, i) => part.run(s.id, i, p.description, p.partNumber, p.quantity, p.unit));
+      const part = db.prepare('INSERT INTO service_items (service_id, sort, description, part_number, quantity, unit, price, part_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+      // A part to keep goes on the Vehicle's list (once, whatever the replays), tied to the Service's Task when it has just one.
+      const keep = db.prepare('INSERT OR IGNORE INTO vehicle_parts (id, vehicle_id, name, part_number, unit, quantity, price, task_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+      const listed = db.prepare('SELECT id FROM vehicle_parts WHERE id = ? AND vehicle_id = ?');
+      const oneTask = new Set(s.taskIds).size === 1 ? s.taskIds[0]! : null;
+      const linked = partsUsed.map((p) => {
+        let partId = p.partId;
+        if (p.remember && partId !== null) {
+          const twin = samePart(s.vehicleId, p.description, p.partNumber, partId);
+          if (twin) partId = twin.id;
+          else keep.run(partId, s.vehicleId, p.description, p.partNumber, p.unit, p.quantity, p.price, oneTask);
+        }
+        // A link to a part that is gone, or on another Vehicle, is dropped: the Service keeps its copy.
+        return { ...p, remember: false, partId: partId !== null && listed.get(partId, s.vehicleId) ? partId : null };
+      });
+      linked.forEach((p, i) => part.run(s.id, i, p.description, p.partNumber, p.quantity, p.unit, p.price, p.partId));
+      partsUsed.splice(0, partsUsed.length, ...linked);
     });
     return c.json({ ...s, taskIds, partsUsed });
   });

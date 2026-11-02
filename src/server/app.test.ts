@@ -9,6 +9,7 @@ import type {
   MaintenanceTask,
   Snapshot,
   SpecLine,
+  VehiclePart,
   Vehicle,
 } from '../shared/types.ts';
 import { BUILT_IN_CATALOGUE, type Build } from '../shared/catalogue.ts';
@@ -434,7 +435,7 @@ describe('spec lines and the plan templates', () => {
     });
   });
 
-  it('stores the components of a Service, ignoring what older phones also send', async () => {
+  it('stores the components of a Service with the price paid, ignoring a link to a part that is gone', async () => {
     const bike = await createVehicle();
     const task = await createTask(bike.id);
     const res = await call('PUT', '/api/services/svc-00009', {
@@ -443,10 +444,48 @@ describe('spec lines and the plan templates', () => {
       date: '2026-10-01',
       odometer: 18000,
       taskIds: [task.id],
-      partsUsed: [{ partSpecId: 'gone', description: 'Motul 7100 10W-40', quantity: 3, unit: 'litre', price: 40, supplier: 'Shop' }],
+      partsUsed: [{ partSpecId: 'gone', partId: 'gone-part-id', description: 'Motul 7100 10W-40', quantity: 3, unit: 'litre', price: 40, supplier: 'Shop' }],
     });
     expect(res.status).toBe(200);
-    expect((await snapshot()).services[0]!.partsUsed).toEqual([{ description: 'Motul 7100 10W-40', partNumber: null, quantity: 3, unit: 'litre' }]);
+    expect((await snapshot()).services[0]!.partsUsed).toEqual([{ description: 'Motul 7100 10W-40', partNumber: null, quantity: 3, unit: 'litre', price: 40, partId: null }]);
+  });
+
+  it('keeps a Vehicle’s parts list: add, edit, refuse a twin, delete', async () => {
+    const bike = await createVehicle();
+    const task = await createTask(bike.id);
+    const part = (await (await call('POST', `/api/vehicles/${bike.id}/parts`, { name: 'Motul 7100 10W-40', unit: 'litre', quantity: 3.2, price: 12.5, taskId: task.id })).json()) as VehiclePart;
+    expect(part).toMatchObject({ name: 'Motul 7100 10W-40', unit: 'litre', quantity: 3.2, price: 12.5, taskId: task.id, partNumber: null });
+    expect((await call('POST', `/api/vehicles/${bike.id}/parts`, { name: 'motul 7100 10w-40', unit: 'litre', quantity: 1 })).status).toBe(409);
+    expect((await call('POST', `/api/vehicles/${bike.id}/parts`, { name: 'x', unit: 'litre', quantity: 1, taskId: 'nope' })).status).toBe(422);
+    await call('PUT', `/api/parts/${part.id}`, { name: 'Motul 7100 10W-40', partNumber: 'REF-1', unit: 'litre', quantity: 3.5, price: null });
+    expect((await snapshot()).vehicleParts).toEqual([{ ...part, partNumber: 'REF-1', quantity: 3.5, price: null, taskId: null }]);
+    expect((await call('DELETE', `/api/parts/${part.id}`)).status).toBe(204);
+    expect((await snapshot()).vehicleParts).toEqual([]);
+  });
+
+  it('puts a part to remember on the list once, ties it to a single Task, and keeps old Services when it is deleted', async () => {
+    const bike = await createVehicle();
+    const task = await createTask(bike.id);
+    const body = {
+      id: 'svc-00010',
+      vehicleId: bike.id,
+      date: '2026-10-01',
+      odometer: 18000,
+      taskIds: [task.id],
+      partsUsed: [{ description: 'Mann HU 7008 z', partNumber: 'HU 7008 z', quantity: 1, unit: 'piece', price: 9.9, partId: 'part-0000001', remember: true }],
+    };
+    expect((await call('PUT', '/api/services/svc-00010', body)).status).toBe(200);
+    expect((await call('PUT', '/api/services/svc-00010', body)).status).toBe(200);
+    const parts = (await snapshot()).vehicleParts;
+    expect(parts).toEqual([{ id: 'part-0000001', vehicleId: bike.id, name: 'Mann HU 7008 z', partNumber: 'HU 7008 z', unit: 'piece', quantity: 1, price: 9.9, taskId: task.id }]);
+    expect((await snapshot()).services[0]!.partsUsed[0]).toMatchObject({ partId: 'part-0000001', price: 9.9 });
+    // The same part typed again in another Service links to the list instead of doubling it.
+    await call('PUT', '/api/services/svc-00011', { ...body, id: 'svc-00011', partsUsed: [{ ...body.partsUsed[0], partId: 'part-0000002' }] });
+    expect((await snapshot()).vehicleParts).toHaveLength(1);
+    expect((await snapshot()).services.find((x) => x.id === 'svc-00011')!.partsUsed[0]!.partId).toBe('part-0000001');
+    await call('DELETE', '/api/parts/part-0000001');
+    const kept = (await snapshot()).services.find((x) => x.id === 'svc-00010')!.partsUsed[0]!;
+    expect(kept).toMatchObject({ description: 'Mann HU 7008 z', partId: null, price: 9.9 });
   });
 });
 
@@ -646,7 +685,7 @@ describe('migrations', () => {
     const latest = openDatabase(join(dir, 'latest.sqlite'));
     const version = (latest.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
     latest.close();
-    const old = openDatabase(path, undefined, version - 4);
+    const old = openDatabase(path, undefined, version - 5);
     old.exec(`INSERT INTO catalogue_parts (garage_id, code, conditions, removed) VALUES ('default', 'tires', '{}', 1)`);
     old.close();
     const migrated = openDatabase(path);
@@ -662,7 +701,7 @@ describe('migrations', () => {
     const latest = openDatabase(join(dir, 'latest.sqlite'));
     const version = (latest.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
     latest.close();
-    const old = openDatabase(path, undefined, version - 3);
+    const old = openDatabase(path, undefined, version - 4);
     old.exec(`INSERT INTO catalogue_parts (garage_id, code, conditions, removed) VALUES ('default', 'moto_fork_oil_seals', '{}', 1)`);
     old.close();
     const migrated = openDatabase(path);
@@ -678,7 +717,7 @@ describe('migrations', () => {
     const latest = openDatabase(join(dir, 'latest.sqlite'));
     const version = (latest.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
     latest.close();
-    const old = openDatabase(path, undefined, version - 2);
+    const old = openDatabase(path, undefined, version - 3);
     old.exec(`INSERT INTO catalogue_parts (garage_id, code, conditions, removed) VALUES ('default', 'shock_absorbers', '{}', 1)`);
     old.close();
     const migrated = openDatabase(path);

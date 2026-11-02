@@ -225,6 +225,7 @@ describe('vehicleDue', () => {
       services: [service('2025-09-01', 15_000, ['oil', 'brake-fluid'])],
       readings: [{ id: 'r1', vehicleId: 'bike', date: '2026-10-01', odometer: 21_500 }],
       specLines: [],
+      vehicleParts: [],
       documents: [],
       catalogue: [],
     };
@@ -244,6 +245,7 @@ describe('vehicleDue', () => {
       services: [service('2025-09-01', 15_000, ['oil', 'chain'])],
       readings: [],
       specLines: [],
+      vehicleParts: [],
       documents: [],
       catalogue: [],
     };

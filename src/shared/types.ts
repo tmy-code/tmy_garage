@@ -60,6 +60,28 @@ export interface PartUsed {
   partNumber: string | null;
   quantity: number;
   unit: PartUnit;
+  /** What was paid per piece or per litre. */
+  price?: number | null;
+  /** The Vehicle Part it was picked from; a copy of its details is kept here, so the history never changes. */
+  partId?: string | null;
+  /** Only when sending a Service: also keep it in the Vehicle's parts list (under `partId`). */
+  remember?: boolean;
+}
+
+/** A part or fluid the owner buys for one Vehicle, picked when logging a Service. */
+export interface VehiclePart {
+  id: string;
+  vehicleId: string;
+  /** Brand and variant, such as "Motul 7100 10W-40". */
+  name: string;
+  partNumber: string | null;
+  unit: PartUnit;
+  /** How much a Service usually uses. */
+  quantity: number;
+  /** Per piece or per litre; empty when unknown. */
+  price: number | null;
+  /** The Task it is usually bought for; its parts are suggested first when that Task is ticked. */
+  taskId: string | null;
 }
 
 export interface Service {
@@ -112,6 +134,7 @@ export interface Snapshot {
   services: Service[];
   readings: OdometerReading[];
   specLines: SpecLine[];
+  vehicleParts: VehiclePart[];
   /** Document details only; the files are fetched on demand. */
   documents: GarageDocument[];
   /** The owner's changes to the parts catalogue; see catalogueOf. */

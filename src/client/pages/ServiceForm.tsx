@@ -3,10 +3,10 @@ import { todayIso } from '../../shared/dates.ts';
 import { effectiveInterval, vehicleDue } from '../../shared/due.ts';
 import { PART_CATEGORIES, type PartCategory } from '../../shared/catalogue.ts';
 import type { PartUnit, PerformedBy, ServiceKind } from '../../shared/schemas.ts';
-import type { OdometerReading, PartUsed, Service, Snapshot, Vehicle } from '../../shared/types.ts';
+import type { OdometerReading, PartUsed, Service, Snapshot, Vehicle, VehiclePart } from '../../shared/types.ts';
 import { newId } from '../api.ts';
 import { confirmDelete, Field, FormError, Layout, StatusChip } from '../components.tsx';
-import { formatKm, parseNumber, taskName } from '../format.ts';
+import { formatKm, formatMoney, parseNumber, taskName } from '../format.ts';
 import { showToast } from '../feedback.ts';
 import { useT, type Messages } from '../i18n.ts';
 import { navigate } from '../router.ts';
@@ -21,6 +21,12 @@ interface PartDraft {
   partNumber: string;
   quantity: string;
   unit: PartUnit;
+  /** Price per piece or litre, as typed. */
+  price: string;
+  /** The part of the Vehicle's list it was picked from, if it still is that part. */
+  partId: string | null;
+  /** A part typed by hand is also kept in the list, unless the owner unticks it. */
+  remember: boolean;
 }
 
 let nextKey = 1;
@@ -32,17 +38,39 @@ function toDraft(p: PartUsed): PartDraft {
     partNumber: p.partNumber ?? '',
     quantity: String(p.quantity),
     unit: p.unit,
+    price: p.price != null ? String(p.price) : '',
+    partId: p.partId ?? null,
+    remember: false,
+  };
+}
+
+function draftOfListed(p: VehiclePart): PartDraft {
+  return {
+    key: nextKey++,
+    description: p.name,
+    partNumber: p.partNumber ?? '',
+    quantity: String(p.quantity),
+    unit: p.unit,
+    price: p.price !== null ? String(p.price) : '',
+    partId: p.id,
+    remember: false,
   };
 }
 
 function fromDraft(d: PartDraft, t: Messages): PartUsed {
   const quantity = parseNumber(d.quantity);
+  const price = parseNumber(d.price);
   if (!d.description.trim() || quantity === null || Number.isNaN(quantity) || quantity <= 0) throw new Error(t.workshop.partError);
+  if (price !== null && (Number.isNaN(price) || price < 0)) throw new Error(t.workshop.partError);
   return {
     description: d.description.trim(),
     partNumber: d.partNumber.trim() || null,
     quantity,
     unit: d.unit,
+    price,
+    // An id made here for a part to keep travels with the Service, so sending it again never doubles it.
+    partId: d.partId ?? (d.remember ? newId() : null),
+    ...(d.remember && !d.partId ? { remember: true } : {}),
   };
 }
 
@@ -118,8 +146,20 @@ export function ServiceForm({
         partNumber: '',
         quantity: '1',
         unit: 'piece',
+        price: '',
+        partId: null,
+        remember: true,
       },
     ]);
+  }
+
+  /** The Vehicle's listed parts: those usually bought for a ticked Task first. */
+  const listed = snapshot.vehicleParts.filter((p) => p.vehicleId === vehicle.id).sort((a, b) => a.name.localeCompare(b.name));
+  const forTasks = listed.filter((p) => p.taskId !== null && selected.has(p.taskId));
+  const others = listed.filter((p) => !forTasks.includes(p));
+  function pickListed(id: string) {
+    const part = listed.find((p) => p.id === id);
+    if (part) setParts([...parts, draftOfListed(part)]);
   }
 
   async function submit(event: FormEvent) {
@@ -295,7 +335,7 @@ export function ServiceForm({
                   </div>
                   <input
                     value={d.description}
-                    onChange={(e) => setPart(d.key, { description: e.target.value })}
+                    onChange={(e) => setPart(d.key, { description: e.target.value, ...(d.partId ? { partId: null, remember: true } : {}) })}
                     maxLength={200}
                     placeholder={t.workshop.descriptionHint}
                     aria-label={t.workshop.description}
@@ -310,18 +350,50 @@ export function ServiceForm({
                         <option value="litre">{t.workshop.litre}</option>
                       </select>
                     </Field>
+                    <Field label={t.workshop.unitPrice}>
+                      <input inputMode="decimal" value={d.price} onChange={(e) => setPart(d.key, { price: e.target.value })} />
+                    </Field>
                   </div>
+                  {d.partId === null ? (
+                    <label className="check">
+                      <input type="checkbox" checked={d.remember} onChange={(e) => setPart(d.key, { remember: e.target.checked })} />
+                      <span>{t.workshop.keepPart}</span>
+                    </label>
+                  ) : null}
                   <details className="part-details">
                     <summary>{t.workshop.moreDetails}</summary>
                     <div className="row">
                       <Field label={t.workshop.partNumber}>
-                        <input value={d.partNumber} onChange={(e) => setPart(d.key, { partNumber: e.target.value })} maxLength={120} />
+                        <input value={d.partNumber} onChange={(e) => setPart(d.key, { partNumber: e.target.value, ...(d.partId ? { partId: null, remember: true } : {}) })} maxLength={120} />
                       </Field>
                     </div>
                   </details>
                 </div>
               ))}
               <div className="actions">
+                {listed.length > 0 ? (
+                  <select value="" onChange={(e) => pickListed(e.target.value)} aria-label={t.workshop.pickPart}>
+                    <option value="">{t.workshop.pickPart}</option>
+                    {forTasks.length > 0 ? (
+                      <optgroup label={t.workshop.pickPartForTasks}>
+                        {forTasks.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {listedLabel(p, t)}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ) : null}
+                    {others.length > 0 ? (
+                      <optgroup label={forTasks.length > 0 ? t.workshop.pickPartOthers : t.workshop.partsListLink}>
+                        {others.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {listedLabel(p, t)}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ) : null}
+                  </select>
+                ) : null}
                 <button type="button" className="button button-small" onClick={addEmptyPart}>
                   {t.workshop.addPartUsed}
                 </button>
@@ -350,6 +422,12 @@ export function ServiceForm({
       ) : null}
     </Layout>
   );
+}
+
+/** "Motul 7100 10W-40 · 3.2 L" in the picker. */
+function listedLabel(p: VehiclePart, t: Messages): string {
+  const unit = p.unit === 'litre' ? t.workshop.litre : t.workshop.piece;
+  return `${p.name} · ${p.quantity} ${unit.toLowerCase()}${p.price !== null ? ` · ${formatMoney(p.price, t)}` : ''}`;
 }
 
 /** Says a Service or Odometer Reading was saved; a new one can be taken back for a few seconds. */

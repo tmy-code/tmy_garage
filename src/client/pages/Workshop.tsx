@@ -2,10 +2,10 @@ import { Fragment, useMemo, useState, useSyncExternalStore, type FormEvent, type
 import { PART_CATEGORIES, type PartCategory } from '../../shared/catalogue.ts';
 import { todayIso } from '../../shared/dates.ts';
 import { vehicleDue } from '../../shared/due.ts';
-import type { SpecGroup } from '../../shared/schemas.ts';
-import type { MaintenanceTask, PartUsed, Snapshot, SpecLine, Vehicle } from '../../shared/types.ts';
+import type { PartUnit, SpecGroup } from '../../shared/schemas.ts';
+import type { MaintenanceTask, PartUsed, Snapshot, SpecLine, Vehicle, VehiclePart } from '../../shared/types.ts';
 import { confirmDelete, Field, FormError, Layout, NeedsConnection, StatusChip } from '../components.tsx';
-import { describeDue, describeInterval, formatDate, formatKm, formatMoney, taskName } from '../format.ts';
+import { describeDue, describeInterval, formatDate, formatKm, formatMoney, parseNumber, taskName } from '../format.ts';
 import { VehicleIcon } from '../brands.tsx';
 import { Icon } from '../icons.tsx';
 import { showToast } from '../feedback.ts';
@@ -168,6 +168,126 @@ function SpecEditor({ vehicle, existing, editor }: { vehicle: Vehicle; existing?
         <input value={value} onChange={(e) => setValue(e.target.value)} required maxLength={200} />
       </Field>
     </InlineEditor>
+  );
+}
+
+// --- The parts list of a Vehicle: what is bought, picked again when logging a Service ---
+
+function PartEditor({ vehicle, snapshot, existing, editor }: { vehicle: Vehicle; snapshot: Snapshot; existing?: VehiclePart; editor: ReturnType<typeof useEditor> }) {
+  const t = useT();
+  const [name, setName] = useState(existing?.name ?? '');
+  const [partNumber, setPartNumber] = useState(existing?.partNumber ?? '');
+  const [unit, setUnit] = useState<PartUnit>(existing?.unit ?? 'piece');
+  const [quantity, setQuantity] = useState(String(existing?.quantity ?? 1));
+  const [price, setPrice] = useState(existing?.price != null ? String(existing.price) : '');
+  const [taskId, setTaskId] = useState(existing?.taskId ?? '');
+  const tasks = snapshot.tasks.filter((task) => task.vehicleId === vehicle.id);
+  function save() {
+    const qty = parseNumber(quantity);
+    const unitPrice = parseNumber(price);
+    if (qty === null || Number.isNaN(qty) || qty <= 0 || (unitPrice !== null && (Number.isNaN(unitPrice) || unitPrice < 0))) {
+      editor.setError(t.workshop.partError);
+      return;
+    }
+    const body = { name, partNumber, unit, quantity: qty, price: unitPrice, taskId: taskId || null };
+    void editor.save(() => (existing ? online('PUT', `/api/parts/${existing.id}`, body) : online('POST', `/api/vehicles/${vehicle.id}/parts`, body)));
+  }
+  return (
+    <InlineEditor
+      onSubmit={save}
+      onCancel={() => editor.setEditing(null)}
+      onDelete={existing ? () => editor.remove(existing.name, () => online('DELETE', `/api/parts/${existing.id}`)) : undefined}
+      disabled={editor.disabled}
+      error={editor.error}
+    >
+      <Field label={t.workshop.description} hint={t.workshop.descriptionHint}>
+        <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={200} autoFocus />
+      </Field>
+      <Field label={t.workshop.partNumber}>
+        <input value={partNumber} onChange={(e) => setPartNumber(e.target.value)} maxLength={120} />
+      </Field>
+      <div className="row">
+        <Field label={t.workshop.unit}>
+          <select value={unit} onChange={(e) => setUnit(e.target.value as PartUnit)}>
+            <option value="piece">{t.workshop.piece}</option>
+            <option value="litre">{t.workshop.litre}</option>
+          </select>
+        </Field>
+        <Field label={t.workshop.usualQuantity}>
+          <input inputMode="decimal" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+        </Field>
+        <Field label={t.workshop.unitPrice}>
+          <input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} />
+        </Field>
+      </div>
+      <Field label={t.workshop.partTask} hint={t.workshop.partTaskHint}>
+        <select value={taskId} onChange={(e) => setTaskId(e.target.value)}>
+          <option value="">{t.workshop.noTask}</option>
+          {tasks.map((task) => (
+            <option key={task.id} value={task.id}>
+              {taskName(task, t)}
+            </option>
+          ))}
+        </select>
+      </Field>
+    </InlineEditor>
+  );
+}
+
+function PartText({ part, snapshot }: { part: VehiclePart; snapshot: Snapshot }) {
+  const t = useT();
+  const task = snapshot.tasks.find((x) => x.id === part.taskId);
+  const unit = part.unit === 'litre' ? t.workshop.litre : t.workshop.piece;
+  return (
+    <>
+      <strong>{part.name}</strong>
+      {part.partNumber ? <span>{part.partNumber}</span> : null}
+      <span className="muted">
+        {t.workshop.usualQuantity}: {part.quantity} {unit.toLowerCase()}
+        {part.price !== null ? ` · ${formatMoney(part.price, t)} / ${unit.toLowerCase()}` : ''}
+      </span>
+      {task ? <span className="muted">{taskName(task, t)}</span> : null}
+    </>
+  );
+}
+
+export function PartsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: Snapshot }) {
+  const t = useT();
+  const editor = useEditor();
+  const wide = useWide();
+  const parts = snapshot.vehicleParts.filter((p) => p.vehicleId === vehicle.id).sort((a, b) => a.name.localeCompare(b.name));
+  const editing = parts.find((p) => p.id === editor.editing);
+  return (
+    <Layout title={t.workshop.partsListTitle(vehicle.name)} back={`/vehicles/${vehicle.id}`} titleAction={<AddButton editor={editor} />}>
+      <NeedsConnection />
+      <p className="muted">{t.workshop.partsListIntro}</p>
+      <div className={wide ? 'split' : undefined}>
+        <div className="split-main">
+          {!wide && editor.editing === 'new' ? <PartEditor vehicle={vehicle} snapshot={snapshot} editor={editor} /> : null}
+          {parts.length === 0 && editor.editing !== 'new' ? <p className="empty">{t.workshop.noParts}</p> : null}
+          <ul className="list">
+            {parts.map((part) =>
+              !wide && editor.editing === part.id ? (
+                <li key={part.id} className="editing">
+                  <PartEditor vehicle={vehicle} snapshot={snapshot} existing={part} editor={editor} />
+                </li>
+              ) : (
+                <li key={part.id}>
+                  <button type="button" className={`item-row ${editor.editing === part.id ? 'item-selected' : ''}`} onClick={() => editor.setEditing(part.id)}>
+                    <PartText part={part} snapshot={snapshot} />
+                  </button>
+                </li>
+              ),
+            )}
+          </ul>
+        </div>
+        {wide && editor.editing ? (
+          <div className="side-editor">
+            <PartEditor key={editor.editing} vehicle={vehicle} snapshot={snapshot} existing={editing} editor={editor} />
+          </div>
+        ) : null}
+      </div>
+    </Layout>
   );
 }
 

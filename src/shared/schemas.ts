@@ -31,6 +31,12 @@ export const performedBy = z.enum(['diy', 'garage', 'dealership']);
 /** Maintenance of the plan, or a repair outside it. */
 export const serviceKind = z.enum(['maintenance', 'repair']);
 const quantity = z.number().positive().max(10_000);
+const unitPrice = z
+  .number()
+  .min(0)
+  .max(100_000)
+  .nullish()
+  .transform((v) => v ?? null);
 
 const flag = z
   .boolean()
@@ -212,6 +218,19 @@ export const partUsedInput = z.object({
   partNumber: optionalText(120),
   quantity,
   unit: partUnit,
+  price: unitPrice,
+  partId: z.string().min(8).max(64).nullish().transform((v) => v ?? null),
+  remember: z.boolean().default(false),
+});
+
+/** A part or fluid in a Vehicle's parts list. */
+export const vehiclePartInput = z.object({
+  name: z.string().trim().min(1).max(200),
+  partNumber: optionalText(120),
+  unit: partUnit,
+  quantity,
+  price: unitPrice,
+  taskId: z.string().min(1).nullish().transform((v) => v ?? null),
 });
 
 export const serviceInput = z

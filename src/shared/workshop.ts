@@ -43,6 +43,7 @@ export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
     services: snapshot.services.map(normalizeService),
     catalogue: (snapshot.catalogue ?? []).map((e) => ({ ...e, overrides: e.overrides ?? null, own: e.own ? { ...e.own, action: e.own.action ?? 'replace' } : null })),
     specLines: (snapshot.specLines ?? []).map((l) => ({ ...l, category: l.category ?? null })),
+    vehicleParts: (snapshot.vehicleParts ?? []).map((p) => ({ ...p, partNumber: p.partNumber ?? null, price: p.price ?? null, taskId: p.taskId ?? null })),
     vehicles: snapshot.vehicles.map((v) => ({
       ...v,
       vin: v.vin ?? null,
@@ -67,5 +68,5 @@ export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
 }
 
 export function normalizeService(service: Service): Service {
-  return { ...service, partsUsed: (service.partsUsed ?? []).map((p) => ({ description: p.description, partNumber: p.partNumber ?? null, quantity: p.quantity, unit: p.unit })), kind: service.kind ?? 'maintenance', title: service.title ?? null, category: service.category ?? null, performedBy: service.performedBy ?? 'diy', totalCost: service.totalCost ?? null };
+  return { ...service, partsUsed: (service.partsUsed ?? []).map((p) => ({ description: p.description, partNumber: p.partNumber ?? null, quantity: p.quantity, unit: p.unit, price: p.price ?? null, partId: p.partId ?? null, ...(p.remember ? { remember: true } : {}) })), kind: service.kind ?? 'maintenance', title: service.title ?? null, category: service.category ?? null, performedBy: service.performedBy ?? 'diy', totalCost: service.totalCost ?? null };
 }

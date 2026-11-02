@@ -56,6 +56,7 @@ const base: Snapshot = {
   services: [],
   readings: [],
   specLines: [],
+  vehicleParts: [],
   documents: [],
   catalogue: [],
 };
@@ -90,7 +91,7 @@ describe('normalizeSnapshot', () => {
     const s = normalizeSnapshot(old);
     expect(s.tasks[0]).toMatchObject({ notes: null, category: null, action: 'replace', switchedOff: false });
     expect(s.services[0]).toMatchObject({ kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null });
-    expect(s.services[0]!.partsUsed).toEqual([{ description: 'Oil', partNumber: null, quantity: 1, unit: 'litre' }]);
+    expect(s.services[0]!.partsUsed).toEqual([{ description: 'Oil', partNumber: null, quantity: 1, unit: 'litre', price: 5, partId: null }]);
     expect(s.specLines).toEqual([]);
   });
 });

@@ -602,6 +602,24 @@ const MIGRATIONS: (string | ((db: DatabaseSync) => void))[] = [
   ALTER TABLE spec_lines ADD COLUMN template_code TEXT;
   CREATE UNIQUE INDEX spec_lines_template ON spec_lines (vehicle_id, template_code) WHERE template_code IS NOT NULL;
 `,
+  `
+  -- The parts and fluids bought for a Vehicle, picked when logging a Service. A Service keeps its own copy of what it used,
+  -- with a loose link back (part_id) and the price paid.
+  CREATE TABLE vehicle_parts (
+    id TEXT PRIMARY KEY,
+    vehicle_id TEXT NOT NULL REFERENCES vehicles(id),
+    name TEXT NOT NULL,
+    part_number TEXT,
+    unit TEXT NOT NULL CHECK (unit IN ('piece', 'litre')),
+    quantity REAL NOT NULL DEFAULT 1,
+    price REAL,
+    task_id TEXT REFERENCES maintenance_tasks(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX vehicle_parts_vehicle ON vehicle_parts (vehicle_id);
+  ALTER TABLE service_items ADD COLUMN part_id TEXT REFERENCES vehicle_parts(id) ON DELETE SET NULL;
+  ALTER TABLE service_items ADD COLUMN price REAL;
+`,
 ];
 
 /** Replaces what the owner changed on a template that was split by the same change on each of the new ones. */

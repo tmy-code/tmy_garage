@@ -22,7 +22,7 @@ _Avoid_: Part Spec, Vehicle Spec, Torque Spec
 
 ### In the French interface
 
-Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Due Date → échéance, Interval → intervalle, Spec Line → caractéristique (fiche technique), Build → motorisation, Plan Template → modèle de tâche, Document → document, Reminder → rappel, Performed by → réalisé par, Total cost → coût total.
+Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Due Date → échéance, Interval → intervalle, Spec Line → caractéristique (fiche technique), Vehicle Part → pièce ou fluide, Build → motorisation, Plan Template → modèle de tâche, Document → document, Reminder → rappel, Performed by → réalisé par, Total cost → coût total.
 
 ## Maintenance Plan
 
@@ -60,8 +60,12 @@ A Service outside the plan: a title and a Category instead of Tasks (a Task can 
 _Avoid_: Fix, breakdown
 
 **Component Used**:
-A line of a Service naming what went in, with brand and variant ("Motul 7100 10W-40"), a part number, and a quantity in pieces or litres.
+A line of a Service naming what went in, with brand and variant ("Motul 7100 10W-40"), a part number, a quantity in pieces or litres and the price paid per unit. It is a copy: the Service keeps it as logged, even if the Vehicle Part it was picked from changes.
 _Avoid_: Part Used, Part Spec
+
+**Vehicle Part**:
+A part or fluid bought for one Vehicle ("Motul 7100 10W-40", "Mann HU 7008 z"), with its part number, unit, usual quantity and price per unit, and optionally the Task it is bought for. The Vehicle's parts list is what the owner picks from when logging a Service. Not the same as a Spec Line, which is the factory figure.
+_Avoid_: Catalogue (that word is for the Plan Templates), stock, inventory
 
 **Receipt**:
 The photo or PDF of the invoice attached to a Service.

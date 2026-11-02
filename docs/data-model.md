@@ -10,7 +10,7 @@ The app rests on five parts.
 
 1. **Vehicle Profile**: who the Vehicle is (`vehicles`) and its factory specs, a simple list of labelled values (`spec_lines`).
 2. **Maintenance Plan**: the Vehicle's own Tasks (`maintenance_tasks`), each with an Action, an Interval, a Category and Notes. A new Vehicle starts from the **Plan Templates** that fit its Build; after that the plan is the owner's.
-3. **Service History Log**: Services (`services`) with who did the work, the total cost, the Tasks done (`service_tasks`), the components used (`service_items`) and a receipt (`documents`).
+3. **Service History Log**: Services (`services`) with who did the work, the total cost, the Tasks done (`service_tasks`), the components used (`service_items`, picked from the Vehicle's parts list `vehicle_parts`) and a receipt (`documents`).
 4. **Mileage Log**: dated odometer values (`odometer_readings`, and each Service's own).
 5. **Status**: never stored. It is worked out from the other four (see [Worked out, not stored](#worked-out-not-stored)).
 
@@ -25,6 +25,8 @@ flowchart TD
   Template[Plan Templates, by Build] -. seeds a new Vehicle .-> Task
   Service -- did --> Task
   Service --> Item[Component Used]
+  Vehicle --> Part[Vehicle Part]
+  Part -. picked into .-> Item
   Service --> Receipt[Receipt, a Document]
 
   Task --> Status{{5. Status}}
@@ -194,6 +196,9 @@ erDiagram
   services ||--o{ service_tasks : did
   maintenance_tasks ||--o{ service_tasks : done_in
   services ||--o{ service_items : used
+  vehicles ||--o{ vehicle_parts : buys
+  vehicle_parts |o--o{ service_items : picked_into
+  maintenance_tasks |o--o{ vehicle_parts : bought_for
   services ||--o{ documents : receipt
 ```
 
@@ -233,6 +238,27 @@ The components used in a Service. The key is `service_id` and `sort`.
 | `part_number` | |
 | `quantity` | Required. |
 | `unit` | Required. `piece` or `litre`. |
+| `price` | What was paid per piece or per litre, when known. |
+| `part_id` | → `vehicle_parts`, the Vehicle Part it was picked from. Loose: it is emptied if that part is deleted, and the component keeps its own copy of the description, part number, quantity, unit and price, so history never changes. |
+
+### `vehicle_parts`
+
+The parts and fluids bought for one Vehicle: the **parts list**. When logging a Service, the owner picks from it instead of typing, and the form fills in the description, part number, unit, usual quantity and price. It is the list of what is actually bought ("Motul 7100 10W-40"), unlike a Spec Line, which is the factory reference ("Engine oil: 10W-40, 3.2 L"); the two are not linked.
+
+| Column | Meaning |
+| --- | --- |
+| `vehicle_id` | Required. → `vehicles`. Each Vehicle has its own list. |
+| `name` | Required, up to 200 characters. Brand and variant, such as "Motul 7100 10W-40". With the part number, it is unique per Vehicle ignoring case and accents: saving a twin is refused (409). |
+| `part_number` | |
+| `unit` | Required. `piece` or `litre`. |
+| `quantity` | Required. How much a Service usually uses (3.2 litres of oil, 1 filter). |
+| `price` | Per piece or per litre; empty when unknown. Changed by hand only: a Service never changes it. |
+| `task_id` | → `maintenance_tasks`, the Task it is usually bought for. When that Task is ticked in the Service form, its parts are listed first. Emptied if the Task is deleted; moves to the kept Task when two Tasks are merged. |
+
+How the list grows:
+- **Parts and fluids page** (Workshop, per Vehicle): add, edit and delete. Online only, like the Specs page. The list travels in the offline snapshot, so the Service form can pick from it with no signal.
+- **From a Service**: a component typed by hand is also kept in the list unless "Keep in the parts list" is unticked. The phone makes the part's id and sends it with the Service, so sending it again never doubles it, and a Service logged offline works the same. If the list already has that name and part number, the component links to it instead of adding a twin. When the Service did exactly one Task, the new part is tied to it.
+- Editing the description or part number of a picked component detaches it from the list part (it is then a new part to keep, or a plain copy).
 
 ### `documents`
 
@@ -319,6 +345,7 @@ Foreign keys stop anything from being deleted while other rows still need it, ex
 | Maintenance Task | Refused if a Service used it. Otherwise it goes. |
 | Service | Its Task links, components and Documents go too. |
 | Spec Line | Goes. |
+| Vehicle Part | Goes. The components of past Services keep their copy and lose only the link. |
 | A Plan Template of the owner's | Goes. Vehicles keep their Tasks. |
 | A built-in Plan Template | It can't be deleted. It can only be taken off the list, or set back to the built-in version. |
 
@@ -326,7 +353,7 @@ Foreign keys stop anything from being deleted while other rows still need it, ex
 
 The phone keeps one `Snapshot` (defined in [`types.ts`](../src/shared/types.ts)) so it works in the garage with no signal. This design is explained in [ADR 0001](adr/0001-offline-service-logging-via-send-queue.md).
 
-- The snapshot holds Vehicles, Tasks, Services, readings, Spec Lines and the Template changes. It holds Document details, but not the files.
+- The snapshot holds Vehicles, Tasks, Services, readings, Spec Lines, the parts lists and the Template changes. It holds Document details, but not the files.
 - It groups data the way screens use it, not the way tables store it. For example, a Service carries its `taskIds` and `partsUsed` as lists.
 - Services and Odometer Readings can be logged offline. They wait in a queue on the phone and are sent when the connection returns. Everything else needs a connection.
 - A phone may hold a snapshot saved by an older version of the app. `normalizeSnapshot` in [`workshop.ts`](../src/shared/workshop.ts) fills in what it lacks, and drops fields that no longer exist.

@@ -72,6 +72,7 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
   const pending = new Set(outbox.map((op) => op.data.id));
   const owned = vehicle.status === 'owned';
   const specCount = snapshot.specLines.filter((s) => s.vehicleId === vehicle.id).length;
+  const partCount = snapshot.vehicleParts.filter((p) => p.vehicleId === vehicle.id).length;
   const [allHistory, setAllHistory] = useState(false);
   async function addFromTemplates() {
     try {
@@ -196,6 +197,11 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
               <li>
                 <a href={`#/vehicles/${vehicle.id}/specs`}>
                   {t.workshop.section} <span className="muted">{t.workshop.count(specCount)}</span>
+                </a>
+              </li>
+              <li>
+                <a href={`#/vehicles/${vehicle.id}/parts`}>
+                  {t.workshop.partsListLink} <span className="muted">{t.workshop.count(partCount)}</span>
                 </a>
               </li>
             </ul>

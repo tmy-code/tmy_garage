@@ -8,6 +8,7 @@ const base: Snapshot = {
   services: [{ id: 's1', vehicleId: 'v', date: '2026-01-01', odometer: 100, taskIds: ['t'], notes: null, kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null, partsUsed: [] }],
   readings: [],
   specLines: [],
+  vehicleParts: [],
   documents: [],
   catalogue: [],
 };

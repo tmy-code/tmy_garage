@@ -8,7 +8,7 @@ import { catalogueOf } from '../shared/catalogue.ts';
 import { ReadingForm, ServiceForm } from './pages/ServiceForm.tsx';
 import { CopyTasks, SellForm, TaskForm, VehicleForm } from './pages/SetupForms.tsx';
 import { VehiclePage } from './pages/VehiclePage.tsx';
-import { SpecsPage, TaskPage, WorkshopPage } from './pages/Workshop.tsx';
+import { PartsPage, SpecsPage, TaskPage, WorkshopPage } from './pages/Workshop.tsx';
 import { scrollForNewRoute, useRoute } from './router.ts';
 import { sync, useStore } from './store.ts';
 
@@ -87,6 +87,8 @@ export function App() {
         return <CopyTasks vehicle={vehicle} snapshot={snapshot} />;
       case 'specs':
         return <SpecsPage vehicle={vehicle} snapshot={snapshot} />;
+      case 'parts':
+        return <PartsPage vehicle={vehicle} snapshot={snapshot} />;
       case 'tasks':
         if (subId === 'new') return <TaskForm vehicle={vehicle} snapshot={snapshot} />;
     }
