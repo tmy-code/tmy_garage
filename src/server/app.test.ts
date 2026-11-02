@@ -593,6 +593,22 @@ describe('migrations', () => {
     migrated.close();
   });
 
+  it('turns what the owner changed on the car tyres template into the same change on front and rear tyres', () => {
+    const path = join(dir, 'garage.sqlite');
+    const latest = openDatabase(join(dir, 'latest.sqlite'));
+    const version = (latest.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
+    latest.close();
+    const old = openDatabase(path, undefined, version - 1);
+    old.exec(`INSERT INTO catalogue_parts (garage_id, code, conditions, removed) VALUES ('default', 'tires', '{}', 1)`);
+    old.close();
+    const migrated = openDatabase(path);
+    expect(migrated.prepare('SELECT code, removed FROM catalogue_parts ORDER BY code').all()).toEqual([
+      { code: 'tires_front', removed: 1 },
+      { code: 'tires_rear', removed: 1 },
+    ]);
+    migrated.close();
+  });
+
   it('drops the rules by build a database may already hold', () => {
     const path = join(dir, 'garage.sqlite');
     const old = openDatabase(path, undefined, 19);

@@ -150,7 +150,8 @@ const SPARK_IGNITION: Rule = ['fuel', 'in', ['petrol', 'flexfuel', 'hybrid', 'ph
  */
 export const PART_TEMPLATES = [
   // --- Cars ---
-  { code: 'tires', kind: 'car', en: 'Tyres', fr: 'Pneus', unit: 'piece', category: 'chassis', intervalKm: 40_000, intervalMonths: 72, task: { en: 'Replace tyres', fr: 'Remplacer les pneus' } },
+  { code: 'tires_front', kind: 'car', en: 'Front tyres', fr: 'Pneus avant', unit: 'piece', category: 'chassis', intervalKm: 40_000, intervalMonths: 72, task: { en: 'Replace front tyres', fr: 'Remplacer les pneus avant' } },
+  { code: 'tires_rear', kind: 'car', en: 'Rear tyres', fr: 'Pneus arrière', unit: 'piece', category: 'chassis', intervalKm: 40_000, intervalMonths: 72, task: { en: 'Replace rear tyres', fr: 'Remplacer les pneus arrière' } },
   { code: 'shock_absorbers', kind: 'car', en: 'Shock absorbers', fr: 'Amortisseurs', unit: 'piece', category: 'chassis', intervalKm: 100_000, intervalMonths: null, task: { en: 'Replace shock absorbers', fr: 'Remplacer les amortisseurs' } },
   { code: 'brake_pads_front', kind: 'car', en: 'Front brake pads', fr: 'Plaquettes avant', unit: 'piece', category: 'brakes', intervalKm: 40_000, intervalMonths: null, task: { en: 'Replace front brake pads', fr: 'Remplacer les plaquettes avant' } },
   { code: 'brake_pads_rear', kind: 'car', en: 'Rear brake pads', fr: 'Plaquettes arrière', unit: 'piece', category: 'brakes', intervalKm: 60_000, intervalMonths: null, task: { en: 'Replace rear brake pads', fr: 'Remplacer les plaquettes arrière' } },

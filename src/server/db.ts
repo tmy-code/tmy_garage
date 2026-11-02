@@ -590,6 +590,16 @@ const MIGRATIONS: (string | ((db: DatabaseSync) => void))[] = [
   ALTER TABLE maintenance_tasks ADD COLUMN template_code TEXT;
   CREATE UNIQUE INDEX maintenance_tasks_template ON maintenance_tasks (vehicle_id, template_code) WHERE template_code IS NOT NULL;
 `,
+  // The car tyres template became a front and a rear one, since a pair is often changed alone: what the owner changed
+  // on the old one now applies to both. Tasks already on Vehicles stay as they are.
+  (db) => {
+    const columns = (db.prepare('PRAGMA table_info(catalogue_parts)').all() as { name: string }[]).map((c) => c.name).filter((n) => n !== 'code');
+    const list = columns.join(', ');
+    for (const code of ['tires_front', 'tires_rear']) {
+      db.prepare(`INSERT INTO catalogue_parts (code, ${list}) SELECT ?, ${list} FROM catalogue_parts WHERE code = 'tires'`).run(code);
+    }
+    db.exec(`DELETE FROM catalogue_parts WHERE code = 'tires'`);
+  },
 ];
 
 function schemaVersion(db: DatabaseSync): number {
