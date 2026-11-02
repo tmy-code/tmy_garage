@@ -1,6 +1,6 @@
 # TMY Garage
 
-Domain vocabulary: [CONTEXT.md](CONTEXT.md). Architecture decisions: [docs/adr/](docs/adr/).
+Domain vocabulary: [CONTEXT.md](CONTEXT.md). Data model: [docs/data-model.md](docs/data-model.md), kept up to date with every schema change. Architecture decisions: [docs/adr/](docs/adr/).
 
 ## This repository is public: no personal data, ever
 
