@@ -282,7 +282,7 @@ function conditionsOf(kind: VehicleKind, rules: readonly Rule[]): Conditions {
   return conditions;
 }
 
-function matches(build: Build, conditions: Conditions): boolean {
+export function matchesBuild(build: Build, conditions: Conditions): boolean {
   return Object.entries(conditions).every(([key, values]) => {
     const actual = build[key as ConditionKey];
     // A fuel never filled in (a Vehicle added before it was required) still counts as a combustion engine.
@@ -445,7 +445,7 @@ export class Catalogue {
   /** Whether a Standard Part is on a Vehicle with this Build. */
   fits(build: Build, code: StandardPartKey): boolean {
     const part = this.part(code);
-    return part !== undefined && part.kind === build.kind && matches(build, part.conditions);
+    return part !== undefined && part.kind === build.kind && matchesBuild(build, part.conditions);
   }
 
   /** A Standard Part's name in the interface language, or null for one this catalogue does not know. */

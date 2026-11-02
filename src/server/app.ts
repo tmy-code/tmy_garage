@@ -9,6 +9,7 @@ import type { ZodType } from 'zod';
 import {
   catalogueChangeInput,
   copyTasksInput,
+  addStandardSpecsInput,
   mergeTaskInput,
   documentInput,
   documentOwner,
@@ -34,6 +35,7 @@ import type {
   SpecLine,
 } from '../shared/types.ts';
 import { BUILT_IN_CATALOGUE, Catalogue, tidyConditions, type Build, type Conditions } from '../shared/catalogue.ts';
+import { starterSpecs } from '../shared/spec-templates.ts';
 import { buildOfRow, catalogueEntries } from './catalogue-rows.ts';
 import type { VehicleInput, VehicleKind } from '../shared/schemas.ts';
 import { todayIso } from '../shared/dates.ts';
@@ -667,6 +669,42 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       }
     });
     return c.json(toSpecLine(ownedRowOrThrow('spec_lines', id, 'Spec line')));
+  });
+
+  /**
+   * Gives a Vehicle the usual spec lines for its Build, each with its value still empty, in the owner's language. A
+   * line already there is left alone: one carrying the template's code, or an untagged one labelled like it (which is
+   * then tagged), so running this again never doubles a line.
+   */
+  app.post('/api/vehicles/:id/add-standard-specs', async (c) => {
+    const vehicleId = c.req.param('id');
+    const build = buildOfRow(vehicleOrThrow(vehicleId));
+    const { lang } = await parse(c, addStandardSpecsInput);
+    const added = transaction(() => {
+      const lines = db.prepare('SELECT id, label, template_code FROM spec_lines WHERE vehicle_id = ?').all(vehicleId) as Row[];
+      const tagged = new Set(lines.map((l) => l.template_code).filter((code) => code !== null));
+      const untagged = lines.filter((l) => l.template_code === null);
+      const labels = new Set(lines.map((l) => looseName(l.label)));
+      const nextSort = db.prepare('SELECT coalesce(max(sort), -1) + 1 AS n FROM spec_lines WHERE vehicle_id = ? AND spec_group = ?');
+      const insert = db.prepare("INSERT INTO spec_lines (id, vehicle_id, label, value, spec_group, category, sort, template_code) VALUES (?, ?, ?, '', ?, ?, ?, ?)");
+      let count = 0;
+      for (const s of starterSpecs(build)) {
+        if (tagged.has(s.code)) continue;
+        const known = new Set([s.label, s.labelFr].map(looseName));
+        const same = untagged.find((l) => known.has(looseName(l.label)));
+        if (same) {
+          db.prepare('UPDATE spec_lines SET template_code = ? WHERE id = ?').run(s.code, same.id);
+          untagged.splice(untagged.indexOf(same), 1);
+          continue;
+        }
+        const label = lang === 'fr' ? s.labelFr : s.label;
+        if (labels.has(looseName(label))) continue;
+        insert.run(randomUUID(), vehicleId, label, s.group, s.category === 'other' ? null : s.category, (nextSort.get(vehicleId, s.group) as Row).n, s.code);
+        count++;
+      }
+      return count;
+    });
+    return c.json({ added }, 201);
   });
 
   app.delete('/api/specs/:id', (c) => {

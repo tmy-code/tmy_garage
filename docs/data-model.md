@@ -124,10 +124,13 @@ A Vehicle's factory specs, one labelled value per row (for example "Engine oil: 
 | --- | --- |
 | `vehicle_id` | Required. → `vehicles`. |
 | `label` | Required, up to 80 characters. What it is. Unique per Vehicle: saving a second line with the same label is refused (409). |
-| `value` | Required, up to 200 characters. The figure or reference, written as the owner likes ("10W-40, 3.2 L"). |
+| `value` | The figure or reference, written as the owner likes ("10W-40, 3.2 L"), up to 200 characters. Required when the owner saves a line, but empty on a line added from the usual list until they fill it in (shown as "to fill in"). |
 | `spec_group` | Required. What kind of figure it is: `fluids`, `parts`, `torque` or `other`. |
 | `category` | Which part of the Vehicle it concerns: the same seven categories as Tasks (`engine`, `transmission`, `brakes`, `chassis`, `electrical`, `cooling_climate`, `other`). Empty counts as `other`. |
+| `template_code` | The usual spec line (see `src/shared/spec-templates.ts`) it came from, empty for the owner's own lines. Unique per Vehicle, so adding the usual lines again never doubles one, whatever it was renamed to. |
 | `sort` | Required. Position within its group, in the order entered. A new line goes last in its group; changing a line's group moves it to the end of the new one. |
+
+**Add the usual specs** (button on the Specs page) gives a Vehicle the usual lines for its Build, with empty values for the owner to fill in: fluids (engine oil, gearbox oil, coolant, brake fluid…), parts (tyres, filters, spark plugs, pads, battery…), torque (wheel nuts, drain plug, axle nuts) and a few others (chain slack). Which lines apply follows the Build like the plan templates (a diesel has a fuel filter, a belt-driven engine a timing belt kit, a chain drive a chain and sprockets). Labels are written in the language the app is in. A line already there is left alone: one with the template's code, or one labelled like it (which is then tagged). It is safe to run again. The list is built in code, not editable in Settings.
 
 How the screens use them:
 - The Specs page lists a Vehicle's lines under their **category** headings (in the same order as the Task list), and inside a category by **group** (fluids, parts, torque, other), then by `sort`. The group is shown next to each value.

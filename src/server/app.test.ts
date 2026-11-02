@@ -307,6 +307,33 @@ describe('spec lines and the plan templates', () => {
     expect((await snapshot()).specLines).toEqual([]);
   });
 
+  it('adds the usual spec lines for the Build with empty values, once, whatever they were renamed to', async () => {
+    const bike = await createVehicle();
+    const hand = (await (await call('POST', `/api/vehicles/${bike.id}/specs`, { label: 'huile moteur', value: '10W-40', group: 'fluids' })).json()) as SpecLine;
+    expect(await (await call('POST', `/api/vehicles/${bike.id}/add-standard-specs`, { lang: 'fr' })).json()).toMatchObject({ added: expect.any(Number) });
+    const lines = (await snapshot()).specLines.filter((l) => l.vehicleId === bike.id);
+    const labels = lines.map((l) => l.label);
+    expect(labels).toContain('Liquide de frein');
+    expect(labels).toContain('Chaîne');
+    expect(labels).not.toContain('Courroie de transmission finale');
+    expect(labels.filter((l) => l.toLowerCase() === 'huile moteur')).toHaveLength(1);
+    expect(lines.find((l) => l.id === hand.id)!.value).toBe('10W-40');
+    expect(lines.find((l) => l.label === 'Liquide de frein')).toMatchObject({ value: '', group: 'fluids', category: 'brakes' });
+    const renamed = lines.find((l) => l.label === 'Liquide de frein')!;
+    await call('PUT', `/api/specs/${renamed.id}`, { label: 'DOT 4', value: 'DOT 4', group: 'fluids', category: 'brakes' });
+    expect(await (await call('POST', `/api/vehicles/${bike.id}/add-standard-specs`, { lang: 'fr' })).json()).toEqual({ added: 0 });
+    expect((await snapshot()).specLines.filter((l) => l.vehicleId === bike.id)).toHaveLength(lines.length);
+  });
+
+  it('chooses the usual spec lines by the Build', async () => {
+    const car = (await (await call('POST', '/api/vehicles', { ...CAR, name: 'Diesel', fuel: 'diesel', distribution: 'belt', hasAc: true })).json()) as Vehicle;
+    await call('POST', `/api/vehicles/${car.id}/add-standard-specs`, { lang: 'en' });
+    const labels = (await snapshot()).specLines.filter((l) => l.vehicleId === car.id).map((l) => l.label);
+    expect(labels).toEqual(expect.arrayContaining(['Fuel filter', 'Timing belt kit', 'A/C refrigerant', 'Gearbox oil', 'Wheel nuts']));
+    expect(labels).not.toContain('Spark plugs');
+    expect(labels).not.toContain('Reduction gear oil');
+  });
+
   it('files a spec line under a category, empty meaning other, and refuses an unknown one', async () => {
     const bike = await createVehicle();
     const line = (await (await call('POST', `/api/vehicles/${bike.id}/specs`, { label: 'Spark plug', value: 'NGK CR8E', group: 'parts', category: 'engine' })).json()) as SpecLine;
@@ -619,7 +646,7 @@ describe('migrations', () => {
     const latest = openDatabase(join(dir, 'latest.sqlite'));
     const version = (latest.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
     latest.close();
-    const old = openDatabase(path, undefined, version - 3);
+    const old = openDatabase(path, undefined, version - 4);
     old.exec(`INSERT INTO catalogue_parts (garage_id, code, conditions, removed) VALUES ('default', 'tires', '{}', 1)`);
     old.close();
     const migrated = openDatabase(path);
@@ -635,7 +662,7 @@ describe('migrations', () => {
     const latest = openDatabase(join(dir, 'latest.sqlite'));
     const version = (latest.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
     latest.close();
-    const old = openDatabase(path, undefined, version - 2);
+    const old = openDatabase(path, undefined, version - 3);
     old.exec(`INSERT INTO catalogue_parts (garage_id, code, conditions, removed) VALUES ('default', 'moto_fork_oil_seals', '{}', 1)`);
     old.close();
     const migrated = openDatabase(path);
@@ -651,7 +678,7 @@ describe('migrations', () => {
     const latest = openDatabase(join(dir, 'latest.sqlite'));
     const version = (latest.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
     latest.close();
-    const old = openDatabase(path, undefined, version - 1);
+    const old = openDatabase(path, undefined, version - 2);
     old.exec(`INSERT INTO catalogue_parts (garage_id, code, conditions, removed) VALUES ('default', 'shock_absorbers', '{}', 1)`);
     old.close();
     const migrated = openDatabase(path);

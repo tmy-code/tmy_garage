@@ -597,6 +597,11 @@ const MIGRATIONS: (string | ((db: DatabaseSync) => void))[] = [
   (db) => splitCatalogueEntry(db, 'moto_fork_oil_seals', ['moto_fork_oil', 'moto_fork_seals']),
   // And the car shock absorbers, front and rear.
   (db) => splitCatalogueEntry(db, 'shock_absorbers', ['shock_absorbers_front', 'shock_absorbers_rear']),
+  `
+  -- The standard spec line a line came from, so adding the usual lines again never doubles one, whatever it was renamed to.
+  ALTER TABLE spec_lines ADD COLUMN template_code TEXT;
+  CREATE UNIQUE INDEX spec_lines_template ON spec_lines (vehicle_id, template_code) WHERE template_code IS NOT NULL;
+`,
 ];
 
 /** Replaces what the owner changed on a template that was split by the same change on each of the new ones. */

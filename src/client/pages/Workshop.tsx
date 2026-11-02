@@ -8,7 +8,8 @@ import { confirmDelete, Field, FormError, Layout, NeedsConnection, StatusChip } 
 import { describeDue, describeInterval, formatDate, formatKm, formatMoney, taskName } from '../format.ts';
 import { VehicleIcon } from '../brands.tsx';
 import { Icon } from '../icons.tsx';
-import { messages, useT } from '../i18n.ts';
+import { showToast } from '../feedback.ts';
+import { getLang, messages, useT } from '../i18n.ts';
 import { online } from '../store.ts';
 import { useSubmit } from './SetupForms.tsx';
 
@@ -168,9 +169,11 @@ export function specCategoriesOf(snapshot: Snapshot, vehicleId: string): [PartCa
 function SpecText({ spec }: { spec: SpecLine }) {
   const t = useT();
   return (
-    <span>
-      <strong>{spec.label}</strong> · {spec.value} <span className="muted">({t.workshop.specGroups[spec.group]})</span>
-    </span>
+    <>
+      <strong>{spec.label}</strong>
+      <span>{spec.value || <span className="muted">{t.workshop.specToFill}</span>}</span>
+      <span className="muted">{t.workshop.specGroups[spec.group]}</span>
+    </>
   );
 }
 
@@ -178,16 +181,27 @@ export function SpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: S
   const t = useT();
   const editor = useEditor();
   const groups = specCategoriesOf(snapshot, vehicle.id);
+  async function addStandard() {
+    try {
+      const { added } = await online<{ added: number }>('POST', `/api/vehicles/${vehicle.id}/add-standard-specs`, { lang: getLang() });
+      showToast(t.workshop.standardSpecsAdded(added));
+    } catch (e) {
+      showToast((e as Error).message);
+    }
+  }
   return (
     <Layout title={t.workshop.specsTitle(vehicle.name)} back={`/vehicles/${vehicle.id}`} titleAction={<AddButton editor={editor} />}>
       <NeedsConnection />
       <p className="muted">{t.workshop.specsIntro}</p>
+      <button type="button" className="button button-block" onClick={addStandard}>
+        {t.workshop.addStandardSpecs}
+      </button>
       {editor.editing === 'new' ? <SpecEditor vehicle={vehicle} editor={editor} /> : null}
       {groups.length === 0 && editor.editing !== 'new' ? <p className="empty">{t.workshop.noSpecs}</p> : null}
       {groups.map(([group, items]) => (
         <section key={group}>
           <h2>{t.workshop.partCategories[group]}</h2>
-          <ul className="list list-grid">
+          <ul className="list">
             {items.map((spec) =>
               editor.editing === spec.id ? (
                 <li key={spec.id} className="editing">
