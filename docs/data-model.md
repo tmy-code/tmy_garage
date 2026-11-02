@@ -8,7 +8,7 @@ The source of truth is the code: [`src/server/db.ts`](../src/server/db.ts) for t
 
 - A **Garage** holds everything. Each user has one, and today the app runs with a single Garage.
 - A Garage has **Vehicles**, and nearly everything hangs off a Vehicle: its **Maintenance Tasks**, its **Services**, its **Odometer Readings**, its **Part Specs**, its **Technical Inspections** and its **Modifications**.
-- A Vehicle's **Build** (fuel, gearbox, timing drive, options…) and the **Parts Catalogue** decide which **Standard Parts** it has. Those parts bring their Part Specs, Fitment Positions and Maintenance Tasks with them.
+- A Vehicle's **Build** (fuel, gearbox, timing drive, options…) and the **Parts Catalogue** decide which **Standard Parts** it has, and which checks and services. Those bring their Part Specs, Fitment Positions and Maintenance Tasks with them, each Task at the interval its Build calls for.
 - Logging a **Service** says which Tasks were done and which parts went on. What is due next is worked out from that history and never stored.
 - **Insurance** sits beside the Vehicles: a Policy has yearly Terms, and each Term has one Cover per Vehicle.
 - **Documents** are stored files that can be attached to almost anything.
@@ -194,6 +194,7 @@ The database refuses a Task with neither a distance nor a time interval.
 | `standard_part` | The code of the Standard Part this Task replaces. The Task is paused while that part is not on the Vehicle. |
 | `custom_interval` | Required, yes/no. No means the interval follows the Build (shorter with a turbo, for example). Yes means the owner set it. |
 | `category` | The group chosen by the owner, for a Task that replaces no part. A Task that replaces a part takes the part's category. |
+| `switched_off` | Required, yes/no. A check or service of the schedule the owner switched off on this Vehicle, which pauses it. |
 
 ### `services`
 
@@ -302,10 +303,12 @@ A location holding one Part at a time. A fitted Standard Part gets one automatic
 
 The catalogue is two lists merged by the `Catalogue` class in [`catalogue.ts`](../src/shared/catalogue.ts):
 
-1. **Built-in parts**, in `PART_TEMPLATES` in the code, each with a code, names, unit, category, default interval and conditions on the Build.
-2. **The owner's changes**, in the `catalogue_parts` table: one row per changed or added part, for each Garage.
+1. **Built-in parts**, in `PART_TEMPLATES` in the code, each with a code, names, unit, category, default interval, conditions on the Build and, for engine oil, a shorter distance with a turbo.
+2. **The owner's changes**, in the `catalogue_parts` table: one row per changed or added entry, for each Garage. An entry is a part to replace, or a **check or service** with a Task but no part (chain lubrication, valve clearance).
 
-A part with no row is used exactly as built in, so a Garage with no changes has an empty table. Standard Part codes are not foreign keys, because most of them point at the code rather than at a table.
+An entry with no row is used exactly as built in, so a Garage with no changes has an empty table. Standard Part codes are not foreign keys, because most of them point at the code rather than at a table.
+
+**Intervals.** Each entry has a default interval and any number of **interval rules**: an interval for the Builds matching some conditions. For a Vehicle, the first rule its Build matches is the interval of its Task, otherwise the default. A built-in entry's own rules and default are the ones in the code until the owner sets theirs; the turbo rule of engine oil is an ordinary rule they can change or remove.
 
 ### `catalogue_parts`
 
@@ -318,15 +321,17 @@ The key is `garage_id` and `code`. This table has no `id`.
 | `kind` | `car` or `motorcycle`. **Empty means the row changes a built-in part**, and filled means it is a whole part of the owner's. |
 | `name` | Own parts only. |
 | `name_fr` | Own parts only. |
-| `unit` | Own parts only: `piece` for fitted, `litre` for a fluid. |
-| `category` | Own parts only. |
-| `interval_km` | Own parts only. |
-| `interval_months` | Own parts only. |
+| `unit` | Own entries only: `piece` for fitted, `litre` for a fluid, **empty for a check or service**, which has no Part Spec and no Fitment Position. |
+| `category` | Own entries only. |
+| `interval_km` | The default distance interval: for an own entry always, for a built-in one only when `interval_set` is 1. |
+| `interval_months` | The same, for time. |
+| `interval_set` | Required, yes/no. A built-in entry whose default interval is the owner's. |
+| `interval_rules` | JSON list of rules, each with `conditions`, `intervalKm` and `intervalMonths`. For a built-in entry, empty keeps the built-in rules; an own entry has its own list. |
 | `conditions` | JSON: for each detail of the Build, the values allowed. Empty keeps a built-in part's own conditions. |
-| `characteristics` | Default details for matching Vehicles' Part Specs. |
-| `removed` | Required, yes/no. A built-in part taken off the list. |
+| `characteristics` | Default details for matching Vehicles' Part Specs. Parts only. |
+| `removed` | Required, yes/no. A built-in entry taken off the list. |
 
-For example, conditions of `{"fuel":["diesel"],"hasTurbo":["true"]}` mean a Vehicle has the part only if it runs on diesel and has a turbo. A detail that isn't listed doesn't matter.
+For example, conditions of `{"fuel":["diesel"],"hasTurbo":["true"]}` mean a Vehicle has the part only if it runs on diesel and has a turbo. A detail that isn't listed doesn't matter. A rule's conditions work the same way, and a rule without any condition is refused, since it would only repeat the default.
 
 ### What follows from the Build and the catalogue
 
@@ -338,6 +343,10 @@ When a Vehicle is added, its Build changes or the catalogue changes, the server 
 | A part no longer fits, and is untouched | Its Part Spec is marked `not_fitted`, which pauses its Task. |
 | A part no longer fits, but is in use | It stays on the Vehicle, and the screens flag it. |
 | A part's fit did not change | The owner's own "not on this vehicle" choice is left alone. |
+| A check now fits | An owned Vehicle gets its Task, and no Part Spec. |
+| A check no longer fits | Its Task stays and is paused, since the Task is kept for its history. |
+| The catalogue's interval or rules change | Every Task of an owned Vehicle whose `custom_interval` is no takes the interval its Build now calls for. Intervals the owner set stay. |
+| The owner switches a check off on a Vehicle | Its Task is paused (`switched_off`), and no change in the catalogue brings it back. |
 
 A part is **in use** when its Part Spec has been filled in, a Task gives a quantity for it, or a Part Used refers to it. Default details and required parts with no quantity don't count.
 
@@ -588,7 +597,7 @@ Foreign keys stop anything from being deleted while other rows still need it, ex
 | Insurance Policy | Its Terms, Covers, Claims, driver links and all their Documents go too. |
 | Policy Term | Its Covers and their Documents go too. |
 | Claim | Its Documents go too. |
-| The owner's own part | What was never used is removed. Anything with history stays on the Vehicle under its name, no longer linked to the catalogue. |
+| The owner's own part or check | What was never used is removed. Anything with history stays on the Vehicle under its name, no longer linked to the catalogue. |
 | A built-in part | It can't be deleted. It can only be taken off the list, or set back to the built-in version. |
 
 ## The offline copy

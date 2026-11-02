@@ -167,6 +167,8 @@ export const taskInput = z
       .enum(PART_CATEGORIES)
       .nullish()
       .transform((v) => v ?? null),
+    /** A check or service of the schedule, switched off on this Vehicle. */
+    switchedOff: z.boolean().default(false),
   })
   .refine((t) => t.intervalKm !== null || t.intervalMonths !== null, {
     message: 'An Interval needs a distance, a duration, or both',
@@ -178,33 +180,56 @@ export const copyTasksInput = z.object({ fromVehicleId: z.string().min(1) });
 /** For each detail a part depends on, the values it needs; at least one, or no Vehicle could ever have the part. */
 const conditions = z.record(z.string(), z.array(z.string().min(1)).min(1, 'Tick at least one value'));
 
-export const catalogueChangeInput = z.object({
-  conditions,
-  characteristics: optionalText(500),
-  removed: z.boolean().default(false),
-});
+const intervalKm = z
+  .number()
+  .int()
+  .positive()
+  .max(1_000_000)
+  .nullish()
+  .transform((v) => v ?? null);
+const intervalMonths = z
+  .number()
+  .int()
+  .positive()
+  .max(600)
+  .nullish()
+  .transform((v) => v ?? null);
+
+/** An Interval for the Vehicles whose Build matches: it needs a condition (else it would be the default) and a distance, a duration or both. */
+const intervalRule = z
+  .object({ conditions, intervalKm, intervalMonths })
+  .refine((r) => r.intervalKm !== null || r.intervalMonths !== null, {
+    message: 'An Interval needs a distance, a duration, or both',
+    path: ['intervalKm'],
+  });
+const intervalRules = z.array(intervalRule).max(20);
+
+/** A change to a built-in part. Without an Interval or rules the built-in ones stay; with them, they are the owner's. */
+export const catalogueChangeInput = z
+  .object({
+    conditions,
+    characteristics: optionalText(500),
+    removed: z.boolean().default(false),
+    intervalKm: z.number().int().positive().max(1_000_000).nullish(),
+    intervalMonths: z.number().int().positive().max(600).nullish(),
+    rules: intervalRules.optional(),
+  })
+  .refine((p) => (p.intervalKm === undefined && p.intervalMonths === undefined) || (p.intervalKm ?? null) !== null || (p.intervalMonths ?? null) !== null, {
+    message: 'An Interval needs a distance, a duration, or both',
+    path: ['intervalKm'],
+  });
 
 export const ownPartInput = z
   .object({
     kind: vehicleKind,
     name: z.string().trim().min(1).max(120),
     nameFr: optionalText(120),
-    unit: partUnit,
+    /** Empty for a check or service, which has a Task but no part. */
+    unit: partUnit.nullish().transform((v) => v ?? null),
     category: z.enum(PART_CATEGORIES),
-    intervalKm: z
-      .number()
-      .int()
-      .positive()
-      .max(1_000_000)
-      .nullish()
-      .transform((v) => v ?? null),
-    intervalMonths: z
-      .number()
-      .int()
-      .positive()
-      .max(600)
-      .nullish()
-      .transform((v) => v ?? null),
+    intervalKm,
+    intervalMonths,
+    rules: intervalRules.default([]),
     conditions,
     characteristics: optionalText(500),
   })

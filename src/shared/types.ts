@@ -60,6 +60,8 @@ export interface MaintenanceTask {
   standardPart: StandardPartKey | null;
   /** The category the owner picked when the Task replaces no Standard Part; see taskCategory. */
   category: PartCategory | null;
+  /** A check or service of the schedule the owner switched off on this Vehicle: the Task is paused. */
+  switchedOff: boolean;
   requiredParts: RequiredPart[];
   /** Required Tools, in checklist order. */
   tools: string[];

@@ -1,4 +1,5 @@
 import { addDays, addMonths, daysBetween, minDate, type IsoDate } from './dates.ts';
+import { catalogueOf } from './catalogue.ts';
 import type { MaintenanceTask, Service, Snapshot } from './types.ts';
 
 /** Only the last months of readings are used, so the projection follows seasonal use. */
@@ -138,9 +139,18 @@ export function computeDue(task: MaintenanceTask, services: Service[], usage: Us
   return { taskId: task.id, status, lastDone, timeDueDate, dueOdometer, distanceDueDate, dueDate, kmRemaining, daysRemaining };
 }
 
-/** Whether a Task replaces a Standard Part its Vehicle does not have (set aside, or never on its Build). */
+/**
+ * Whether a Task is not due on its Vehicle: it replaces a Standard Part the Vehicle does not have (set aside, or
+ * never on its Build), it is a check or service of the schedule its Build no longer has, or the owner switched it off.
+ */
 export function isPaused(snapshot: Snapshot, task: MaintenanceTask): boolean {
+  if (task.switchedOff) return true;
   if (task.standardPart === null) return false;
+  const part = catalogueOf(snapshot).known(task.standardPart);
+  if (part?.unit === null) {
+    const vehicle = snapshot.vehicles.find((v) => v.id === task.vehicleId);
+    return !vehicle || !catalogueOf(snapshot).fits(vehicle, task.standardPart);
+  }
   return !snapshot.partSpecs.some((p) => p.vehicleId === task.vehicleId && p.standardPart === task.standardPart && !p.notFitted);
 }
 

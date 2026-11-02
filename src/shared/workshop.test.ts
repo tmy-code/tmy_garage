@@ -19,6 +19,7 @@ function task(overrides: Partial<MaintenanceTask>): MaintenanceTask {
     workshopNotes: null,
     standardPart: null,
     category: null,
+    switchedOff: false,
     requiredParts: [],
     tools: [],
     specIds: [],

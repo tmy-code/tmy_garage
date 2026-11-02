@@ -180,6 +180,7 @@ export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
       workshopNotes: t.workshopNotes ?? null,
       standardPart: t.standardPart ?? null,
       category: t.category ?? null,
+      switchedOff: t.switchedOff ?? false,
       requiredParts: t.requiredParts ?? [],
       tools: t.tools ?? [],
       specIds: t.specIds ?? [],

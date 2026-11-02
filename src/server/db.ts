@@ -447,6 +447,14 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (garage_id, code)
   );
   `,
+  `
+  -- Interval rules on the parts catalogue (e.g. a shorter distance with a turbo): for a built-in part the owner's rules
+  -- and, when interval_set is 1, their default Interval; a catalogue entry with no unit is a check or service with a
+  -- Task but no part. A Task can also be switched off on one Vehicle, which pauses it.
+  ALTER TABLE catalogue_parts ADD COLUMN interval_rules TEXT;
+  ALTER TABLE catalogue_parts ADD COLUMN interval_set INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE maintenance_tasks ADD COLUMN switched_off INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 function schemaVersion(db: DatabaseSync): number {

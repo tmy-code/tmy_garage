@@ -1102,6 +1102,178 @@ describe('the parts catalogue in Settings', () => {
   });
 });
 
+describe('the maintenance task list in Settings', () => {
+  const FUELS = ['petrol', 'flexfuel', 'hybrid', 'phev', 'diesel'];
+
+  async function createCar(build: object = {}): Promise<Vehicle> {
+    const res = await call('POST', '/api/vehicles', { ...CAR, name: 'Test car', ...build });
+    expect(res.status).toBe(201);
+    return res.json();
+  }
+  async function createBike(build: object = {}): Promise<Vehicle> {
+    const res = await call('POST', '/api/vehicles', { ...BIKE, name: 'Test bike', ...build });
+    expect(res.status).toBe(201);
+    return res.json();
+  }
+
+  const taskOf = async (vehicleId: string, code: string) =>
+    (await snapshot()).tasks.find((t) => t.vehicleId === vehicleId && t.standardPart === code);
+  const statusOf = async (vehicleId: string, code: string) => {
+    const s = await snapshot();
+    const task = s.tasks.find((t) => t.vehicleId === vehicleId && t.standardPart === code)!;
+    return vehicleDue(s, vehicleId, '2026-11-01').due.find((d) => d.taskId === task.id)!.status;
+  };
+
+  it('changes a built-in task’s Interval on every vehicle that kept the built-in one, and goes back to the built-in version', async () => {
+    const followed = await createCar();
+    const own = await createCar();
+    const ownTask = (await taskOf(own.id, 'cabin_filter'))!;
+    await call('PUT', `/api/tasks/${ownTask.id}`, { name: ownTask.name, intervalKm: 9000, intervalMonths: 6, standardPart: 'cabin_filter' });
+
+    const res = await call('PUT', '/api/catalogue/cabin_filter', { conditions: {}, intervalKm: 20000, intervalMonths: 18 });
+    expect(res.status).toBe(200);
+    expect(await taskOf(followed.id, 'cabin_filter')).toMatchObject({ intervalKm: 20000, intervalMonths: 18 });
+    // The owner’s own Interval on a vehicle stays.
+    expect(await taskOf(own.id, 'cabin_filter')).toMatchObject({ intervalKm: 9000, intervalMonths: 6 });
+    // A new vehicle starts with the changed one.
+    expect(await taskOf((await createCar()).id, 'cabin_filter')).toMatchObject({ intervalKm: 20000, intervalMonths: 18 });
+    expect((await snapshot()).catalogue).toMatchObject([{ code: 'cabin_filter', interval: { intervalKm: 20000, intervalMonths: 18 } }]);
+
+    expect((await call('DELETE', '/api/catalogue/cabin_filter')).status).toBe(204);
+    expect(await taskOf(followed.id, 'cabin_filter')).toMatchObject({ intervalKm: 15000, intervalMonths: 12 });
+    expect((await snapshot()).catalogue).toEqual([]);
+  });
+
+  it('gives a distance only, or a duration only, and refuses neither', async () => {
+    await call('PUT', '/api/catalogue/cabin_filter', { conditions: {}, intervalKm: null, intervalMonths: 24 });
+    expect((await taskOf((await createCar()).id, 'cabin_filter'))).toMatchObject({ intervalKm: null, intervalMonths: 24 });
+    expect((await call('PUT', '/api/catalogue/cabin_filter', { conditions: {}, intervalKm: null, intervalMonths: null })).status).toBe(422);
+  });
+
+  it('applies the first Interval rule a build matches, else the default', async () => {
+    const petrol = await createCar();
+    const diesel = await createCar({ fuel: 'diesel' });
+    const turbo = await createCar({ hasTurbo: true });
+    // The built-in rule: a turbo shortens the engine oil's distance.
+    expect(await taskOf(petrol.id, 'engine_oil')).toMatchObject({ intervalKm: 15000 });
+    expect(await taskOf(turbo.id, 'engine_oil')).toMatchObject({ intervalKm: 10000 });
+    expect(BUILT_IN_CATALOGUE.known('engine_oil')!.rules).toMatchObject([{ conditions: { hasTurbo: ['true'] }, intervalKm: 10000 }]);
+
+    const rules = [
+      { conditions: { fuel: ['diesel'] }, intervalKm: 12000, intervalMonths: 12 },
+      { conditions: { hasTurbo: ['true'] }, intervalKm: 9000, intervalMonths: 12 },
+    ];
+    expect((await call('PUT', '/api/catalogue/engine_oil', { conditions: { fuel: FUELS }, rules })).status).toBe(200);
+    expect(await taskOf(diesel.id, 'engine_oil')).toMatchObject({ intervalKm: 12000 });
+    expect(await taskOf(turbo.id, 'engine_oil')).toMatchObject({ intervalKm: 9000 });
+    expect(await taskOf(petrol.id, 'engine_oil')).toMatchObject({ intervalKm: 15000 });
+
+    // Taking the rules away, the turbo included, leaves the default for everyone.
+    await call('PUT', '/api/catalogue/engine_oil', { conditions: { fuel: FUELS }, rules: [] });
+    expect(await taskOf(turbo.id, 'engine_oil')).toMatchObject({ intervalKm: 15000 });
+    // A change that leaves the rules out keeps the ones the owner set.
+    await call('PUT', '/api/catalogue/engine_oil', { conditions: { fuel: FUELS }, characteristics: '5W-30' });
+    expect(await taskOf(turbo.id, 'engine_oil')).toMatchObject({ intervalKm: 15000 });
+    await call('DELETE', '/api/catalogue/engine_oil');
+    expect(await taskOf(turbo.id, 'engine_oil')).toMatchObject({ intervalKm: 10000 });
+    expect((await snapshot()).catalogue).toEqual([]);
+  });
+
+  it('refuses a rule without a condition or without an Interval', async () => {
+    const noCondition = [{ conditions: {}, intervalKm: 5000, intervalMonths: null }];
+    const noInterval = [{ conditions: { fuel: ['diesel'] }, intervalKm: null, intervalMonths: null }];
+    // Every value ticked says nothing: it would only repeat the default.
+    const everything = [{ conditions: { fuel: FUELS.concat('electric') }, intervalKm: 5000, intervalMonths: null }];
+    for (const rules of [noCondition, noInterval, everything]) {
+      expect((await call('PUT', '/api/catalogue/cabin_filter', { conditions: {}, rules })).status).toBe(422);
+    }
+  });
+
+  it('adds a check of the owner’s to matching vehicles as a Task with no part, and pauses it when the build no longer matches', async () => {
+    const chain = await createBike();
+    const belt = await createBike({ finalDrive: 'belt' });
+    const res = await call('POST', '/api/catalogue', {
+      kind: 'motorcycle',
+      name: 'Chain lubrication',
+      nameFr: 'Graissage de la chaîne',
+      category: 'drivetrain',
+      intervalKm: 1000,
+      conditions: { finalDrive: ['chain'] },
+    });
+    expect(res.status).toBe(201);
+    const { code } = (await res.json()) as { code: string };
+
+    const s = await snapshot();
+    expect(await taskOf(chain.id, code)).toMatchObject({ name: 'Chain lubrication', nameFr: 'Graissage de la chaîne', intervalKm: 1000, requiredParts: [] });
+    expect(await taskOf(belt.id, code)).toBeUndefined();
+    // A check has no Part Spec and no Fitment Position.
+    expect(s.partSpecs.some((p) => p.standardPart === code)).toBe(false);
+    expect(s.positions.some((p) => p.standardPart === code)).toBe(false);
+    expect(await statusOf(chain.id, code)).not.toBe('paused');
+
+    // The build changes: the check stays, paused; changed back, it is due again.
+    await call('PUT', `/api/vehicles/${chain.id}`, { ...BIKE, name: 'Test bike', finalDrive: 'belt' });
+    expect(await taskOf(chain.id, code)).toBeDefined();
+    expect(await statusOf(chain.id, code)).toBe('paused');
+    await call('PUT', `/api/vehicles/${chain.id}`, { ...BIKE, name: 'Test bike' });
+    expect(await statusOf(chain.id, code)).not.toBe('paused');
+  });
+
+  it('switches a check off on one vehicle, and keeps the other vehicles’', async () => {
+    const one = await createBike();
+    const other = await createBike();
+    const { code } = (await (
+      await call('POST', '/api/catalogue', { kind: 'motorcycle', name: 'Valve clearance', category: 'engine', intervalKm: 24000, conditions: {} })
+    ).json()) as { code: string };
+    const task = (await taskOf(one.id, code))!;
+    // The Task is the vehicle’s only one for the check, so it cannot be deleted: it is switched off instead.
+    expect((await call('DELETE', `/api/tasks/${task.id}`)).status).toBe(409);
+    const body = { name: task.name, intervalKm: 24000, standardPart: code, switchedOff: true };
+    expect((await call('PUT', `/api/tasks/${task.id}`, body)).status).toBe(200);
+    expect(await statusOf(one.id, code)).toBe('paused');
+    expect(await statusOf(other.id, code)).not.toBe('paused');
+    // A change in the list does not bring it back.
+    await call('PUT', `/api/catalogue/${code}`, { kind: 'motorcycle', name: 'Valve clearance check', category: 'engine', intervalKm: 20000, conditions: {} });
+    expect(await statusOf(one.id, code)).toBe('paused');
+    expect(await taskOf(other.id, code)).toMatchObject({ name: 'Valve clearance check', intervalKm: 20000 });
+  });
+
+  it('does not turn a check into a part or a part into a check', async () => {
+    const check = (await (await call('POST', '/api/catalogue', { kind: 'car', name: 'Alignment', category: 'tires_suspension', intervalMonths: 24, conditions: {} })).json()) as { code: string };
+    const part = (await (await call('POST', '/api/catalogue', { kind: 'car', name: 'Roof rack', unit: 'piece', category: 'body', intervalMonths: 60, conditions: {} })).json()) as { code: string };
+    const body = { kind: 'car', name: 'X', category: 'body', intervalMonths: 12, conditions: {} };
+    expect((await call('PUT', `/api/catalogue/${check.code}`, { ...body, unit: 'piece' })).status).toBe(422);
+    expect((await call('PUT', `/api/catalogue/${part.code}`, body)).status).toBe(422);
+    expect((await call('PUT', `/api/catalogue/${part.code}`, { ...body, unit: 'litre' })).status).toBe(200);
+  });
+
+  it('deletes a check: a Task with no history goes, one used in a Service stays under its name', async () => {
+    const unused = await createBike();
+    const used = await createBike();
+    const { code } = (await (
+      await call('POST', '/api/catalogue', { kind: 'motorcycle', name: 'Fork check', category: 'tires_suspension', intervalMonths: 12, conditions: {} })
+    ).json()) as { code: string };
+    const usedTask = (await taskOf(used.id, code))!;
+    await call('PUT', '/api/services/svc-00004', { id: 'svc-00004', vehicleId: used.id, date: '2026-10-01', odometer: 1000, taskIds: [usedTask.id], partsUsed: [] });
+
+    expect((await call('DELETE', `/api/catalogue/${code}`)).status).toBe(204);
+    const s = await snapshot();
+    expect(s.tasks.some((t) => t.vehicleId === unused.id && t.name === 'Fork check')).toBe(false);
+    expect(s.tasks.find((t) => t.id === usedTask.id)).toMatchObject({ standardPart: null, category: 'tires_suspension' });
+  });
+
+  it('applies a new or changed check to vehicles added earlier, the sold ones excepted', async () => {
+    const earlier = await createBike();
+    const sold = await createBike();
+    await call('POST', `/api/vehicles/${sold.id}/sell`, { date: '2026-10-01' });
+    const { code } = (await (
+      await call('POST', '/api/catalogue', { kind: 'motorcycle', name: 'Brake check', category: 'brakes', intervalMonths: 6, conditions: {} })
+    ).json()) as { code: string };
+    expect(await taskOf(earlier.id, code)).toMatchObject({ intervalMonths: 6 });
+    expect(await taskOf(sold.id, code)).toBeUndefined();
+  });
+});
+
 describe('migrations', () => {
   let dir: string;
   beforeEach(() => {
@@ -1267,6 +1439,21 @@ describe('migrations', () => {
     expect(migrated.prepare('SELECT id, on_garage_page FROM vehicles ORDER BY id').all()).toEqual([
       { id: 'gone', on_garage_page: 0 },
       { id: 'kept', on_garage_page: 1 },
+    ]);
+    migrated.close();
+  });
+
+  it('adds interval rules and switched-off tasks without touching what is kept', () => {
+    const path = join(dir, 'garage.sqlite');
+    const old = openDatabase(path, undefined, 18);
+    old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v1', 'default', 'car', 'Old car')`);
+    old.exec(`INSERT INTO maintenance_tasks (id, vehicle_id, name, interval_km) VALUES ('t1', 'v1', 'Oil', 10000)`);
+    old.exec(`INSERT INTO catalogue_parts (garage_id, code, conditions, removed) VALUES ('default', 'wipers', '{}', 1)`);
+    old.close();
+    const migrated = openDatabase(path);
+    expect(migrated.prepare('SELECT switched_off FROM maintenance_tasks').all()).toEqual([{ switched_off: 0 }]);
+    expect(migrated.prepare('SELECT code, removed, interval_set, interval_rules FROM catalogue_parts').all()).toEqual([
+      { code: 'wipers', removed: 1, interval_set: 0, interval_rules: null },
     ]);
     migrated.close();
   });

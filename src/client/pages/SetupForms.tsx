@@ -381,11 +381,14 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
   const [baselineOdometer, setBaselineOdometer] = useState(String(existing?.baselineOdometer ?? ''));
   const [standardPart, setStandardPart] = useState<string>(existing?.standardPart ?? '');
   const [category, setCategory] = useState<PartCategory>(existing?.category ?? 'other');
+  const [switchedOff, setSwitchedOff] = useState(existing?.switchedOff ?? false);
   // The Vehicle's Standard Parts, in catalogue order; one set aside is offered only if the Task already replaces it.
   const standardParts = partSpecsOf(snapshot, vehicle, { notFitted: true }).filter(
     (p) => p.standardPart !== null && (!p.notFitted || p.standardPart === existing?.standardPart),
   );
   const catalogue = catalogueOf(snapshot);
+  // A check or service of the schedule has no part to mark as not on the Vehicle: it is switched off here instead.
+  const scheduledCheck = existing?.standardPart != null && catalogue.known(existing.standardPart)?.unit === null;
   const fallback = standardPart ? catalogue.defaultInterval(vehicle, standardPart) : null;
   const atDefault =
     fallback !== null && intervalKm === String(fallback.intervalKm ?? '') && intervalMonths === String(fallback.intervalMonths ?? '');
@@ -412,6 +415,7 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
         standardPart: standardPart || null,
         // A Task replacing a part is listed under the part's category.
         category: standardPart ? null : category,
+        switchedOff: scheduledCheck && switchedOff,
       };
       if (body.intervalKm === null && body.intervalMonths === null) throw new Error(t.setup.needInterval);
       if (body.baselineOdometer !== null && body.baselineDate === null) throw new Error(t.setup.needBaselineDate);
@@ -439,7 +443,7 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
         <Field label={t.setup.taskFr} hint={t.setup.taskFrHint}>
           <input value={nameFr} onChange={(e) => setNameFr(e.target.value)} maxLength={120} lang="fr" />
         </Field>
-        {standardParts.length > 0 ? (
+        {standardParts.length > 0 && !scheduledCheck ? (
           <Field label={t.setup.taskPart} hint={t.setup.taskPartHint}>
             <select value={standardPart} onChange={(e) => setStandardPart(e.target.value)} disabled={scheduled}>
               <option value="">{t.setup.noTaskPart}</option>
@@ -511,9 +515,18 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
           </Field>
         </div>
         <p className="muted">{t.setup.baselineHint}</p>
+        {scheduledCheck ? (
+          <label className={`check ${switchedOff ? 'check-on' : ''}`}>
+            <input type="checkbox" checked={switchedOff} onChange={(e) => setSwitchedOff(e.target.checked)} />
+            <span>
+              {t.setup.switchedOff}
+              <span className="muted"> · {t.setup.switchedOffHint}</span>
+            </span>
+          </label>
+        ) : null}
         <FormError error={error} />
         <Submit disabled={disabled}>{existing ? t.setup.save : t.setup.addTask}</Submit>
-        {existing && scheduled ? <p className="muted">{t.setup.scheduledTask}</p> : null}
+        {existing && scheduled ? <p className="muted">{scheduledCheck ? t.setup.scheduledCheck : t.setup.scheduledTask}</p> : null}
         {existing && !scheduled ? (
           <button type="button" className="button button-danger button-block" onClick={remove} disabled={disabled}>
             {t.setup.deleteTask}

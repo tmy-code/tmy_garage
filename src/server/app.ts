@@ -57,9 +57,11 @@ import {
   Catalogue,
   isBuiltInPart,
   tidyConditions,
+  tidyRules,
   type Build,
   type CatalogueEntry,
   type Conditions,
+  type IntervalRule,
   type StandardPartKey,
 } from '../shared/catalogue.ts';
 import type { ClaimInput, TermInput, VehicleInput, VehicleKind } from '../shared/schemas.ts';
@@ -190,6 +192,7 @@ const toTask = (r: Row, w: Workshop = noWorkshop()): MaintenanceTask => ({
   workshopNotes: r.workshop_notes,
   standardPart: r.standard_part,
   category: r.category,
+  switchedOff: r.switched_off === 1,
   ...w,
 });
 
@@ -343,6 +346,8 @@ function catalogueEntries(db: DatabaseSync, garageId: string): CatalogueEntry[] 
     conditions: r.conditions ? (JSON.parse(r.conditions) as Conditions) : null,
     characteristics: r.characteristics,
     removed: r.removed === 1,
+    interval: r.interval_set === 1 ? { intervalKm: r.interval_km, intervalMonths: r.interval_months } : null,
+    rules: r.interval_rules ? (JSON.parse(r.interval_rules) as IntervalRule[]) : null,
   }));
 }
 
@@ -699,7 +704,8 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       const fits = catalogue.fits(after, code);
       const id = rows.get(code);
       if (id === undefined) {
-        if (fits) {
+        // A check or service has a Task but no Part Spec.
+        if (fits && catalogue.part(code)!.unit !== null) {
           const part = catalogue.part(code)!;
           insert.run(randomUUID(), vehicleId, code, storedName(code), part.builtIn ? null : part.fr, part.unit, part.characteristics);
           rows.set(code, 'new');
@@ -936,6 +942,9 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
 
   /** Whether the Vehicle lists this Standard Part (even set aside), so a Task can say it replaces it. */
   function hasStandardPart(vehicleId: string, code: string): boolean {
+    // A check or service of the catalogue has no Part Spec: it is on every Vehicle of its kind.
+    const known = catalogue.known(code);
+    if (known?.unit === null) return known.kind === vehicleOrThrow(vehicleId).kind;
     return db.prepare('SELECT 1 FROM part_specs WHERE vehicle_id = ? AND standard_part = ?').get(vehicleId, code) !== undefined;
   }
 
@@ -1021,7 +1030,8 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     return c.json({ copied: source.length }, 201);
   });
 
-  const SCHEDULE_TASK_KEPT = 'This task is the vehicle’s only one for a part it has; mark the part as not on this vehicle to switch it off';
+  const SCHEDULE_TASK_KEPT =
+    'This task is the vehicle’s only one on its schedule; to stop it, mark its part as not on this vehicle, or switch the check off';
 
   app.put('/api/tasks/:id', async (c) => {
     const id = c.req.param('id');
@@ -1032,7 +1042,8 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     const build = buildOfRow(vehicleOrThrow(task.vehicle_id));
     db.prepare(
       `UPDATE maintenance_tasks SET name = ?, name_fr = ?, interval_km = ?, interval_months = ?, official_interval_km = ?,
-         official_interval_months = ?, baseline_date = ?, baseline_odometer = ?, standard_part = ?, custom_interval = ?, category = ?
+         official_interval_months = ?, baseline_date = ?, baseline_odometer = ?, standard_part = ?, custom_interval = ?, category = ?,
+         switched_off = ?
        WHERE id = ?`,
     ).run(
       t.name,
@@ -1047,6 +1058,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       // An Interval equal to the catalogue's for this Build is not the owner's own: it keeps following the Build.
       isCustomInterval(build, standardPart, t.intervalKm, t.intervalMonths) ? 1 : 0,
       standardPart === null ? t.category : null,
+      t.switchedOff ? 1 : 0,
       id,
     );
     return c.json(loadTask(id));
@@ -1091,14 +1103,25 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     return tidy;
   }
 
+  /** Interval rules as they are kept: each needs a condition, or it would only repeat the default. */
+  function tidyRulesOrThrow(kind: VehicleKind, rules: IntervalRule[]): IntervalRule[] {
+    const tidy = tidyRules(kind, rules);
+    for (const rule of tidy) {
+      if (Object.keys(rule.conditions).length === 0) throw new HttpError(422, 'An Interval rule needs a condition: untick at least one value');
+      if (Object.values(rule.conditions).some((values) => !values || values.length === 0)) throw new HttpError(422, 'Tick at least one value for each detail');
+    }
+    return tidy;
+  }
+
   app.post('/api/catalogue', async (c) => {
     const p = await parse(c, ownPartInput);
     const code = `own_${randomUUID()}`;
+    const rules = JSON.stringify(tidyRulesOrThrow(p.kind, p.rules));
     transaction(() => {
       db.prepare(
-        `INSERT INTO catalogue_parts (garage_id, code, kind, name, name_fr, unit, category, interval_km, interval_months, conditions, characteristics)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(garageId, code, p.kind, p.name, p.nameFr, p.unit, p.category, p.intervalKm, p.intervalMonths, JSON.stringify(tidyOrThrow(p.kind, p.conditions)), p.characteristics);
+        `INSERT INTO catalogue_parts (garage_id, code, kind, name, name_fr, unit, category, interval_km, interval_months, conditions, characteristics, interval_rules)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(garageId, code, p.kind, p.name, p.nameFr, p.unit, p.category, p.intervalKm, p.intervalMonths, JSON.stringify(tidyOrThrow(p.kind, p.conditions)), p.characteristics, rules);
       catalogueChanged();
     });
     return c.json({ code }, 201);
@@ -1111,33 +1134,59 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     if (part.builtIn) {
       const p = await parse(c, catalogueChangeInput);
       const conditions = tidyOrThrow(part.kind, p.conditions);
-      const original = tidyConditions(part.kind, BUILT_IN_CATALOGUE.known(code)!.conditions);
+      const builtIn = BUILT_IN_CATALOGUE.known(code)!;
+      const original = tidyConditions(part.kind, builtIn.conditions);
       const kept = JSON.stringify(conditions) === JSON.stringify(original) ? null : JSON.stringify(conditions);
+      // What is left out of the request stays as it is: the owner's rules and Interval if they set them, else the built-in ones.
+      const rules = JSON.stringify(tidyRulesOrThrow(part.kind, p.rules ?? part.rules));
+      const keptRules = rules === JSON.stringify(tidyRules(part.kind, builtIn.rules)) ? null : rules;
+      const intervalKm = p.intervalKm === undefined && p.intervalMonths === undefined ? part.intervalKm : (p.intervalKm ?? null);
+      const intervalMonths = p.intervalKm === undefined && p.intervalMonths === undefined ? part.intervalMonths : (p.intervalMonths ?? null);
+      const sameInterval = intervalKm === builtIn.intervalKm && intervalMonths === builtIn.intervalMonths;
       transaction(() => {
         spreadDetails(code, part.characteristics, p.characteristics);
         // A part set just as it is built in is no change at all.
-        if (kept === null && p.characteristics === null && !p.removed) {
+        if (kept === null && p.characteristics === null && !p.removed && sameInterval && keptRules === null) {
           db.prepare('DELETE FROM catalogue_parts WHERE garage_id = ? AND code = ?').run(garageId, code);
         } else {
           db.prepare(
-            `INSERT INTO catalogue_parts (garage_id, code, conditions, characteristics, removed) VALUES (?, ?, ?, ?, ?)
-             ON CONFLICT (garage_id, code) DO UPDATE SET conditions = excluded.conditions, characteristics = excluded.characteristics, removed = excluded.removed`,
-          ).run(garageId, code, kept, p.characteristics, p.removed ? 1 : 0);
+            `INSERT INTO catalogue_parts (garage_id, code, conditions, characteristics, removed, interval_set, interval_km, interval_months, interval_rules)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT (garage_id, code) DO UPDATE SET conditions = excluded.conditions, characteristics = excluded.characteristics,
+               removed = excluded.removed, interval_set = excluded.interval_set, interval_km = excluded.interval_km,
+               interval_months = excluded.interval_months, interval_rules = excluded.interval_rules`,
+          ).run(
+            garageId,
+            code,
+            kept,
+            p.characteristics,
+            p.removed ? 1 : 0,
+            sameInterval ? 0 : 1,
+            sameInterval ? null : intervalKm,
+            sameInterval ? null : intervalMonths,
+            keptRules,
+          );
         }
         catalogueChanged();
       });
     } else {
       const p = await parse(c, ownPartInput);
       const fr = p.nameFr ?? p.name;
+      // A check has no Part Specs to turn into parts, nor a part into a check.
+      if ((p.unit === null) !== (part.unit === null)) throw new HttpError(422, 'A check cannot become a part, nor a part a check');
+      const rules = JSON.stringify(tidyRulesOrThrow(part.kind, p.rules));
       transaction(() => {
         spreadDetails(code, part.characteristics, p.characteristics);
         // Its kind stays: a Vehicle's list is made of parts of its own kind.
         db.prepare(
-          `UPDATE catalogue_parts SET name = ?, name_fr = ?, unit = ?, category = ?, interval_km = ?, interval_months = ?, conditions = ?, characteristics = ?
+          `UPDATE catalogue_parts SET name = ?, name_fr = ?, unit = ?, category = ?, interval_km = ?, interval_months = ?, conditions = ?, characteristics = ?,
+             interval_rules = ?
            WHERE garage_id = ? AND code = ?`,
-        ).run(p.name, p.nameFr, p.unit, p.category, p.intervalKm, p.intervalMonths, JSON.stringify(tidyOrThrow(part.kind, p.conditions)), p.characteristics, garageId, code);
+        ).run(p.name, p.nameFr, p.unit, p.category, p.intervalKm, p.intervalMonths, JSON.stringify(tidyOrThrow(part.kind, p.conditions)), p.characteristics, rules, garageId, code);
         const ofGarage = 'vehicle_id IN (SELECT id FROM vehicles WHERE garage_id = ?)';
-        db.prepare(`UPDATE part_specs SET name = ?, name_fr = ?, unit = ? WHERE standard_part = ? AND ${ofGarage}`).run(p.name, fr, p.unit, code, garageId);
+        if (p.unit !== null) {
+          db.prepare(`UPDATE part_specs SET name = ?, name_fr = ?, unit = ? WHERE standard_part = ? AND ${ofGarage}`).run(p.name, fr, p.unit, code, garageId);
+        }
         db.prepare(`UPDATE fitment_positions SET name = ? WHERE standard_part = ? AND ${ofGarage}`).run(p.name, code, garageId);
         // A Task still named after the part follows it; one the owner renamed stays.
         db.prepare(`UPDATE maintenance_tasks SET name = ?, name_fr = ? WHERE standard_part = ? AND name = ? AND ${ofGarage}`).run(p.name, fr, code, part.en, garageId);

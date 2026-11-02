@@ -45,6 +45,7 @@ const task = (intervalKm: number | null, intervalMonths: number | null): Mainten
   workshopNotes: null,
   standardPart: null,
   category: null,
+  switchedOff: false,
   requiredParts: [],
   tools: [],
   specIds: [],
