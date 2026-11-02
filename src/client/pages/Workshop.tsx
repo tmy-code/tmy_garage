@@ -467,7 +467,7 @@ export function TaskPage({ task, vehicle, snapshot }: { task: MaintenanceTask; v
   );
 }
 
-// --- The specs of every vehicle on the garage page, reached from the menu ---
+// --- One tab per vehicle on the garage page, reached from the menu; each opens that vehicle's specs page ---
 
 export function WorkshopPage({ snapshot }: { snapshot: Snapshot }) {
   const t = useT();
@@ -483,43 +483,13 @@ export function WorkshopPage({ snapshot }: { snapshot: Snapshot }) {
           </a>
         </div>
       ) : null}
-      <div className="card-grid">
-        {shown.map((v) => {
-          const categories = specCategoriesOf(snapshot, v.id);
-          return (
-            <section key={v.id}>
-              <div className="heading-row">
-                <h2 className="with-icon">
-                  <VehicleIcon vehicle={v} /> {v.name}
-                </h2>
-                <a className="button button-small" href={`#/vehicles/${v.id}/specs`}>
-                  {t.workshop.editSpecs}
-                </a>
-              </div>
-              {categories.length === 0 ? <p className="muted">{t.workshop.noSpecs}</p> : null}
-              {categories.map(([category, groups]) => (
-                <Fragment key={category}>
-                  <h3 className="due-group">{t.workshop.partCategories[category]}</h3>
-                  {groups.map(([group, items]) => (
-                    <Fragment key={group}>
-                      <h4 className="muted">{t.workshop.specGroups[group]}</h4>
-                      <ul className="list list-plain">
-                        {items.map((spec) => (
-                          <li key={spec.id}>
-                            <div className="spec-row">
-                              <SpecText spec={spec} />
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    </Fragment>
-                  ))}
-                </Fragment>
-              ))}
-            </section>
-          );
-        })}
-      </div>
+      <nav className="vehicle-tabs" aria-label={t.workshop.section}>
+        {shown.map((v) => (
+          <a key={v.id} className="button button-block with-icon" href={`#/vehicles/${v.id}/specs`}>
+            <VehicleIcon vehicle={v} /> {v.name}
+          </a>
+        ))}
+      </nav>
     </Layout>
   );
 }

@@ -1217,3 +1217,13 @@ body > .banner {
   display: flex;
   gap: 8px;
 }
+
+.vehicle-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.vehicle-tabs .button {
+  flex: 1 1 160px;
+}
