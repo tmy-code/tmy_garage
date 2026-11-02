@@ -41,7 +41,7 @@ export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
       action: t.action ?? 'replace',
     })),
     services: snapshot.services.map(normalizeService),
-    catalogue: (snapshot.catalogue ?? []).map((e) => ({ ...e, own: e.own ? { ...e.own, action: e.own.action ?? 'replace' } : null })),
+    catalogue: (snapshot.catalogue ?? []).map((e) => ({ ...e, overrides: e.overrides ?? null, own: e.own ? { ...e.own, action: e.own.action ?? 'replace' } : null })),
     specLines: (snapshot.specLines ?? []).map((l) => ({ ...l, category: l.category ?? null })),
     vehicles: snapshot.vehicles.map((v) => ({
       ...v,

@@ -41,6 +41,10 @@ export function catalogueEntries(db: DatabaseSync, garageId: string): CatalogueE
     conditions: r.conditions ? (JSON.parse(r.conditions) as Conditions) : null,
     characteristics: r.characteristics,
     removed: r.removed === 1,
+    overrides:
+      !r.kind && (r.name || r.name_fr || r.category || r.action)
+        ? { name: r.name, nameFr: r.name_fr, category: r.category, action: r.action }
+        : null,
     interval: r.interval_set === 1 ? { intervalKm: r.interval_km, intervalMonths: r.interval_months } : null,
   }));
 }

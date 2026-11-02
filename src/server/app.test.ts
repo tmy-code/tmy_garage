@@ -315,6 +315,18 @@ describe('spec lines and the plan templates', () => {
     expect((await call('DELETE', '/api/catalogue/moto_engine_oil')).status).toBe(204);
   });
 
+  it('lets the owner rename a built-in template and change its category and action, for the vehicles added next', async () => {
+    const put = (body: object) => call('PUT', '/api/catalogue/moto_chain', { conditions: { finalDrive: ['chain'] }, ...body });
+    expect((await put({ name: 'Inspect the chain and sprockets', category: 'chassis', action: 'inspect' })).status).toBe(200);
+    const bike = (await (await call('POST', '/api/vehicles', { ...BIKE, name: 'Next' })).json()) as Vehicle;
+    expect((await snapshot()).tasks.find((t) => t.vehicleId === bike.id && t.name === 'Inspect the chain and sprockets')).toMatchObject({ category: 'chassis', action: 'inspect', intervalKm: 25000 });
+    // Set back as built in, it is no change at all.
+    expect((await put({ name: 'Replace chain', category: 'transmission', action: 'replace' })).status).toBe(200);
+    expect(db.prepare(`SELECT COUNT(*) AS n FROM catalogue_parts WHERE code = 'moto_chain'`).get()).toEqual({ n: 0 });
+    const again = (await (await call('POST', '/api/vehicles', { ...BIKE, name: 'Again' })).json()) as Vehicle;
+    expect((await snapshot()).tasks.find((t) => t.vehicleId === again.id && t.name === 'Replace chain')).toMatchObject({ category: 'transmission', action: 'replace' });
+  });
+
   it('adds a template of the owner’s with an action, used by the next matching vehicle', async () => {
     const res = await call('POST', '/api/catalogue', {
       kind: 'motorcycle',

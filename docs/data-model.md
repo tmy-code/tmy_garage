@@ -153,7 +153,7 @@ The Templates are the built-in list in [`catalogue.ts`](../src/shared/catalogue.
 - A **new Vehicle** gets the Templates that fit its Build as Tasks, at the Template's Interval (shorter engine oil distance with a turbo).
 - After that the Vehicle's Tasks are its own. Changing a Template, or the Vehicle's Build, never changes them.
 - **Add missing tasks from templates** (on the Vehicle page) gives an existing Vehicle the Templates it has no Task named like yet.
-- **Settings** edits the Templates: a built-in one's Interval, Build details or removal, and the owner's own Templates (name, Action, Category, Interval, Build details).
+- **Settings** edits any Template: its name, Action, Category, Interval and the Build details it applies to; a built-in one can also be taken off the list or set back to the built-in version.
 
 ### `catalogue_parts`
 
@@ -164,9 +164,9 @@ The key is `garage_id` and `code`. This table has no `id`. The columns `unit` an
 | `garage_id` | Required. → `garages`. |
 | `code` | Required. A built-in code, or `own_<uuid>` for the owner's own Template. |
 | `kind` | `car` or `motorcycle`. **Empty means the row changes a built-in Template**, and filled means it is a whole Template of the owner's. |
-| `name`, `name_fr` | Own Templates only. |
-| `category` | Own Templates only. |
-| `action` | Own Templates only. A built-in Template's Action comes from its name. |
+| `name`, `name_fr` | An own Template's name; for a built-in one, the owner's own task name (empty keeps the built-in one). |
+| `category` | The same: an own Template's, or the owner's choice for a built-in one. |
+| `action` | The same. A built-in Template's Action otherwise comes from its name. |
 | `interval_km`, `interval_months` | The default Interval: for an own Template always, for a built-in one only when `interval_set` is 1. |
 | `interval_set` | Required, yes/no. A built-in Template whose default Interval is the owner's. |
 | `conditions` | JSON: for each detail of the Build, the values allowed. Empty keeps a built-in Template's own conditions. |

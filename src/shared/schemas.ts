@@ -159,6 +159,14 @@ export const catalogueChangeInput = z
   .object({
     conditions,
     removed: z.boolean().default(false),
+    /** The owner's own name, category or action for the task; left out keeps the built-in one. */
+    name: optionalText(120),
+    nameFr: optionalText(120),
+    category: z
+      .enum(PART_CATEGORIES)
+      .nullish()
+      .transform((v) => v ?? null),
+    action: taskAction.nullish().transform((v) => v ?? null),
     intervalKm: z.number().int().positive().max(1_000_000).nullish(),
     intervalMonths: z.number().int().positive().max(600).nullish(),
   })

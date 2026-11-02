@@ -539,18 +539,26 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       const intervalKm = p.intervalKm === undefined && p.intervalMonths === undefined ? part.intervalKm : (p.intervalKm ?? null);
       const intervalMonths = p.intervalKm === undefined && p.intervalMonths === undefined ? part.intervalMonths : (p.intervalMonths ?? null);
       const sameInterval = intervalKm === builtIn.intervalKm && intervalMonths === builtIn.intervalMonths;
+      // Only what differs from the built-in task is kept as the owner's.
+      const builtInName = builtIn.task?.en ?? builtIn.en;
+      const name = builtIn.task && p.name && p.name !== builtInName ? p.name : null;
+      const nameFr = builtIn.task && p.nameFr && p.nameFr !== builtIn.task.fr ? p.nameFr : null;
+      const category = p.category && p.category !== BUILT_IN_CATALOGUE.known(code)!.category ? p.category : null;
+      const builtInAction = BUILT_IN_CATALOGUE.known(code)!.action;
+      const action = p.action && p.action !== builtInAction ? p.action : null;
       transaction(() => {
         // A template set just as it is built in is no change at all.
-        if (kept === null && !p.removed && sameInterval) {
+        if (kept === null && !p.removed && sameInterval && !name && !nameFr && !category && !action) {
           db.prepare('DELETE FROM catalogue_parts WHERE garage_id = ? AND code = ?').run(garageId, code);
         } else {
           db.prepare(
-            `INSERT INTO catalogue_parts (garage_id, code, conditions, removed, interval_set, interval_km, interval_months)
-             VALUES (?, ?, ?, ?, ?, ?, ?)
+            `INSERT INTO catalogue_parts (garage_id, code, conditions, removed, interval_set, interval_km, interval_months, name, name_fr, category, action)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT (garage_id, code) DO UPDATE SET conditions = excluded.conditions,
                removed = excluded.removed, interval_set = excluded.interval_set, interval_km = excluded.interval_km,
-               interval_months = excluded.interval_months`,
-          ).run(garageId, code, kept, p.removed ? 1 : 0, sameInterval ? 0 : 1, sameInterval ? null : intervalKm, sameInterval ? null : intervalMonths);
+               interval_months = excluded.interval_months, name = excluded.name, name_fr = excluded.name_fr,
+               category = excluded.category, action = excluded.action`,
+          ).run(garageId, code, kept, p.removed ? 1 : 0, sameInterval ? 0 : 1, sameInterval ? null : intervalKm, sameInterval ? null : intervalMonths, name, nameFr, category, action);
         }
         catalogueChanged();
       });

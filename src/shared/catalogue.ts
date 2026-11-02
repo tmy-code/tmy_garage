@@ -317,6 +317,8 @@ export interface CatalogueEntry {
   characteristics: string | null;
   /** A built-in part taken off the list. */
   removed: boolean;
+  /** The owner's own name, category or action for a built-in part; empty keeps the built-in one. */
+  overrides: { name: string | null; nameFr: string | null; category: PartCategory | null; action: TaskAction | null } | null;
   /** The owner's own default Interval for a built-in part; null keeps the built-in one. */
   interval: Interval | null;
 }
@@ -374,13 +376,17 @@ export class Catalogue {
     const changes = new Map(entries.map((e) => [e.code, e]));
     const builtIn = (PART_TEMPLATES as readonly PartTemplate[]).map((t): CataloguePart => {
       const change = changes.get(t.code);
+      const o = change?.overrides;
+      const task = t.task ? { en: o?.name ?? t.task.en, fr: o?.nameFr ?? o?.name ?? t.task.fr } : undefined;
       return {
         ...t,
+        ...(task ? { task } : {}),
+        category: o?.category ?? t.category,
         intervalKm: change?.interval ? change.interval.intervalKm : t.intervalKm,
         intervalMonths: change?.interval ? change.interval.intervalMonths : t.intervalMonths,
         conditions: change?.conditions ?? conditionsOf(t.kind, t.when ?? []),
         characteristics: change?.characteristics ?? null,
-        action: actionOfName(t.task?.en ?? t.en),
+        action: o?.action ?? actionOfName(t.task?.en ?? t.en),
         builtIn: true,
         changed: change !== undefined,
         removed: change?.removed ?? false,

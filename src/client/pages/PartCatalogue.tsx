@@ -178,8 +178,8 @@ export function PartForm({ part, kind }: { part?: CataloguePart; kind: VehicleKi
   const t = useT();
   const own = part === undefined || !part.builtIn;
   const choices = conditionChoices(kind);
-  const [name, setName] = useState(part?.en ?? '');
-  const [nameFr, setNameFr] = useState(part && part.fr !== part.en ? part.fr : '');
+  const [name, setName] = useState(part ? (part.task?.en ?? part.en) : '');
+  const [nameFr, setNameFr] = useState(part && (part.task?.fr ?? part.fr) !== (part.task?.en ?? part.en) ? (part.task?.fr ?? part.fr) : '');
   const [category, setCategory] = useState<PartCategory>(part?.category ?? 'other');
   const [action, setAction] = useState<TaskAction>(part?.action ?? 'replace');
   const [intervalKm, setIntervalKm] = useState(String(part?.intervalKm ?? ''));
@@ -203,7 +203,7 @@ export function PartForm({ part, kind }: { part?: CataloguePart; kind: VehicleKi
         if (part) await online('PUT', `/api/catalogue/${part.code}`, body);
         else await online('POST', '/api/catalogue', body);
       } else {
-        await online('PUT', `/api/catalogue/${part!.code}`, { ...shared, removed });
+        await online('PUT', `/api/catalogue/${part!.code}`, { ...shared, removed, ...(together ? {} : { name, nameFr, category, action }) });
       }
       navigate(LIST, { replace: true });
     });
@@ -229,7 +229,7 @@ export function PartForm({ part, kind }: { part?: CataloguePart; kind: VehicleKi
       <NeedsConnection />
       <form onSubmit={submit} className="form">
         {part?.removed ? <p className="banner banner-warn">{t.settings.removedNotice}</p> : null}
-        {own ? (
+        {own || !together ? (
           <>
             <Field label={t.settings.partName}>
               <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} lang="en" />
