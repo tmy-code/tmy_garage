@@ -64,7 +64,6 @@ function snapshot(inspections: TechnicalInspection[] = [], documents: GarageDocu
     readings: [],
     vehicleSpecs: [],
     partSpecs: [],
-    positions: [],
     inspections,
     modifications: [],
     documents,

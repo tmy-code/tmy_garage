@@ -8,7 +8,7 @@ The source of truth is the code: [`src/server/db.ts`](../src/server/db.ts) for t
 
 - A **Garage** holds everything. Each user has one, and today the app runs with a single Garage.
 - A Garage has **Vehicles**, and nearly everything hangs off a Vehicle: its **Maintenance Tasks**, its **Services**, its **Odometer Readings**, its **Part Specs**, its **Technical Inspections** and its **Modifications**.
-- A Vehicle's **Build** (fuel, gearbox, timing drive, options…) and the **Parts Catalogue** decide which **Standard Parts** it has, and which checks and services. Those bring their Part Specs, Fitment Positions and Maintenance Tasks with them, each Task at the interval its Build calls for.
+- A Vehicle's **Build** (fuel, gearbox, timing drive, options…) and the **Parts Catalogue** decide which **Standard Parts** it has, and which tasks that use nothing to buy. Those bring their Part Specs and Maintenance Tasks with them, each Task at the interval its Build calls for.
 - Logging a **Service** says which Tasks were done and which parts went on. What is due next is worked out from that history and never stored.
 - **Insurance** sits beside the Vehicles: a Policy has yearly Terms, and each Term has one Cover per Vehicle.
 - **Documents** are stored files that can be attached to almost anything.
@@ -26,7 +26,6 @@ flowchart TD
   Vehicle --> Service
   Vehicle --> Reading[Odometer Reading]
   Vehicle --> PartSpec[Part Spec]
-  Vehicle --> Position[Fitment Position]
   Vehicle --> VSpec[Vehicle Spec]
   Vehicle --> Inspection[Technical Inspection]
   Vehicle --> Modification
@@ -35,7 +34,6 @@ flowchart TD
   Service -- did --> Task
   Service -- fitted --> PartUsed[Part Used]
   Task -- needs --> PartSpec
-  PartUsed -- at --> Position
 
   Policy --> Term[Policy Term]
   Term --> Cover
@@ -194,7 +192,7 @@ The database refuses a Task with neither a distance nor a time interval.
 | `standard_part` | The code of the Standard Part this Task replaces. The Task is paused while that part is not on the Vehicle. |
 | `custom_interval` | Required, yes/no. No means the interval follows the Build (shorter with a turbo, for example). Yes means the owner set it. |
 | `category` | The category the owner placed the Task in: `engine`, `transmission`, `brakes`, `chassis`, `electrical`, `cooling_climate` or `other`. Empty follows the Task's part's category, or `other` when it has no part. |
-| `switched_off` | Required, yes/no. A check or service of the schedule the owner switched off on this Vehicle, which pauses it. |
+| `switched_off` | Required, yes/no. A task of the schedule that uses nothing, switched off by the owner on this Vehicle, which pauses it. |
 
 ### `services`
 
@@ -223,7 +221,6 @@ What actually went on during a Service. A line keeps its own description, so the
 | `service_id` | Required. → `services`. |
 | `sort` | Required. |
 | `part_spec_id` | → `part_specs`. The Part Spec this line fulfils. |
-| `position_id` | → `fitment_positions`. Where it was fitted. |
 | `description` | Required. Brand and product as bought. |
 | `part_number` | |
 | `quantity` | Required. |
@@ -266,9 +263,6 @@ The Vehicle Specs a Task involves. The key is the pair of columns.
 ```mermaid
 erDiagram
   vehicles ||--o{ part_specs : takes
-  vehicles ||--o{ fitment_positions : has
-  fitment_positions ||--o{ parts_used : holds
-  fitment_positions ||--o{ modifications : holds
   part_specs ||--o{ parts_used : "fulfilled by"
   garages ||--o{ catalogue_parts : changes
 ```
@@ -289,22 +283,12 @@ What a Vehicle takes for one Part. A Vehicle has at most one row per Standard Pa
 | `unit` | Required. `piece` or `litre`. |
 | `not_fitted` | Required, yes/no. A Standard Part set aside as not on this Vehicle. |
 
-### `fitment_positions`
-
-A location holding one Part at a time. A fitted Standard Part gets one automatically; oils and fluids don't. What is fitted there now is never stored: it is the latest Part Used or Modification at that position.
-
-| Column | Meaning |
-| --- | --- |
-| `vehicle_id` | Required. → `vehicles`. |
-| `standard_part` | The Standard Part's code. Empty for an older position the owner named. |
-| `name` | Required. Used on screen only when `standard_part` is empty. |
-
 ### The Parts Catalogue
 
 The catalogue is two lists merged by the `Catalogue` class in [`catalogue.ts`](../src/shared/catalogue.ts):
 
 1. **Built-in parts**, in `PART_TEMPLATES` in the code, each with a code, names, unit, category, default interval, conditions on the Build and, for engine oil, a shorter distance with a turbo (not editable).
-2. **The owner's changes**, in the `catalogue_parts` table: one row per changed or added entry, for each Garage. An entry is a part to replace, or a **check or service** with a Task but no part (chain lubrication, valve clearance).
+2. **The owner's changes**, in the `catalogue_parts` table: one row per changed or added entry, for each Garage. An entry is a part to replace, or a task that uses nothing to buy (chain lubrication, valve clearance), chosen in Settings as "Nothing" next to "A part" and "A fluid".
 
 An entry with no row is used exactly as built in, so a Garage with no changes has an empty table. Standard Part codes are not foreign keys, because most of them point at the code rather than at a table.
 
@@ -321,7 +305,7 @@ The key is `garage_id` and `code`. This table has no `id`.
 | `kind` | `car` or `motorcycle`. **Empty means the row changes a built-in part**, and filled means it is a whole part of the owner's. |
 | `name` | Own parts only. |
 | `name_fr` | Own parts only. |
-| `unit` | Own entries only: `piece` for fitted, `litre` for a fluid, **empty for a check or service**, which has no Part Spec and no Fitment Position. |
+| `unit` | Own entries only: `piece` for fitted, `litre` for a fluid, **empty for a task that uses nothing**, which has no Part Spec. |
 | `category` | Own entries only; the same seven values as a Task's. A built-in entry's category is in the code. |
 | `interval_km` | The default distance interval: for an own entry always, for a built-in one only when `interval_set` is 1. |
 | `interval_months` | The same, for time. |
@@ -338,14 +322,14 @@ When a Vehicle is added, its Build changes or the catalogue changes, the server 
 
 | Situation | What happens |
 | --- | --- |
-| A part now fits | The Vehicle gets its Part Spec, its Fitment Position if fitted, and an owned Vehicle gets its Task. A part set aside earlier comes back. |
+| A part now fits | The Vehicle gets its Part Spec, and an owned Vehicle gets its Task. A part set aside earlier comes back. |
 | A part no longer fits, and is untouched | Its Part Spec is marked `not_fitted`, which pauses its Task. |
 | A part no longer fits, but is in use | It stays on the Vehicle, and the screens flag it. |
 | A part's fit did not change | The owner's own "not on this vehicle" choice is left alone. |
-| A check now fits | An owned Vehicle gets its Task, and no Part Spec. |
-| A check no longer fits | Its Task stays and is paused, since the Task is kept for its history. |
+| A task that uses nothing now fits | An owned Vehicle gets its Task, and no Part Spec. |
+| A task that uses nothing no longer fits | Its Task stays and is paused, since the Task is kept for its history. |
 | The catalogue's interval changes | Every Task of an owned Vehicle whose `custom_interval` is no takes the interval its Build now calls for. Intervals the owner set stay. |
-| The owner switches a check off on a Vehicle | Its Task is paused (`switched_off`), and no change in the catalogue brings it back. |
+| The owner switches such a task off on a Vehicle | Its Task is paused (`switched_off`), and no change in the catalogue brings it back. |
 
 A part is **in use** when its Part Spec has been filled in, a Task gives a quantity for it, or a Part Used refers to it. Default details and required parts with no quantity don't count.
 
@@ -392,7 +376,6 @@ The key is `inspection_id` and `sort`.
 | `fitted_date` | Required. |
 | `fitted_odometer` | |
 | `removed_date` | |
-| `position_id` | → `fitment_positions`. |
 | `declared_to_insurer` | Required, yes/no. |
 | `notes` | |
 
@@ -576,7 +559,6 @@ These values are always calculated from the records above, so they can't drift o
 | Due Date and status | From the last Service or the baseline, the stricter interval and the distance rate. The status is `overdue`, `dueSoon`, `ok`, `unknown` or `paused`. A date from a distance is a projection, and the screens mark it "≈". |
 | A Task's category | The owner's choice, otherwise the part's category if it replaces one, otherwise `other`. |
 | Shopping List | The Required Parts of the Tasks coming due, added up per Part Spec. No stock is tracked. |
-| What is fitted | The latest Part Used or Modification at a position. |
 | Next Technical Inspection | The date on the last report, otherwise the regulatory rhythm from first registration. |
 
 ## Deleting things
@@ -589,7 +571,6 @@ Foreign keys stop anything from being deleted while other rows still need it, ex
 | Maintenance Task | Refused if a Service used it, or if it is the only Task for a part still on the Vehicle (the owner switches that off through the part). Otherwise its required parts, tools and spec links go too. |
 | Service | Its Task links, Parts Used and Documents go too. A defect it fixed loses that link, so it no longer shows as fixed. |
 | Part Spec | Refused for a Standard Part, which is marked as not on the Vehicle instead. Otherwise Tasks stop requiring it, and Parts Used keep their description and lose the link. |
-| Fitment Position | Refused for a Standard Part's position, or if anything has been fitted there. |
 | Technical Inspection | Its defects and Documents go too. |
 | Modification | Its Documents go too. |
 | Driver | Policies stop listing them. Their Claims stay, with nobody named as driving. |
@@ -603,7 +584,7 @@ Foreign keys stop anything from being deleted while other rows still need it, ex
 
 The phone keeps one `Snapshot` (defined in [`types.ts`](../src/shared/types.ts)) so it works in the garage with no signal. This design is explained in [ADR 0001](adr/0001-offline-service-logging-via-send-queue.md).
 
-- The snapshot holds Vehicles, Tasks, Services, readings, Vehicle Specs, Part Specs, positions, inspections, Modifications, Drivers, Policies, Claims, Quotes and the catalogue changes. It holds Document details, but not the files.
+- The snapshot holds Vehicles, Tasks, Services, readings, Vehicle Specs, Part Specs, inspections, Modifications, Drivers, Policies, Claims, Quotes and the catalogue changes. It holds Document details, but not the files.
 - It groups data the way screens use it, not the way tables store it. For example, a Task carries its `requiredParts`, `tools` and `specIds` as lists.
 - Services and Odometer Readings can be logged offline. They wait in a queue on the phone and are sent when the connection returns. Everything else needs a connection.
 - A phone may hold a snapshot saved by an older version of the app. `normalizeSnapshot` in [`workshop.ts`](../src/shared/workshop.ts) fills in what it lacks.

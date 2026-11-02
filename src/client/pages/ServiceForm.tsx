@@ -3,10 +3,10 @@ import { todayIso } from '../../shared/dates.ts';
 import { effectiveInterval, vehicleDue } from '../../shared/due.ts';
 import type { PartUnit } from '../../shared/schemas.ts';
 import type { OdometerReading, PartUsed, Service, Snapshot, Vehicle } from '../../shared/types.ts';
-import { lastUsed, partSpecsOf, positionsOf } from '../../shared/workshop.ts';
+import { lastUsed, partSpecsOf } from '../../shared/workshop.ts';
 import { newId } from '../api.ts';
 import { confirmDelete, Field, FormError, Layout, StatusChip } from '../components.tsx';
-import { formatKm, parseNumber, partName, positionName, taskName } from '../format.ts';
+import { formatKm, parseNumber, partName, taskName } from '../format.ts';
 import { showToast } from '../feedback.ts';
 import { useT, type Messages } from '../i18n.ts';
 import { navigate } from '../router.ts';
@@ -18,7 +18,6 @@ import { DocumentsPanel } from './Papers.tsx';
 interface PartDraft {
   key: number;
   partSpecId: string | null;
-  positionId: string | null;
   description: string;
   partNumber: string;
   quantity: string;
@@ -33,7 +32,6 @@ function toDraft(p: PartUsed): PartDraft {
   return {
     key: nextKey++,
     partSpecId: p.partSpecId,
-    positionId: p.positionId,
     description: p.description,
     partNumber: p.partNumber ?? '',
     quantity: String(p.quantity),
@@ -50,7 +48,6 @@ function fromDraft(d: PartDraft, t: Messages): PartUsed {
   if (price !== null && (Number.isNaN(price) || price < 0)) throw new Error(t.workshop.priceError);
   return {
     partSpecId: d.partSpecId,
-    positionId: d.positionId,
     description: d.description.trim(),
     partNumber: d.partNumber.trim() || null,
     quantity,
@@ -89,7 +86,6 @@ export function ServiceForm({
   const [notes, setNotes] = useState(existing?.notes ?? '');
   const [parts, setParts] = useState<PartDraft[]>(() => (existing?.partsUsed ?? []).map(toDraft));
   const partSpecs = partSpecsOf(snapshot, vehicle, { keep: (existing?.partsUsed ?? []).map((p) => p.partSpecId) });
-  const positions = positionsOf(snapshot, vehicle);
   const missingParts = [...selected]
     .flatMap((id) => tasks.get(id)?.requiredParts ?? [])
     .filter((r) => partSpecs.some((s) => s.id === r.partSpecId) && !parts.some((p) => p.partSpecId === r.partSpecId));
@@ -132,7 +128,6 @@ export function ServiceForm({
       added.push({
         key: nextKey++,
         partSpecId: spec.id,
-        positionId: last?.positionId ?? positions.find((p) => p.standardPart !== null && p.standardPart === spec.standardPart)?.id ?? null,
         description: last?.description ?? [partName(spec, t), spec.characteristics].filter(Boolean).join(' '),
         partNumber: last?.partNumber ?? '',
         // A quantity not given yet is taken from last time, if any.
@@ -151,7 +146,6 @@ export function ServiceForm({
       {
         key: nextKey++,
         partSpecId: null,
-        positionId: null,
         description: '',
         partNumber: '',
         quantity: '1',
@@ -299,18 +293,6 @@ export function ServiceForm({
                       </select>
                     </Field>
                   </div>
-                  {positions.length > 0 ? (
-                    <Field label={t.workshop.position}>
-                      <select value={d.positionId ?? ''} onChange={(e) => setPart(d.key, { positionId: e.target.value || null })}>
-                        <option value="">{t.workshop.noPosition}</option>
-                        {positions.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {positionName(p, t)}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
-                  ) : null}
                   <details className="part-details">
                     <summary>{t.workshop.moreDetails}</summary>
                     <div className="row">

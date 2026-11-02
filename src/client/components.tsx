@@ -87,7 +87,7 @@ type Section = (typeof SECTIONS)[number][0];
 /** Which menu entry the screen at this route belongs to. */
 function sectionOf([section, , sub]: string[]): Section {
   if (section === 'workshop' || section === 'tasks') return 'workshop';
-  if (section === 'vehicles' && (sub === 'parts' || sub === 'fitted' || sub === 'specs')) return 'workshop';
+  if (section === 'vehicles' && (sub === 'parts' || sub === 'specs')) return 'workshop';
   if (section === 'shopping') return 'shopping';
   if (section === 'settings' || section === 'reminders') return 'settings';
   if (section === 'insurance' || section === 'policies' || section === 'terms' || section === 'claims' || section === 'drivers' || section === 'quotes') return 'insurance';

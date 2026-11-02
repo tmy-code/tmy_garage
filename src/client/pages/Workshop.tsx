@@ -3,29 +3,27 @@ import { catalogueOf, PART_CATEGORIES, specsProblem, type Catalogue } from '../.
 import { todayIso } from '../../shared/dates.ts';
 import { vehicleDue } from '../../shared/due.ts';
 import type { PartUnit, VehicleSpecKind } from '../../shared/schemas.ts';
-import type { FitmentPosition, MaintenanceTask, PartSpec, PartUsed, Snapshot, Vehicle, VehicleSpec } from '../../shared/types.ts';
-import { fitments, lastUsed, partSpecsOf, positionsOf, SHOPPING_HORIZON_DAYS, shoppingList, type FittedItem } from '../../shared/workshop.ts';
+import type { MaintenanceTask, PartSpec, PartUsed, Snapshot, Vehicle, VehicleSpec } from '../../shared/types.ts';
+import { lastUsed, partSpecsOf, SHOPPING_HORIZON_DAYS, shoppingList } from '../../shared/workshop.ts';
 import { confirmDelete, Field, FormError, Layout, NeedsConnection, StatusChip, useWide } from '../components.tsx';
 import {
   describeDue,
   describeInterval,
   describeOfficialInterval,
   formatDate,
-  formatKm,
   formatQuantity,
   parseNumber,
   partName,
   partReferences,
-  positionName,
   taskName,
 } from '../format.ts';
 import { VehicleIcon } from '../brands.tsx';
-import { messages, useT, type Messages } from '../i18n.ts';
+import { messages, useT } from '../i18n.ts';
 import { navigate } from '../router.ts';
 import { online } from '../store.ts';
 import { Submit, useSubmit } from './SetupForms.tsx';
 
-// Workshop data (specs, Part Specs, positions, workshop cards) is desk work and needs a connection, like other setup.
+// Workshop data (specs, Part Specs, workshop cards) is desk work and needs a connection, like other setup.
 // Reading it works offline from the phone's copy, which is what matters mid-job.
 
 /** "Motul 7100 10W-40 · ref. 123" */
@@ -441,110 +439,6 @@ export function PartSpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapsho
   );
 }
 
-// --- Fitment Positions and what is fitted ---
-
-/** Only an older, free-named position can be renamed or deleted: the others are the Vehicle's Standard Parts. */
-function PositionEditor({ existing, editor }: { existing: FitmentPosition; editor: ReturnType<typeof useEditor> }) {
-  const t = useT();
-  const [name, setName] = useState(existing.name);
-  return (
-    <InlineEditor
-      onSubmit={() => editor.save(() => online('PUT', `/api/positions/${existing.id}`, { name }))}
-      onCancel={() => editor.setEditing(null)}
-      onDelete={() => editor.remove(existing.name, () => online('DELETE', `/api/positions/${existing.id}`))}
-      disabled={editor.disabled}
-      error={editor.error}
-    >
-      <Field label={t.workshop.positionName} hint={t.workshop.positionHint}>
-        <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={80} autoFocus />
-      </Field>
-    </InlineEditor>
-  );
-}
-
-/** `odometer` is the latest logged value, so "ago" never rests on a guess. */
-function FittedLine({ item, odometer, t }: { item: FittedItem; odometer: number | null; t: Messages }) {
-  const since = odometer !== null && item.odometer !== null && odometer > item.odometer ? t.workshop.since(formatKm(odometer - item.odometer)) : '';
-  return (
-    <>
-      <span>
-        {item.modification ? '🛠️ ' : ''}
-        {item.label}
-      </span>
-      <span className="muted">
-        {item.odometer !== null
-          ? t.workshop.fittedOn(formatDate(item.date, t), formatKm(item.odometer))
-          : t.workshop.fittedOnDate(formatDate(item.date, t))}
-        {item.modification?.removedDate ? t.workshop.removedOn(formatDate(item.modification.removedDate, t)) : since}
-      </span>
-    </>
-  );
-}
-
-export function FittedPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: Snapshot }) {
-  const t = useT();
-  const editor = useEditor();
-  const today = todayIso();
-  const { usage } = useMemo(() => vehicleDue(snapshot, vehicle.id, today), [snapshot, vehicle.id, today]);
-  const list = fitments(snapshot, vehicle);
-
-  return (
-    <Layout title={t.workshop.fittedTitle(vehicle.name)} back={`/vehicles/${vehicle.id}`}>
-      <NeedsConnection />
-      <p className="muted">{t.workshop.fittedIntro}</p>
-      <TraitsNudge vehicle={vehicle} />
-      {list.length === 0 ? <p className="empty">{t.workshop.noPositions}</p> : null}
-      {PART_CATEGORIES.map((category) => {
-        const items = list.filter(({ position }) => catalogueOf(snapshot).category(position.standardPart) === category);
-        return items.length > 0 ? (
-          <section key={category}>
-            <h2>{t.workshop.partCategories[category]}</h2>
-            <ul className="list list-grid">
-              {items.map(({ position, current, previous }) =>
-                editor.editing === position.id ? (
-                  <li key={position.id} className="editing">
-                    <PositionEditor existing={position} editor={editor} />
-                  </li>
-                ) : (
-                  <li key={position.id}>
-                    <div className="history-row">
-                      <div className="section-head">
-                        <strong>{positionName(position, t)}</strong>
-                        {position.standardPart ? null : (
-                          <button type="button" className="button button-small" onClick={() => editor.setEditing(position.id)}>
-                            {t.workshop.edit}
-                          </button>
-                        )}
-                      </div>
-                      {current ? (
-                        <FittedLine item={current} odometer={usage.latest?.odometer ?? null} t={t} />
-                      ) : (
-                        <span className="muted">{t.workshop.nothingFitted}</span>
-                      )}
-                      {previous.length > 0 ? (
-                        <details>
-                          <summary className="muted">
-                            {t.workshop.previously} {t.workshop.count(previous.length)}
-                          </summary>
-                          {previous.map((p, i) => (
-                            <p key={i} className="history-row">
-                              <FittedLine item={p} odometer={null} t={t} />
-                            </p>
-                          ))}
-                        </details>
-                      ) : null}
-                    </div>
-                  </li>
-                ),
-              )}
-            </ul>
-          </section>
-        ) : null;
-      })}
-    </Layout>
-  );
-}
-
 // --- A Task's workshop card ---
 
 export function TaskPage({ task, vehicle, snapshot }: { task: MaintenanceTask; vehicle: Vehicle; snapshot: Snapshot }) {
@@ -832,11 +726,6 @@ export function WorkshopPage({ snapshot }: { snapshot: Snapshot }) {
               <li>
                 <a href={`#/vehicles/${v.id}/parts`}>
                   {t.workshop.partSpecs} <span className="muted">{count(snapshot.partSpecs, v.id)}</span>
-                </a>
-              </li>
-              <li>
-                <a href={`#/vehicles/${v.id}/fitted`}>
-                  {t.workshop.fitted} <span className="muted">{t.workshop.count(positionsOf(snapshot, v).length)}</span>
                 </a>
               </li>
               <li>

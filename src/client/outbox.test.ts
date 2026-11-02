@@ -9,7 +9,6 @@ const base: Snapshot = {
   readings: [],
   vehicleSpecs: [],
   partSpecs: [],
-  positions: [],
   inspections: [],
   modifications: [],
   documents: [],

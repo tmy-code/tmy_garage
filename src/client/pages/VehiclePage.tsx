@@ -4,7 +4,7 @@ import { catalogueOf } from '../../shared/catalogue.ts';
 import { vehicleDue, type DueInfo } from '../../shared/due.ts';
 import { nextInspection, openDefects } from '../../shared/inspections.ts';
 import { currentCover, renewal } from '../../shared/insurance.ts';
-import { groupByCategory, positionsOf } from '../../shared/workshop.ts';
+import { groupByCategory } from '../../shared/workshop.ts';
 import type { MaintenanceTask, PartUsed, Snapshot, Vehicle } from '../../shared/types.ts';
 import { Layout, StatusChip } from '../components.tsx';
 import { describeDue, describeInterval, describeOfficialInterval, formatDate, formatKm, formatMoney, taskName } from '../format.ts';
@@ -77,7 +77,6 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
   const defects = openDefects(snapshot, vehicle).length;
   const documentCount = snapshot.documents.filter((d) => d.vehicleId === vehicle.id).length;
   const modificationCount = snapshot.modifications.filter((m) => m.vehicleId === vehicle.id).length;
-  const positionCount = positionsOf(snapshot, vehicle).length;
   const partSpecCount = snapshot.partSpecs.filter((p) => p.vehicleId === vehicle.id).length;
   const specCount = snapshot.vehicleSpecs.filter((s) => s.vehicleId === vehicle.id).length;
   const cover = currentCover(snapshot, vehicle.id, today);
@@ -234,11 +233,6 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
           <section>
             <h2>{t.workshop.section}</h2>
             <ul className="list">
-              <li>
-                <a href={`#/vehicles/${vehicle.id}/fitted`}>
-                  {t.workshop.fitted} <span className="muted">{t.workshop.count(positionCount)}</span>
-                </a>
-              </li>
               <li>
                 <a href={`#/vehicles/${vehicle.id}/parts`}>
                   {t.workshop.partSpecs} <span className="muted">{t.workshop.count(partSpecCount)}</span>

@@ -20,7 +20,7 @@ import { catalogueOf } from '../shared/catalogue.ts';
 import { ReadingForm, ServiceForm } from './pages/ServiceForm.tsx';
 import { CopyTasks, SellForm, TaskForm, VehicleForm } from './pages/SetupForms.tsx';
 import { VehiclePage } from './pages/VehiclePage.tsx';
-import { FittedPage, PartSpecsPage, ShoppingPage, SpecsPage, TaskPage, WorkshopForm, WorkshopPage } from './pages/Workshop.tsx';
+import { PartSpecsPage, ShoppingPage, SpecsPage, TaskPage, WorkshopForm, WorkshopPage } from './pages/Workshop.tsx';
 import { scrollForNewRoute, useRoute } from './router.ts';
 import { sync, useStore } from './store.ts';
 
@@ -103,8 +103,6 @@ export function App() {
         return <SpecsPage vehicle={vehicle} snapshot={snapshot} />;
       case 'parts':
         return <PartSpecsPage vehicle={vehicle} snapshot={snapshot} />;
-      case 'fitted':
-        return <FittedPage vehicle={vehicle} snapshot={snapshot} />;
       case 'documents':
         return <DocumentsPage vehicle={vehicle} snapshot={snapshot} />;
       case 'inspections':

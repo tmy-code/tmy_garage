@@ -326,7 +326,7 @@ export interface CataloguePart {
   kind: VehicleKind;
   en: string;
   fr: string;
-  /** Null for a check or service: it has a Task but no Part Spec or Fitment Position. */
+  /** Null for a task that uses nothing to buy: it has a Task but no Part Spec. */
   unit: PartUnit | null;
   category: PartCategory;
   intervalKm: number | null;
@@ -449,11 +449,6 @@ export class Catalogue {
   order(code: StandardPartKey | null): number {
     const index = code === null ? -1 : this.all.findIndex((p) => p.code === code);
     return index === -1 ? Number.MAX_SAFE_INTEGER : index;
-  }
-
-  /** Whether a Standard Part is fitted at a position, rather than a fluid that is topped up or drained. */
-  isFitted(code: StandardPartKey): boolean {
-    return this.known(code)?.unit === 'piece';
   }
 
   category(code: StandardPartKey | null): PartCategory {

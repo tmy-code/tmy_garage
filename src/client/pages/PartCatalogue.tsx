@@ -67,7 +67,6 @@ function PartRow({ part, t }: { part: CataloguePart; t: Messages }) {
       <a className="history-row" href={`#${LIST}/${part.code}`}>
         <span>
           <strong>{listName(part, t)}</strong>
-          {part.unit === null ? <span className="chip chip-unknown">{t.settings.checkChip}</span> : null}
           {part.builtIn ? null : <span className="chip chip-unknown">{t.settings.ownPart}</span>}
           {part.changed && !part.removed ? <span className="chip chip-unknown">{t.settings.changed}</span> : null}
         </span>

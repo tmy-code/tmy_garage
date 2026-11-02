@@ -104,20 +104,9 @@ export interface PartSpec {
   notFitted: boolean;
 }
 
-/** A location on a Vehicle that holds one Part at a time: one of its Standard Parts, or an older free-named one. */
-export interface FitmentPosition {
-  id: string;
-  vehicleId: string;
-  /** Which Standard Part this is; null for a position named by the user before positions came from the catalogue. */
-  standardPart: StandardPartKey | null;
-  /** Only meaningful when standardPart is null: a Standard Part is named by the interface language. */
-  name: string;
-}
-
 /** The actual Part fitted or consumed during a Service. */
 export interface PartUsed {
   partSpecId: string | null;
-  positionId: string | null;
   description: string;
   partNumber: string | null;
   quantity: number;
@@ -173,7 +162,6 @@ export interface Modification {
   fittedDate: IsoDate;
   fittedOdometer: number | null;
   removedDate: IsoDate | null;
-  positionId: string | null;
   declaredToInsurer: boolean;
   notes: string | null;
 }
@@ -280,7 +268,6 @@ export interface Snapshot {
   readings: OdometerReading[];
   vehicleSpecs: VehicleSpec[];
   partSpecs: PartSpec[];
-  positions: FitmentPosition[];
   inspections: TechnicalInspection[];
   modifications: Modification[];
   /** Document details only; the files are fetched on demand. */

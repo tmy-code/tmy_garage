@@ -1,7 +1,7 @@
 import { BUILT_IN_CATALOGUE, type Catalogue } from '../shared/catalogue.ts';
 import { effectiveInterval, type DueInfo } from '../shared/due.ts';
 import type { PartUnit } from '../shared/schemas.ts';
-import type { FitmentPosition, MaintenanceTask, PartSpec } from '../shared/types.ts';
+import type { MaintenanceTask, PartSpec } from '../shared/types.ts';
 import { messages, type Messages } from './i18n.ts';
 
 // Distances use French digit grouping ("24 000 km") in both languages.
@@ -45,11 +45,6 @@ export function nameFrom(current: Catalogue) {
 /** A Standard Part is named in the interface language; another Part by the name the user gave it. */
 export function partName(spec: PartSpec, m: Messages = messages()): string {
   return (spec.standardPart && catalogue.name(spec.standardPart, m.lang)) || localName(spec, m);
-}
-
-/** A Standard Part's position is named in the interface language; an older one by the name the user gave it. */
-export function positionName(position: FitmentPosition, m: Messages = messages()): string {
-  return (position.standardPart && catalogue.name(position.standardPart, m.lang)) || position.name;
 }
 
 /** The OEM reference then the acceptable equivalents, e.g. "OEM 15410-MFJ-D01 · HF204, KN-204"; null when neither is set. */

@@ -471,6 +471,48 @@ const MIGRATIONS: string[] = [
   ALTER TABLE maintenance_tasks RENAME COLUMN category_new TO category;
   UPDATE catalogue_parts SET category = CASE category WHEN 'engine' THEN 'engine' WHEN 'ignition' THEN 'engine' WHEN 'fuel_exhaust' THEN 'engine' WHEN 'transmission' THEN 'transmission' WHEN 'drivetrain' THEN 'transmission' WHEN 'brakes' THEN 'brakes' WHEN 'tires_suspension' THEN 'chassis' WHEN 'body' THEN 'chassis' WHEN 'electrical' THEN 'electrical' WHEN 'cooling' THEN 'cooling_climate' WHEN 'hvac' THEN 'cooling_climate' WHEN 'other' THEN 'other' END WHERE category IS NOT NULL;
   `,
+  `
+  -- Fitment Positions are gone: a Part Used keeps its description and its Part Spec, and the screen listing what is
+  -- fitted where is dropped. A Modification at an older free-named position keeps that name in its notes. The two
+  -- tables that pointed at positions are recreated without the column.
+  UPDATE modifications
+    SET notes = trim(coalesce(notes || char(10), '') || 'Position: ' || (SELECT name FROM fitment_positions WHERE fitment_positions.id = modifications.position_id))
+    WHERE position_id IN (SELECT id FROM fitment_positions WHERE standard_part IS NULL);
+
+  CREATE TABLE parts_used_new (
+    service_id TEXT NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+    sort INTEGER NOT NULL,
+    part_spec_id TEXT REFERENCES part_specs(id) ON DELETE SET NULL,
+    description TEXT NOT NULL,
+    part_number TEXT,
+    quantity REAL NOT NULL,
+    unit TEXT NOT NULL CHECK (unit IN ('piece', 'litre')),
+    price REAL,
+    supplier TEXT,
+    PRIMARY KEY (service_id, sort)
+  );
+  INSERT INTO parts_used_new SELECT service_id, sort, part_spec_id, description, part_number, quantity, unit, price, supplier FROM parts_used;
+  DROP TABLE parts_used;
+  ALTER TABLE parts_used_new RENAME TO parts_used;
+
+  CREATE TABLE modifications_new (
+    id TEXT PRIMARY KEY,
+    vehicle_id TEXT NOT NULL REFERENCES vehicles(id),
+    name TEXT NOT NULL,
+    fitted_date TEXT NOT NULL,
+    fitted_odometer INTEGER,
+    removed_date TEXT,
+    declared_to_insurer INTEGER NOT NULL DEFAULT 0,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  INSERT INTO modifications_new
+    SELECT id, vehicle_id, name, fitted_date, fitted_odometer, removed_date, declared_to_insurer, notes, created_at FROM modifications;
+  DROP TABLE modifications;
+  ALTER TABLE modifications_new RENAME TO modifications;
+
+  DROP TABLE fitment_positions;
+`,
 ];
 
 function schemaVersion(db: DatabaseSync): number {

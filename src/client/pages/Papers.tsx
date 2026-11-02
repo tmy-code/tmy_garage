@@ -4,8 +4,7 @@ import { nextInspection, openDefects } from '../../shared/inspections.ts';
 import type { DefectSeverity, DocumentOwnerKind, DocumentType, InspectionResult } from '../../shared/schemas.ts';
 import type { GarageDocument, Modification, Snapshot, TechnicalInspection, Vehicle } from '../../shared/types.ts';
 import { confirmDelete, Field, FormError, Layout, NeedsConnection } from '../components.tsx';
-import { formatDate, formatKm, parseNumber, positionName } from '../format.ts';
-import { positionsOf } from '../../shared/workshop.ts';
+import { formatDate, formatKm, parseNumber } from '../format.ts';
 import { messages, useT, type Messages } from '../i18n.ts';
 import { Icon } from '../icons.tsx';
 import { navigate } from '../router.ts';
@@ -443,7 +442,6 @@ export function InspectionForm({ vehicle, snapshot, existing }: { vehicle: Vehic
 export function ModificationsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: Snapshot }) {
   const t = useT();
   const mods = snapshot.modifications.filter((m) => m.vehicleId === vehicle.id).sort((a, b) => (a.fittedDate < b.fittedDate ? 1 : -1));
-  const positions = new Map(snapshot.positions.map((p) => [p.id, positionName(p, t)]));
   return (
     <Layout
       title={t.papers.modificationsTitle(vehicle.name)}
@@ -462,7 +460,6 @@ export function ModificationsPage({ vehicle, snapshot }: { vehicle: Vehicle; sna
               <strong>🛠️ {m.name}</strong>
               <span className="muted">
                 {t.papers.fitted(formatDate(m.fittedDate, t))}
-                {m.positionId && positions.get(m.positionId) ? ` · ${positions.get(m.positionId)}` : ''}
                 {m.removedDate ? ` · ${t.papers.removed(formatDate(m.removedDate, t))}` : ''}
               </span>
               {!m.removedDate ? (
@@ -480,12 +477,10 @@ export function ModificationsPage({ vehicle, snapshot }: { vehicle: Vehicle; sna
 
 export function ModificationForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; snapshot: Snapshot; existing?: Modification }) {
   const t = useT();
-  const positions = positionsOf(snapshot, vehicle);
   const [name, setName] = useState(existing?.name ?? '');
   const [fittedDate, setFittedDate] = useState(existing?.fittedDate ?? todayIso());
   const [fittedOdometer, setFittedOdometer] = useState(existing?.fittedOdometer != null ? String(existing.fittedOdometer) : '');
   const [removedDate, setRemovedDate] = useState(existing?.removedDate ?? '');
-  const [positionId, setPositionId] = useState(existing?.positionId ?? '');
   const [declared, setDeclared] = useState(existing?.declaredToInsurer ?? false);
   const [notes, setNotes] = useState(existing?.notes ?? '');
   const { error, disabled, run } = useSubmit();
@@ -499,7 +494,6 @@ export function ModificationForm({ vehicle, snapshot, existing }: { vehicle: Veh
         fittedDate,
         fittedOdometer: wholeKm(fittedOdometer, t),
         removedDate: removedDate || null,
-        positionId: positionId || null,
         declaredToInsurer: declared,
         notes,
       };
@@ -533,18 +527,6 @@ export function ModificationForm({ vehicle, snapshot, existing }: { vehicle: Veh
               <input inputMode="numeric" value={fittedOdometer} onChange={(e) => setFittedOdometer(e.target.value)} />
             </Field>
           </div>
-          {positions.length > 0 ? (
-            <Field label={t.papers.position}>
-              <select value={positionId} onChange={(e) => setPositionId(e.target.value)}>
-                <option value="">{t.papers.noPosition}</option>
-                {positions.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {positionName(p, t)}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          ) : null}
           <label className={`check ${declared ? 'check-on' : ''}`}>
             <input type="checkbox" checked={declared} onChange={(e) => setDeclared(e.target.checked)} />
             <span className="due-name">{t.papers.declared}</span>

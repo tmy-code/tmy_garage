@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { MaintenanceTask, PartUsed, Service, Snapshot } from './types.ts';
 import { BUILT_IN_CATALOGUE } from './catalogue.ts';
 import type { DueInfo } from './due.ts';
-import { fitments, groupByCategory, normalizeSnapshot, positionsOf, shoppingList } from './workshop.ts';
+import { groupByCategory, normalizeSnapshot, shoppingList } from './workshop.ts';
 
 function task(overrides: Partial<MaintenanceTask>): MaintenanceTask {
   return {
@@ -30,7 +30,6 @@ function task(overrides: Partial<MaintenanceTask>): MaintenanceTask {
 function part(overrides: Partial<PartUsed>): PartUsed {
   return {
     partSpecId: null,
-    positionId: null,
     description: 'Part',
     partNumber: null,
     quantity: 1,
@@ -113,7 +112,6 @@ const base: Snapshot = {
       unit: 'piece',
     },
   ],
-  positions: [{ id: 'rear', vehicleId: 'bike', standardPart: 'moto_tire_rear', name: 'moto_tire_rear' }],
   inspections: [],
   modifications: [],
   documents: [],
@@ -125,75 +123,6 @@ const base: Snapshot = {
 };
 
 const bike = base.vehicles[0]!;
-
-describe('fitments', () => {
-  it('derives what is fitted from the most recent Part Used at each position', () => {
-    const snapshot: Snapshot = {
-      ...base,
-      services: [
-        service('s1', '2024-04-01', 10_000, ['tyre'], [part({ positionId: 'rear', description: 'Pilot Road 4' })]),
-        service(
-          's2',
-          '2026-05-02',
-          21_340,
-          ['tyre'],
-          [part({ positionId: 'rear', description: 'Road 6' }), part({ description: 'Valve' })],
-        ),
-      ],
-    };
-    const [rear] = fitments(snapshot, bike);
-    expect(rear!.current).toMatchObject({ date: '2026-05-02', odometer: 21_340, label: 'Road 6' });
-    expect(rear!.previous.map((p) => p.label)).toEqual(['Pilot Road 4']);
-  });
-
-  it('counts a Modification at a position as fitted until it is removed', () => {
-    const exhaust = {
-      id: 'm',
-      vehicleId: 'bike',
-      name: 'Slip-on exhaust',
-      fittedDate: '2025-06-01',
-      fittedOdometer: 15_000,
-      removedDate: null,
-      positionId: 'rear',
-      declaredToInsurer: true,
-      notes: null,
-    };
-    const snapshot: Snapshot = {
-      ...base,
-      services: [service('s1', '2024-04-01', 10_000, ['tyre'], [part({ positionId: 'rear', description: 'Stock' })])],
-      modifications: [exhaust],
-    };
-    expect(fitments(snapshot, bike)[0]!.current).toMatchObject({ label: 'Slip-on exhaust', modification: { id: 'm' } });
-    const removed = { ...snapshot, modifications: [{ ...exhaust, removedDate: '2026-01-01' }] };
-    const [rear] = fitments(removed, bike);
-    expect(rear!.current?.label).toBe('Stock');
-    expect(rear!.previous.map((p) => p.label)).toEqual(['Slip-on exhaust']);
-  });
-
-  it('shows an empty position when nothing was fitted yet', () => {
-    expect(fitments(base, bike)).toEqual([{ position: base.positions[0], current: null, previous: [] }]);
-  });
-
-  it('lists Standard Part positions in catalogue order, then older free-named ones', () => {
-    const snapshot: Snapshot = {
-      ...base,
-      positions: [
-        { id: 'old', vehicleId: 'bike', standardPart: null, name: 'Top box' },
-        ...base.positions,
-        { id: 'chain', vehicleId: 'bike', standardPart: 'moto_chain', name: 'moto_chain' },
-      ],
-    };
-    expect(positionsOf(snapshot, bike).map((p) => p.id)).toEqual(['rear', 'chain', 'old']);
-  });
-
-  it('hides the position of a part marked as not on the vehicle, unless something was fitted there', () => {
-    const notFitted = { ...base.partSpecs[1]!, id: 'tyre-spec', standardPart: 'moto_tire_rear' as const, notFitted: true };
-    const hidden: Snapshot = { ...base, partSpecs: [...base.partSpecs, notFitted] };
-    expect(positionsOf(hidden, bike)).toEqual([]);
-    const used: Snapshot = { ...hidden, services: [service('s1', '2024-04-01', 10_000, ['tyre'], [part({ positionId: 'rear' })])] };
-    expect(positionsOf(used, bike).map((p) => p.id)).toEqual(['rear']);
-  });
-});
 
 describe('shoppingList', () => {
   const oilChange = task({
@@ -278,6 +207,6 @@ describe('normalizeSnapshot', () => {
     const s = normalizeSnapshot(old);
     expect(s.tasks[0]).toMatchObject({ workshopNotes: null, standardPart: null, category: null, requiredParts: [], tools: [], specIds: [] });
     expect(s.services[0]!.partsUsed).toEqual([]);
-    expect([s.vehicleSpecs, s.partSpecs, s.positions]).toEqual([[], [], []]);
+    expect([s.vehicleSpecs, s.partSpecs]).toEqual([[], []]);
   });
 });

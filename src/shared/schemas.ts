@@ -251,15 +251,9 @@ export const partSpecInput = z.object({
   notFitted: z.boolean().default(false),
 });
 
-export const positionInput = z.object({ name: z.string().trim().min(1).max(80) });
 
 export const partUsedInput = z.object({
   partSpecId: z
-    .string()
-    .min(1)
-    .nullish()
-    .transform((v) => v ?? null),
-  positionId: z
     .string()
     .min(1)
     .nullish()
@@ -323,11 +317,6 @@ export const modificationInput = z.object({
   fittedDate: isoDate,
   fittedOdometer: odometer.nullish().transform((v) => v ?? null),
   removedDate: isoDate.nullish().transform((v) => v ?? null),
-  positionId: z
-    .string()
-    .min(1)
-    .nullish()
-    .transform((v) => v ?? null),
   declaredToInsurer: z.boolean(),
   notes: optionalText(2000),
 });

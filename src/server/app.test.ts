@@ -7,7 +7,6 @@ import type { DatabaseSync } from 'node:sqlite';
 import type {
   Claim,
   Driver,
-  FitmentPosition,
   GarageDocument,
   InsurancePolicy,
   MaintenanceTask,
@@ -259,7 +258,7 @@ describe('workshop data', () => {
     return res.json();
   }
 
-  it('stores Vehicle Specs, Part Specs and positions, and lists them in the snapshot', async () => {
+  it('stores Vehicle Specs and Part Specs, and lists them in the snapshot', async () => {
     const bike = await createVehicle();
     const torque = await created<VehicleSpec>(`/api/vehicles/${bike.id}/specs`, { kind: 'torque', name: 'Drain plug', value: '30 Nm' });
     await call('PUT', `/api/specs/${torque.id}`, { kind: 'torque', name: 'Drain plug', value: '30 Nm', notes: 'New washer' });
@@ -285,23 +284,11 @@ describe('workshop data', () => {
       partNumbers: null,
       unit: 'litre',
     });
-    // Positions are the vehicle's fitted Standard Parts: a tyre is fitted, engine oil is not.
-    const positions = s.positions.filter((p) => p.vehicleId === bike.id).map((p) => p.standardPart);
-    expect(positions).toEqual(expect.arrayContaining(['moto_tire_rear', 'moto_chain', 'moto_battery']));
-    expect(positions).not.toContain('moto_engine_oil');
-  });
-
-  it('gives positions only from the Standard Parts, which cannot be added, renamed or deleted by hand', async () => {
-    const bike = await createVehicle();
-    const rear = (await snapshot()).positions.find((p) => p.vehicleId === bike.id && p.standardPart === 'moto_tire_rear')!;
-    expect((await call('POST', `/api/vehicles/${bike.id}/positions`, { name: 'Top box' })).status).toBe(404);
-    expect((await call('PUT', `/api/positions/${rear.id}`, { name: 'Renamed' })).status).toBe(409);
-    expect((await call('DELETE', `/api/positions/${rear.id}`)).status).toBe(409);
-    // An older, free-named position is kept and can still be renamed or deleted.
-    db.exec(`INSERT INTO fitment_positions (id, vehicle_id, name) VALUES ('old', '${bike.id}', 'Top box')`);
-    expect((await call('PUT', '/api/positions/old', { name: 'Top case' })).status).toBe(200);
-    expect((await snapshot()).positions.find((p) => p.id === 'old')).toMatchObject({ standardPart: null, name: 'Top case' });
-    expect((await call('DELETE', '/api/positions/old')).status).toBe(204);
+    // Fluids and parts alike are Part Specs: engine oil and a tyre both have one, and no position is kept for either.
+    const specs = s.partSpecs.filter((p) => p.vehicleId === bike.id).map((p) => p.standardPart);
+    expect(specs).toEqual(expect.arrayContaining(['moto_tire_rear', 'moto_chain', 'moto_battery', 'moto_engine_oil']));
+    expect((s as unknown as Record<string, unknown>).positions).toBeUndefined();
+    expect((await call('PUT', '/api/positions/any', { name: 'Renamed' })).status).toBe(404);
   });
 
   /** The Standard Parts a vehicle lists, minus those marked as not on it. */
@@ -371,11 +358,11 @@ describe('workshop data', () => {
     for (const gone of ['moto_chain', 'moto_sprockets', 'moto_drive_belt', 'moto_coolant']) expect(fitted).not.toContain(gone);
   });
 
-  it('gives a motorcycle with a belt drive a drive belt position and no chain one', async () => {
+  it('gives a motorcycle with a belt drive a drive belt Part Spec and no chain one', async () => {
     const bike = await create({ ...BIKE, finalDrive: 'belt' });
-    const positions = (await snapshot()).positions.filter((p) => p.vehicleId === bike.id).map((p) => p.standardPart);
-    expect(positions).toContain('moto_drive_belt');
-    expect(positions).not.toContain('moto_chain');
+    const specs = (await snapshot()).partSpecs.filter((p) => p.vehicleId === bike.id && !p.notFitted).map((p) => p.standardPart);
+    expect(specs).toContain('moto_drive_belt');
+    expect(specs).not.toContain('moto_chain');
   });
 
   it('starts a new vehicle with a Maintenance Task per part, at the catalogue interval', async () => {
@@ -556,7 +543,6 @@ describe('workshop data', () => {
     // Details not filled in never match, so nothing that depends on them is listed.
     expect(expected).toEqual(expect.arrayContaining(['tires', 'brake_pads_front', 'engine_oil']));
     expect(expected).not.toContain('timing_belt_kit');
-    expect(s.positions.filter((p) => p.vehicleId === 'old').map((p) => p.standardPart)).toEqual(expect.arrayContaining(['tires', 'oil_filter']));
   });
 
   it('saves a Task’s workshop card as a whole', async () => {
@@ -620,10 +606,8 @@ describe('workshop data', () => {
       characteristics: '180/55 ZR17',
       unit: 'piece',
     });
-    const rear = (await snapshot()).positions.find((p) => p.vehicleId === bike.id && p.standardPart === 'moto_tire_rear')!;
     const part = {
       partSpecId: tyre.id,
-      positionId: rear.id,
       description: 'Michelin Road 6',
       partNumber: null,
       quantity: 1,
@@ -648,21 +632,28 @@ describe('workshop data', () => {
     expect((await snapshot()).services[0]!.partsUsed).toEqual([{ ...part, partSpecId: null }]);
   });
 
-  it('fits a Part Used for a Standard Part at that part’s position when none was chosen', async () => {
+  it('accepts a Service queued by an earlier version of the phone app, with a position that no longer exists', async () => {
     const bike = await createVehicle();
     const task = await createTask(bike.id);
-    const s = await snapshot();
-    const chainSpec = s.partSpecs.find((p) => p.vehicleId === bike.id && p.standardPart === 'moto_chain')!;
-    const chain = s.positions.find((p) => p.vehicleId === bike.id && p.standardPart === 'moto_chain')!;
-    await call('PUT', '/api/services/svc-00001', {
+    const chainSpec = (await snapshot()).partSpecs.find((p) => p.vehicleId === bike.id && p.standardPart === 'moto_chain')!;
+    const res = await call('PUT', '/api/services/svc-00001', {
       id: 'svc-00001',
       vehicleId: bike.id,
       date: '2026-10-01',
       odometer: 18000,
       taskIds: [task.id],
-      partsUsed: [{ partSpecId: chainSpec.id, positionId: null, description: 'DID 520 kit', quantity: 1, unit: 'piece' }],
+      partsUsed: [{ partSpecId: chainSpec.id, positionId: 'old-position', description: 'DID 520 kit', quantity: 1, unit: 'piece' }],
     });
-    expect((await snapshot()).services[0]!.partsUsed[0]).toMatchObject({ partSpecId: chainSpec.id, positionId: chain.id });
+    expect(res.status).toBe(200);
+    expect((await snapshot()).services[0]!.partsUsed[0]).toEqual({
+      partSpecId: chainSpec.id,
+      description: 'DID 520 kit',
+      partNumber: null,
+      quantity: 1,
+      unit: 'piece',
+      price: null,
+      supplier: null,
+    });
   });
 
   it('accepts a Service queued before Parts Used existed, and drops links to deleted data', async () => {
@@ -670,9 +661,9 @@ describe('workshop data', () => {
     const task = await createTask(bike.id);
     const old = { id: 'svc-00001', vehicleId: bike.id, date: '2026-10-01', odometer: 1, taskIds: [task.id] };
     expect((await call('PUT', '/api/services/svc-00001', old)).status).toBe(200);
-    const stale = { ...old, partsUsed: [{ partSpecId: 'gone', positionId: 'gone', description: 'Oil', quantity: 1, unit: 'litre' }] };
+    const stale = { ...old, partsUsed: [{ partSpecId: 'gone', description: 'Oil', quantity: 1, unit: 'litre' }] };
     expect((await call('PUT', '/api/services/svc-00001', stale)).status).toBe(200);
-    expect((await snapshot()).services[0]!.partsUsed[0]).toMatchObject({ partSpecId: null, positionId: null, description: 'Oil' });
+    expect((await snapshot()).services[0]!.partsUsed[0]).toMatchObject({ partSpecId: null, description: 'Oil' });
   });
 
   it('deletes a Task’s workshop data with the Task', async () => {
@@ -729,21 +720,16 @@ describe('technical inspections and modifications', () => {
     expect((await snapshot()).inspections).toEqual([{ ...saved, result: 'passed', nextDueDate: '2028-10-01', notes: null, defects: [] }]);
   });
 
-  it('stores Modifications, and keeps a position in use from being deleted', async () => {
+  it('stores Modifications', async () => {
     const bike = await createVehicle();
-    // An older, free-named position: those of Standard Parts can never be deleted anyway.
-    db.exec(`INSERT INTO fitment_positions (id, vehicle_id, name) VALUES ('exhaust', '${bike.id}', 'Exhaust')`);
-    const position = { id: 'exhaust' };
     const body = {
       name: 'Slip-on exhaust',
       fittedDate: '2026-05-01',
       fittedOdometer: 12_000,
-      positionId: position.id,
       declaredToInsurer: true,
     };
     const mod = (await (await call('POST', `/api/vehicles/${bike.id}/modifications`, body)).json()) as Modification;
     expect(mod).toMatchObject({ ...body, removedDate: null, notes: null });
-    expect((await call('DELETE', `/api/positions/${position.id}`)).status).toBe(409);
     await call('PUT', `/api/modifications/${mod.id}`, { ...body, removedDate: '2026-09-01', declaredToInsurer: false });
     expect((await snapshot()).modifications[0]).toMatchObject({ removedDate: '2026-09-01', declaredToInsurer: false });
   });
@@ -1050,7 +1036,7 @@ describe('the parts catalogue in Settings', () => {
     expect(await specOf(empty.id, 'engine_oil')).toMatchObject({ notFitted: true });
   });
 
-  it('adds a part of the owner’s to matching vehicles, with its position and Task, and renames it', async () => {
+  it('adds a part of the owner’s to matching vehicles, with its Part Spec and Task, and renames it', async () => {
     const petrol = await createCar();
     const diesel = await createCar({ fuel: 'diesel' });
     const res = await call('POST', '/api/catalogue', {
@@ -1069,7 +1055,6 @@ describe('the parts catalogue in Settings', () => {
 
     expect(await specOf(petrol.id, code)).toBeUndefined();
     expect(await specOf(diesel.id, code)).toMatchObject({ name: 'Particle filter', nameFr: 'Filtre à particules', characteristics: 'Original type', unit: 'piece' });
-    expect((await snapshot()).positions.find((p) => p.vehicleId === diesel.id && p.standardPart === code)).toBeDefined();
     expect(await taskOf(diesel.id, code)).toMatchObject({ name: 'Particle filter', nameFr: 'Filtre à particules', intervalKm: 150000 });
 
     const body = { kind: 'car', name: 'DPF', unit: 'piece', category: 'engine', intervalKm: 100000, conditions: { fuel: ['diesel'] } };
@@ -1086,13 +1071,12 @@ describe('the parts catalogue in Settings', () => {
     const { code } = (await res.json()) as { code: string };
     const usedSpec = (await specOf(used.id, code))!;
     const usedTask = (await taskOf(used.id, code))!;
-    const position = (await snapshot()).positions.find((p) => p.vehicleId === used.id && p.standardPart === code)!;
     await call('PUT', '/api/services/svc-00003', {
       id: 'svc-00003',
       vehicleId: used.id,
       date: '2026-10-01',
       taskIds: [usedTask.id],
-      partsUsed: [{ partSpecId: usedSpec.id, positionId: position.id, description: 'Thule', quantity: 1, unit: 'piece' }],
+      partsUsed: [{ partSpecId: usedSpec.id, description: 'Thule', quantity: 1, unit: 'piece' }],
     });
 
     expect((await call('DELETE', `/api/catalogue/${code}`)).status).toBe(204);
@@ -1101,7 +1085,6 @@ describe('the parts catalogue in Settings', () => {
     expect(s.tasks.some((t) => t.vehicleId === unused.id && t.name === 'Roof rack')).toBe(false);
     expect(s.partSpecs.find((p) => p.id === usedSpec.id)).toMatchObject({ standardPart: null, name: 'Roof rack', notFitted: false });
     expect(s.tasks.find((t) => t.id === usedTask.id)).toMatchObject({ standardPart: null, category: 'chassis' });
-    expect(s.positions.find((p) => p.id === position.id)).toMatchObject({ standardPart: null, name: 'Roof rack' });
   });
 
   it('refuses a detail with nothing ticked and an unknown part, and keeps a part set as built in as no change', async () => {
@@ -1210,9 +1193,8 @@ describe('the maintenance task list in Settings', () => {
     const s = await snapshot();
     expect(await taskOf(chain.id, code)).toMatchObject({ name: 'Chain lubrication', nameFr: 'Graissage de la chaîne', intervalKm: 1000, requiredParts: [] });
     expect(await taskOf(belt.id, code)).toBeUndefined();
-    // A check has no Part Spec and no Fitment Position.
+    // A task that uses nothing has no Part Spec.
     expect(s.partSpecs.some((p) => p.standardPart === code)).toBe(false);
-    expect(s.positions.some((p) => p.standardPart === code)).toBe(false);
     expect(await statusOf(chain.id, code)).not.toBe('paused');
 
     // The build changes: the check stays, paused; changed back, it is due again.
@@ -1333,9 +1315,7 @@ describe('migrations', () => {
       ('chain', 'v1', 'timingChainKit', 'timingChainKit', 'piece', NULL),
       ('tyres', 'v1', 'frontTyres', 'frontTyres', 'piece', NULL),
       ('plugs', 'v1', 'sparkPlugs', 'sparkPlugs', 'piece', NULL)`);
-    old.exec(`INSERT INTO fitment_positions (id, vehicle_id, name, standard_part) VALUES
-      ('front', 'v1', 'frontTyres', 'frontTyres'), ('rear', 'v1', 'rearTyres', 'rearTyres'), ('belt', 'v1', 'timingChainKit', 'timingChainKit')`);
-    old.exec(`INSERT INTO modifications (id, vehicle_id, name, fitted_date, position_id) VALUES ('m1', 'v1', 'Wider tyres', '2025-01-01', 'rear')`);
+    old.exec(`INSERT INTO modifications (id, vehicle_id, name, fitted_date) VALUES ('m1', 'v1', 'Wider tyres', '2025-01-01')`);
     old.close();
 
     const migrated = openDatabase(path);
@@ -1350,10 +1330,6 @@ describe('migrations', () => {
     expect(spec('chain')).toBeUndefined();
     // A petrol part on a diesel is set aside.
     expect(spec('plugs')).toMatchObject({ standardPart: 'spark_plugs', notFitted: true });
-    const position = (id: string) => s.positions.find((p) => p.id === id);
-    expect(position('front')).toMatchObject({ standardPart: 'tires' });
-    expect(position('rear')).toMatchObject({ standardPart: null, name: 'Rear tyres' });
-    expect(position('belt')).toBeUndefined();
     expect(migrated.prepare('SELECT COUNT(*) AS n FROM part_catalogue_moves').get()).toEqual({ n: 0 });
     migrated.close();
   });
@@ -1500,6 +1476,35 @@ describe('migrations', () => {
       { code: 'wipers', category: null },
     ]);
     expect(() => migrated.exec(`UPDATE maintenance_tasks SET category = 'hvac' WHERE id = 'none'`)).toThrow();
+    migrated.close();
+  });
+
+  it('drops the fitted-parts positions, keeping every Part Used and Modification, and a free-named position in the notes', () => {
+    const path = join(dir, 'garage.sqlite');
+    const old = openDatabase(path, undefined, 21);
+    old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v1', 'default', 'car', 'Old car')`);
+    old.exec(`INSERT INTO services (id, vehicle_id, date, odometer) VALUES ('s1', 'v1', '2026-01-10', 20000)`);
+    old.exec(`INSERT INTO part_specs (id, vehicle_id, standard_part, name, unit) VALUES ('p1', 'v1', 'tires', 'tires', 'piece')`);
+    old.exec(`INSERT INTO fitment_positions (id, vehicle_id, name, standard_part) VALUES ('tyres', 'v1', 'tires', 'tires'), ('box', 'v1', 'Top box', NULL)`);
+    old.exec(`INSERT INTO parts_used (service_id, sort, part_spec_id, position_id, description, quantity, unit, price) VALUES ('s1', 0, 'p1', 'tyres', 'Michelin', 4, 'piece', 480)`);
+    old.exec(`INSERT INTO modifications (id, vehicle_id, name, fitted_date, position_id, notes) VALUES
+      ('m1', 'v1', 'Top case', '2025-01-01', 'box', 'Givi'), ('m2', 'v1', 'Wider tyres', '2025-01-01', 'tyres', NULL), ('m3', 'v1', 'Exhaust', '2025-01-01', NULL, NULL)`);
+    old.close();
+
+    const migrated = openDatabase(path);
+    expect(migrated.prepare(`SELECT name FROM sqlite_master WHERE name = 'fitment_positions'`).all()).toEqual([]);
+    expect(migrated.prepare('SELECT service_id, sort, part_spec_id, description, quantity, price FROM parts_used').all()).toEqual([
+      { service_id: 's1', sort: 0, part_spec_id: 'p1', description: 'Michelin', quantity: 4, price: 480 },
+    ]);
+    expect(migrated.prepare('SELECT id, name, notes FROM modifications ORDER BY id').all()).toEqual([
+      { id: 'm1', name: 'Top case', notes: 'Givi\nPosition: Top box' },
+      { id: 'm2', name: 'Wider tyres', notes: null },
+      { id: 'm3', name: 'Exhaust', notes: null },
+    ]);
+    // The recreated tables still work, and a Service still takes its Parts Used with it.
+    migrated.exec(`INSERT INTO modifications (id, vehicle_id, name, fitted_date) VALUES ('m4', 'v1', 'Heated grips', '2026-01-01')`);
+    migrated.exec(`DELETE FROM services WHERE id = 's1'`);
+    expect(migrated.prepare('SELECT COUNT(*) AS n FROM parts_used').get()).toEqual({ n: 0 });
     migrated.close();
   });
 });

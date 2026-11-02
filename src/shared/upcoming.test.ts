@@ -78,7 +78,6 @@ function snapshot(vehicles: Vehicle[], tasks: MaintenanceTask[], readings: Odome
     readings,
     vehicleSpecs: [],
     partSpecs: [],
-    positions: [],
     inspections: [],
     modifications: [],
     documents: [],
