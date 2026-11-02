@@ -339,7 +339,7 @@ export function SpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: S
           {groups.map(([group, items]) => (
             <section key={group}>
               <h2>{t.workshop.partCategories[group]}</h2>
-              <ul className="list">
+              <ul className="list list-plain">
                 {items.map((spec) =>
                   !wide && editor.editing === spec.id ? (
                     <li key={spec.id} className="editing">
@@ -347,7 +347,7 @@ export function SpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: S
                     </li>
                   ) : (
                     <li key={spec.id}>
-                      <button type="button" className={`item-row ${editor.editing === spec.id ? 'item-selected' : ''}`} onClick={() => editor.setEditing(spec.id)}>
+                      <button type="button" className={`item-row spec-row ${editor.editing === spec.id ? 'item-selected' : ''}`} onClick={() => editor.setEditing(spec.id)}>
                         <SpecText spec={spec} />
                       </button>
                     </li>
@@ -490,10 +490,10 @@ export function WorkshopPage({ snapshot }: { snapshot: Snapshot }) {
               {groups.map(([group, items]) => (
                 <Fragment key={group}>
                   <h3 className="due-group">{t.workshop.partCategories[group]}</h3>
-                  <ul className="list">
+                  <ul className="list list-plain">
                     {items.map((spec) => (
                       <li key={spec.id}>
-                        <div className="history-row">
+                        <div className="spec-row">
                           <SpecText spec={spec} />
                         </div>
                       </li>
