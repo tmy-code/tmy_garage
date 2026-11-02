@@ -625,6 +625,10 @@ const MIGRATIONS: (string | ((db: DatabaseSync) => void))[] = [
   ALTER TABLE vehicles ADD COLUMN first_registration_date TEXT;
   ALTER TABLE vehicles ADD COLUMN purchase_date TEXT;
 `,
+  `
+  -- The manufacturer's (OEM) reference of a spec line, kept apart from its value.
+  ALTER TABLE spec_lines ADD COLUMN oem TEXT;
+`,
 ];
 
 /** Replaces what the owner changed on a template that was split by the same change on each of the new ones. */

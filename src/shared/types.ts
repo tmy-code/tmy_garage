@@ -52,6 +52,8 @@ export interface SpecLine {
   vehicleId: string;
   label: string;
   value: string;
+  /** The manufacturer's (OEM) reference. */
+  oem: string | null;
   group: SpecGroup;
   /** The category it is listed under; empty is 'other'. */
   category: PartCategory | null;

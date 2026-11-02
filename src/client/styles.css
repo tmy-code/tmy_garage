@@ -1226,3 +1226,6 @@ body > .banner {
 .vehicle-tabs .button {
   flex: 1 1 160px;
 }
+.spec-oem {
+  display: block;
+}

@@ -131,8 +131,9 @@ function SpecEditor({ vehicle, existing, editor }: { vehicle: Vehicle; existing?
   const [group, setGroup] = useState<SpecGroup>(existing?.group ?? 'fluids');
   const [label, setLabel] = useState(existing?.label ?? '');
   const [value, setValue] = useState(existing?.value ?? '');
+  const [oem, setOem] = useState(existing?.oem ?? '');
   const [category, setCategory] = useState<PartCategory | null>(existing?.category ?? null);
-  const body = { group, label, value, category };
+  const body = { group, label, value, oem, category };
   return (
     <InlineEditor
       onSubmit={() =>
@@ -166,6 +167,9 @@ function SpecEditor({ vehicle, existing, editor }: { vehicle: Vehicle; existing?
       </Field>
       <Field label={t.workshop.specValue} hint={t.workshop.specValueHint}>
         <input value={value} onChange={(e) => setValue(e.target.value)} required maxLength={200} />
+      </Field>
+      <Field label={t.workshop.specOem} hint={t.workshop.specOemHint}>
+        <input value={oem} onChange={(e) => setOem(e.target.value)} maxLength={80} />
       </Field>
     </InlineEditor>
   );
@@ -311,7 +315,10 @@ function SpecText({ spec }: { spec: SpecLine }) {
   return (
     <>
       <strong>{spec.label}</strong>
-      <span>{spec.value || <span className="muted">{t.workshop.specToFill}</span>}</span>
+      <span>
+        {spec.value || <span className="muted">{t.workshop.specToFill}</span>}
+        {spec.oem ? <small className="muted spec-oem">{t.workshop.specOemShown(spec.oem)}</small> : null}
+      </span>
     </>
   );
 }

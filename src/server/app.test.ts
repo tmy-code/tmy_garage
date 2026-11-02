@@ -682,10 +682,8 @@ describe('migrations', () => {
 
   it('turns what the owner changed on the car tyres template into the same change on front and rear tyres', () => {
     const path = join(dir, 'garage.sqlite');
-    const latest = openDatabase(join(dir, 'latest.sqlite'));
-    const version = (latest.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
-    latest.close();
-    const old = openDatabase(path, undefined, version - 6);
+    // Just before the migration that split this template (a fixed version, so later migrations do not move it).
+    const old = openDatabase(path, undefined, 28);
     old.exec(`INSERT INTO catalogue_parts (garage_id, code, conditions, removed) VALUES ('default', 'tires', '{}', 1)`);
     old.close();
     const migrated = openDatabase(path);
@@ -698,10 +696,8 @@ describe('migrations', () => {
 
   it('turns what the owner changed on the fork oil and seals template into the same change on each', () => {
     const path = join(dir, 'garage.sqlite');
-    const latest = openDatabase(join(dir, 'latest.sqlite'));
-    const version = (latest.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
-    latest.close();
-    const old = openDatabase(path, undefined, version - 5);
+    // Just before the migration that split this template (a fixed version, so later migrations do not move it).
+    const old = openDatabase(path, undefined, 29);
     old.exec(`INSERT INTO catalogue_parts (garage_id, code, conditions, removed) VALUES ('default', 'moto_fork_oil_seals', '{}', 1)`);
     old.close();
     const migrated = openDatabase(path);
@@ -714,10 +710,8 @@ describe('migrations', () => {
 
   it('turns what the owner changed on the car shock absorbers template into the same change on front and rear', () => {
     const path = join(dir, 'garage.sqlite');
-    const latest = openDatabase(join(dir, 'latest.sqlite'));
-    const version = (latest.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
-    latest.close();
-    const old = openDatabase(path, undefined, version - 4);
+    // Just before the migration that split this template (a fixed version, so later migrations do not move it).
+    const old = openDatabase(path, undefined, 30);
     old.exec(`INSERT INTO catalogue_parts (garage_id, code, conditions, removed) VALUES ('default', 'shock_absorbers', '{}', 1)`);
     old.close();
     const migrated = openDatabase(path);

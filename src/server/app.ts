@@ -109,6 +109,7 @@ const toSpecLine = (r: Row): SpecLine => ({
   vehicleId: r.vehicle_id,
   label: r.label,
   value: r.value,
+  oem: r.oem,
   group: r.spec_group,
   category: r.category,
   sort: r.sort,
@@ -675,7 +676,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     const s = await parse(c, specLineInput);
     const id = randomUUID();
     const next = (db.prepare('SELECT coalesce(max(sort), -1) + 1 AS n FROM spec_lines WHERE vehicle_id = ? AND spec_group = ?').get(vehicleId, s.group) as Row).n;
-    saveSpecLine(() => db.prepare('INSERT INTO spec_lines (id, vehicle_id, label, value, spec_group, category, sort) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, vehicleId, s.label, s.value, s.group, s.category, next));
+    saveSpecLine(() => db.prepare('INSERT INTO spec_lines (id, vehicle_id, label, value, oem, spec_group, category, sort) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, vehicleId, s.label, s.value, s.oem, s.group, s.category, next));
     return c.json(toSpecLine(ownedRowOrThrow('spec_lines', id, 'Spec line')), 201);
   });
 
@@ -684,10 +685,10 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     const row = ownedRowOrThrow('spec_lines', id, 'Spec line');
     const s = await parse(c, specLineInput);
     saveSpecLine(() => {
-      if (s.group === row.spec_group) db.prepare('UPDATE spec_lines SET label = ?, value = ?, category = ? WHERE id = ?').run(s.label, s.value, s.category, id);
+      if (s.group === row.spec_group) db.prepare('UPDATE spec_lines SET label = ?, value = ?, oem = ?, category = ? WHERE id = ?').run(s.label, s.value, s.oem, s.category, id);
       else {
         const next = (db.prepare('SELECT coalesce(max(sort), -1) + 1 AS n FROM spec_lines WHERE vehicle_id = ? AND spec_group = ?').get(row.vehicle_id, s.group) as Row).n;
-        db.prepare('UPDATE spec_lines SET label = ?, value = ?, spec_group = ?, category = ?, sort = ? WHERE id = ?').run(s.label, s.value, s.group, s.category, next, id);
+        db.prepare('UPDATE spec_lines SET label = ?, value = ?, oem = ?, spec_group = ?, category = ?, sort = ? WHERE id = ?').run(s.label, s.value, s.oem, s.group, s.category, next, id);
       }
     });
     return c.json(toSpecLine(ownedRowOrThrow('spec_lines', id, 'Spec line')));

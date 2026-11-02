@@ -204,6 +204,8 @@ export const ownPartInput = z
 export const specLineInput = z.object({
   label: z.string().trim().min(1).max(80),
   value: z.string().trim().min(1).max(200),
+  /** The manufacturer's (OEM) reference. */
+  oem: optionalText(80),
   group: specGroup,
   /** Empty is 'other'. */
   category: z

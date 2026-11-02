@@ -129,6 +129,7 @@ A Vehicle's factory specs, one labelled value per row (for example "Engine oil: 
 | `vehicle_id` | Required. → `vehicles`. |
 | `label` | Required, up to 80 characters. What it is. Unique per Vehicle: saving a second line with the same label is refused (409). |
 | `value` | The figure or reference, written as the owner likes ("10W-40, 3.2 L"), up to 200 characters. Required when the owner saves a line, but empty on a line added from the usual list until they fill it in (shown as "to fill in"). |
+| `oem` | Optional, up to 80 characters. The manufacturer's (OEM) reference, kept apart from the value and shown under it. |
 | `spec_group` | Required. What kind of figure it is: `fluids`, `parts`, `torque` or `other`. |
 | `category` | Which part of the Vehicle it concerns: the same seven categories as Tasks (`engine`, `transmission`, `brakes`, `chassis`, `electrical`, `cooling_climate`, `other`). Empty counts as `other`. |
 | `template_code` | The usual spec line (see `src/shared/spec-templates.ts`) it came from, empty for the owner's own lines. Unique per Vehicle, so adding the usual lines again never doubles one, whatever it was renamed to. |
