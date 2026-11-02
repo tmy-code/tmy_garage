@@ -137,19 +137,16 @@ export function InsurancePage({ snapshot }: { snapshot: Snapshot }) {
   };
 
   return (
-    <Layout
-      title={t.insurance.title}
-      back="/"
-      actions={
-        <a className="button button-small" href="#/policies/new">
-          {t.insurance.addPolicy}
-        </a>
-      }
-    >
+    <Layout title={t.insurance.title} back="/">
       <div className="split">
         <div className="split-main">
           <section>
-            <h2>{t.insurance.policies}</h2>
+            <div className="heading-row">
+              <h2>{t.insurance.policies}</h2>
+              <a className="button button-small" href="#/policies/new">
+                {t.insurance.addPolicy}
+              </a>
+            </div>
             {active.length === 0 ? <p className="empty">{t.insurance.noPolicies}</p> : null}
             <ul className="list list-grid">{active.map(policyRow)}</ul>
             {cancelled.length > 0 ? (
@@ -185,7 +182,7 @@ export function InsurancePage({ snapshot }: { snapshot: Snapshot }) {
 
         <div className="split-side">
           <section>
-            <div className="section-head">
+            <div className="heading-row">
               <h2>{t.insurance.drivers}</h2>
               <a className="button button-small" href="#/drivers/new">
                 {t.insurance.addDriver}
@@ -343,7 +340,7 @@ export function PolicyPage({ policy, snapshot }: { policy: InsurancePolicy; snap
     <Layout
       title={policy.insurer}
       back="/insurance"
-      actions={
+      titleAction={
         <a className="button button-small" href={`#/policies/${policy.id}/edit`}>
           {t.insurance.edit}
         </a>
@@ -371,7 +368,7 @@ export function PolicyPage({ policy, snapshot }: { policy: InsurancePolicy; snap
           </section>
 
           <section>
-            <div className="section-head">
+            <div className="heading-row">
               <h2>{t.insurance.terms}</h2>
               <a className="button button-small" href={`#/policies/${policy.id}/terms/new`}>
                 {t.insurance.addTerm}
@@ -399,7 +396,7 @@ export function PolicyPage({ policy, snapshot }: { policy: InsurancePolicy; snap
           </section>
 
           <section>
-            <div className="section-head">
+            <div className="heading-row">
               <h2>{t.insurance.claims}</h2>
               <a className="button button-small" href={`#/policies/${policy.id}/claims/new`}>
                 {t.insurance.addClaim}
@@ -805,15 +802,7 @@ export function VehicleInsurancePage({ vehicle, snapshot }: { vehicle: Vehicle; 
     current && current.cover.premium !== null && current.previousPremium ? current.cover.premium / current.previousPremium - 1 : null;
 
   return (
-    <Layout
-      title={t.insurance.vehicleTitle(vehicle.name)}
-      back={`/vehicles/${vehicle.id}`}
-      actions={
-        <a className="button button-small" href={`#/vehicles/${vehicle.id}/quotes/new`}>
-          {t.insurance.addQuote}
-        </a>
-      }
-    >
+    <Layout title={t.insurance.vehicleTitle(vehicle.name)} back={`/vehicles/${vehicle.id}`}>
       <div className="split">
         <div className="split-main">
           <section className="card">
@@ -855,7 +844,12 @@ export function VehicleInsurancePage({ vehicle, snapshot }: { vehicle: Vehicle; 
           </section>
 
           <section>
-            <h2>{t.insurance.quotes}</h2>
+            <div className="heading-row">
+              <h2>{t.insurance.quotes}</h2>
+              <a className="button button-small" href={`#/vehicles/${vehicle.id}/quotes/new`}>
+                {t.insurance.addQuote}
+              </a>
+            </div>
             {quotes.length === 0 ? <p className="empty">{t.insurance.noQuotes}</p> : null}
             <ul className="list list-grid">
               {quotes.map(({ quote, difference, expired }) => (
@@ -1017,7 +1011,7 @@ export function QuotePackPage({ vehicle, snapshot }: { vehicle: Vehicle; snapsho
     <Layout
       title={t.insurance.quotePackTitle(vehicle.name)}
       back={`/vehicles/${vehicle.id}/insurance`}
-      actions={
+      titleAction={
         <button type="button" className="button button-small" onClick={() => window.print()}>
           {t.insurance.print}
         </button>

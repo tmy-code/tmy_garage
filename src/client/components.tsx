@@ -26,13 +26,11 @@ export function useWide(): boolean {
 export function Layout({
   title,
   back,
-  actions,
   titleAction,
   children,
 }: {
   title: string;
   back?: string;
-  actions?: ReactNode;
   /** Sits right next to the page's name, for acting on what it names. */
   titleAction?: ReactNode;
   children: ReactNode;
@@ -56,7 +54,6 @@ export function Layout({
         <NavBar />
         <div className="topbar-side topbar-end">
           <SyncBadge />
-          {actions}
         </div>
       </header>
       <RejectedBanner />

@@ -150,7 +150,7 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
           </section>
 
           <section>
-            <div className="section-head">
+            <div className="heading-row">
               <h2>{t.vehicle.tasks}</h2>
               {owned ? (
                 <a className="button button-small" href={`#/vehicles/${vehicle.id}/tasks/new`}>

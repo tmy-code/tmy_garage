@@ -298,6 +298,22 @@ section {
 }
 
 .card-head,
+/* A heading with the button acting on it right beside it. */
+.heading-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.heading-row .button {
+  flex: none;
+}
+
+.page-buttons {
+  margin-bottom: 16px;
+}
+
 .section-head {
   display: flex;
   justify-content: space-between;
@@ -942,6 +958,7 @@ body > .banner {
   .topbar,
   .tabbar,
   .no-print,
+  .page-title-row .button,
   .language {
     display: none !important;
   }

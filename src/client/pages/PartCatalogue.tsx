@@ -78,7 +78,7 @@ export function CataloguePage({ snapshot }: { snapshot: Snapshot }) {
   return (
     <Layout title={t.settings.partsTitle} back="/settings">
       <p className="muted">{t.settings.partsIntro}</p>
-      <div className="section-head">
+      <div className="heading-row">
         <div className="kind-switch">
           {(['car', 'motorcycle'] as const).map((k) => (
             <button

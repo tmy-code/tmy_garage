@@ -212,7 +212,7 @@ export function SpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: S
     [t.workshop.otherSpecs, specs.filter((s) => s.kind === 'other')],
   ];
   return (
-    <Layout title={t.workshop.specsTitle(vehicle.name)} back={`/vehicles/${vehicle.id}`} actions={<AddButton editor={editor} />}>
+    <Layout title={t.workshop.specsTitle(vehicle.name)} back={`/vehicles/${vehicle.id}`} titleAction={<AddButton editor={editor} />}>
       <NeedsConnection />
       {editor.editing === 'new' ? <SpecEditor vehicle={vehicle} editor={editor} /> : null}
       {specs.length === 0 && editor.editing !== 'new' ? <p className="empty">{t.workshop.noSpecs}</p> : null}
@@ -424,7 +424,7 @@ export function PartSpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapsho
     <Layout
       title={t.workshop.partsTitle(vehicle.name)}
       back={`/vehicles/${vehicle.id}`}
-      actions={<AddButton editor={editor} label={t.workshop.otherPart} />}
+      titleAction={<AddButton editor={editor} label={t.workshop.otherPart} />}
     >
       <NeedsConnection />
       <p className="muted">{t.workshop.partsIntro}</p>
@@ -596,7 +596,7 @@ export function TaskPage({ task, vehicle, snapshot }: { task: MaintenanceTask; v
         <div>
           {task.tools.length > 0 ? (
             <section>
-              <div className="section-head">
+              <div className="heading-row">
                 <h2>{t.workshop.checklist}</h2>
                 {ticked.size > 0 ? (
                   <button type="button" className="button button-small" onClick={() => setTicked(new Set())}>

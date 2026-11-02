@@ -22,21 +22,17 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
   const items = useMemo(() => upcoming(snapshot, today), [snapshot, today]);
 
   return (
-    <Layout
-      title={t.garage}
-      actions={
-        <>
-          {snapshot.vehicles.length > 0 ? (
-            <a className="button button-small" href="#/vehicles/manage">
-              {t.dashboard.manage}
-            </a>
-          ) : null}
+    <Layout title={t.garage}>
+      {snapshot.vehicles.length > 0 ? (
+        <div className="heading-row page-buttons">
+          <a className="button button-small" href="#/vehicles/manage">
+            {t.dashboard.manage}
+          </a>
           <a className="button button-small" href="#/vehicles/new">
             {t.dashboard.addVehicle}
           </a>
-        </>
-      }
-    >
+        </div>
+      ) : null}
       {snapshot.vehicles.length === 0 ? (
         <div className="empty">
           <p>{t.dashboard.noVehicles}</p>

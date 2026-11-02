@@ -238,7 +238,7 @@ export function InspectionsPage({ vehicle, snapshot }: { vehicle: Vehicle; snaps
     <Layout
       title={t.papers.inspectionsTitle(vehicle.name)}
       back={`/vehicles/${vehicle.id}`}
-      actions={
+      titleAction={
         <a className="button button-small" href={`#/vehicles/${vehicle.id}/inspections/new`}>
           {t.papers.addInspection}
         </a>
@@ -448,7 +448,7 @@ export function ModificationsPage({ vehicle, snapshot }: { vehicle: Vehicle; sna
     <Layout
       title={t.papers.modificationsTitle(vehicle.name)}
       back={`/vehicles/${vehicle.id}`}
-      actions={
+      titleAction={
         <a className="button button-small" href={`#/vehicles/${vehicle.id}/modifications/new`}>
           {t.papers.addModification}
         </a>
