@@ -103,6 +103,12 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
 
   // A motorbike's make is already shown in capitals in front.
   const subtitle = [makeAsName(vehicle) ? null : vehicle.make, vehicle.model, vehicle.year].filter(Boolean).join(' · ');
+  const datesLine = [
+    vehicle.firstRegistrationDate ? t.vehicle.firstRegistered(formatDate(vehicle.firstRegistrationDate, t)) : '',
+    vehicle.purchaseDate ? t.vehicle.boughtOn(formatDate(vehicle.purchaseDate, t)) : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
   const saleDetails = [
     vehicle.soldDate ? t.vehicle.soldDate(formatDate(vehicle.soldDate, t)) : '',
     vehicle.soldOdometer !== null ? t.vehicle.soldAt(formatKm(vehicle.soldOdometer)) : '',
@@ -127,6 +133,7 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
                 <VehicleIcon vehicle={vehicle} /> {subtitle}
               </p>
             ) : null}
+            {datesLine ? <p className="muted">{datesLine}</p> : null}
             {vehicle.status === 'sold' ? <p className="banner banner-warn">{t.vehicle.sold(saleDetails)}</p> : null}
             <p className="odometer">
               {usage.latest === null ? (

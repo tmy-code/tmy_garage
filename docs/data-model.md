@@ -91,6 +91,8 @@ A Vehicle is never deleted from the database. It is sold, hidden from the garage
 | `model` | Model. |
 | `year` | Year. |
 | `vin` | Vehicle identification number. |
+| `first_registration_date` | Optional date (`YYYY-MM-DD`): when the Vehicle first went on the road (the "date de mise en circulation"). |
+| `purchase_date` | Optional date (`YYYY-MM-DD`): when the owner bought it. |
 | `status` | Required. `owned` or `sold`, `owned` by default. A sold Vehicle keeps its history and has nothing due. |
 | `sold_date` | Set when sold. |
 | `sold_odometer` | Set when sold. |
@@ -365,7 +367,7 @@ The update that introduced this model ran once, after a backup, in [`five-parts.
 | Before | Now |
 | --- | --- |
 | Insurance (Policies, Terms, Covers, Claims, Drivers), Quotes, Technical Inspections, Modifications | Removed with their tables. Their Documents stay stored but are no longer shown. |
-| Vehicle columns for registration, first registration, version, fiscal power, national type, purchase date, parking | Dropped. VIN stays. |
+| Vehicle columns for registration, first registration, version, fiscal power, national type, purchase date, parking | Dropped. VIN stays. First registration date and purchase date were later brought back as plain optional dates. |
 | Part Specs and Vehicle Specs | One Spec Line each (label and value from the name and details; a part set aside, or one with nothing filled in, has nothing to keep). |
 | Required Parts, Required Tools, linked specs, Workshop Notes | Written into the Task's Notes. |
 | A Task whose part was set aside, or no longer fitting the Build | Switched off, as it was paused before. |

@@ -13,6 +13,8 @@ function vehicle(id: string, overrides: Partial<Vehicle> = {}): Vehicle {
     model: null,
     year: null,
     vin: null,
+    firstRegistrationDate: null,
+    purchaseDate: null,
     fuel: null,
     transmission: null,
     drivetrain: null,

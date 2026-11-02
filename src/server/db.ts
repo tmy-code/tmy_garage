@@ -620,6 +620,11 @@ const MIGRATIONS: (string | ((db: DatabaseSync) => void))[] = [
   ALTER TABLE service_items ADD COLUMN part_id TEXT REFERENCES vehicle_parts(id) ON DELETE SET NULL;
   ALTER TABLE service_items ADD COLUMN price REAL;
 `,
+  `
+  -- When the Vehicle first went on the road (its first registration) and when the owner bought it. Both optional.
+  ALTER TABLE vehicles ADD COLUMN first_registration_date TEXT;
+  ALTER TABLE vehicles ADD COLUMN purchase_date TEXT;
+`,
 ];
 
 /** Replaces what the owner changed on a template that was split by the same change on each of the new ones. */

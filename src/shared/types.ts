@@ -11,6 +11,10 @@ export interface Vehicle extends VehicleSpecs {
   year: number | null;
   /** Vehicle identification number. */
   vin: string | null;
+  /** When it first went on the road (first registration). */
+  firstRegistrationDate: IsoDate | null;
+  /** When the owner bought it. */
+  purchaseDate: IsoDate | null;
   status: 'owned' | 'sold';
   /** Whether it has a card on the garage page, whatever its status; selling it hides it, and the user can change either. */
   onGaragePage: boolean;

@@ -57,6 +57,8 @@ export const vehicleInput = z
       .nullish()
       .transform((v) => v ?? null),
     vin: optionalText(17),
+    firstRegistrationDate: isoDate.nullish().transform((v) => v ?? null),
+    purchaseDate: isoDate.nullish().transform((v) => v ?? null),
     // The Build: which details are required, and which go together, depends on the kind and fuel (see catalogue.ts).
     fuel: fuelType.nullish().transform((v) => v ?? null),
     transmission: transmission.nullish().transform((v) => v ?? null),

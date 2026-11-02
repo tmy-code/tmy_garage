@@ -47,6 +47,8 @@ export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
     vehicles: snapshot.vehicles.map((v) => ({
       ...v,
       vin: v.vin ?? null,
+      firstRegistrationDate: v.firstRegistrationDate ?? null,
+      purchaseDate: v.purchaseDate ?? null,
       fuel: v.fuel ?? null,
       transmission: v.transmission ?? null,
       drivetrain: v.drivetrain ?? null,

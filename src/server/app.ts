@@ -76,6 +76,8 @@ const toVehicle = (r: Row): Vehicle => ({
   model: r.model,
   year: r.year,
   vin: r.vin,
+  firstRegistrationDate: r.first_registration_date,
+  purchaseDate: r.purchase_date,
   ...buildOfRow(r),
   status: r.status,
   onGaragePage: r.on_garage_page === 1,
@@ -379,6 +381,8 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       v.model,
       v.year,
       v.vin,
+      v.firstRegistrationDate,
+      v.purchaseDate,
       v.fuel,
       v.transmission,
       v.drivetrain,
@@ -403,8 +407,8 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     const id = randomUUID();
     transaction(() => {
       db.prepare(
-        `INSERT INTO vehicles (id, garage_id, kind, name, make, model, year, vin, ${BUILD_COLUMNS})
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO vehicles (id, garage_id, kind, name, make, model, year, vin, first_registration_date, purchase_date, ${BUILD_COLUMNS})
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(id, garageId, ...vehicleValues(v));
       // A new Vehicle starts with the plan templates that fit its Build; after that the plan is its own.
       seedTasks(id, v);
@@ -419,6 +423,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     transaction(() => {
       db.prepare(
         `UPDATE vehicles SET kind = ?, name = ?, make = ?, model = ?, year = ?, vin = ?,
+           first_registration_date = ?, purchase_date = ?,
            fuel = ?, transmission = ?, drivetrain = ?, distribution = ?, cooling = ?, final_drive = ?, cylinders = ?,
            has_hydraulic_clutch = ?, has_turbo = ?, has_direct_injection = ?, has_start_stop = ?, has_adblue = ?, has_ac = ?,
            has_air_suspension = ?

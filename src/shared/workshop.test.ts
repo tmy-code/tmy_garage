@@ -31,6 +31,8 @@ const base: Snapshot = {
       model: null,
       year: null,
       vin: null,
+      firstRegistrationDate: null,
+      purchaseDate: null,
       fuel: null,
       transmission: null,
       drivetrain: null,

@@ -105,6 +105,8 @@ export function VehicleForm({ existing, returnTo }: { existing?: Vehicle; return
   const [model, setModel] = useState(existing?.model ?? '');
   const [year, setYear] = useState(existing?.year ? String(existing.year) : '');
   const [vin, setVin] = useState(existing?.vin ?? '');
+  const [firstRegistrationDate, setFirstRegistrationDate] = useState(existing?.firstRegistrationDate ?? '');
+  const [purchaseDate, setPurchaseDate] = useState(existing?.purchaseDate ?? '');
   const [fuel, setFuel] = useState<FuelType | ''>(existing?.fuel ?? '');
   const [transmission, setTransmission] = useState<Transmission | ''>(existing?.transmission ?? '');
   const [drivetrain, setDrivetrain] = useState<Drivetrain | ''>(existing?.drivetrain ?? '');
@@ -135,6 +137,8 @@ export function VehicleForm({ existing, returnTo }: { existing?: Vehicle; return
         model,
         year: optionalNumber(year, t.setup.year, t),
         vin,
+        firstRegistrationDate: firstRegistrationDate || null,
+        purchaseDate: purchaseDate || null,
         fuel: fuelValue || null,
         transmission: transmissionValue || null,
         drivetrain: drivetrain || null,
@@ -188,6 +192,12 @@ export function VehicleForm({ existing, returnTo }: { existing?: Vehicle; return
         </Field>
         <Field label={t.setup.vin}>
           <input value={vin} onChange={(e) => setVin(e.target.value.toUpperCase())} maxLength={17} />
+        </Field>
+        <Field label={t.setup.firstRegistrationDate}>
+          <input type="date" value={firstRegistrationDate} onChange={(e) => setFirstRegistrationDate(e.target.value)} />
+        </Field>
+        <Field label={t.setup.purchaseDate}>
+          <input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} />
         </Field>
         <fieldset className="field">
           <legend className="field-label">{t.setup.builtWith}</legend>

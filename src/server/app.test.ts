@@ -685,7 +685,7 @@ describe('migrations', () => {
     const latest = openDatabase(join(dir, 'latest.sqlite'));
     const version = (latest.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
     latest.close();
-    const old = openDatabase(path, undefined, version - 5);
+    const old = openDatabase(path, undefined, version - 6);
     old.exec(`INSERT INTO catalogue_parts (garage_id, code, conditions, removed) VALUES ('default', 'tires', '{}', 1)`);
     old.close();
     const migrated = openDatabase(path);
@@ -701,7 +701,7 @@ describe('migrations', () => {
     const latest = openDatabase(join(dir, 'latest.sqlite'));
     const version = (latest.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
     latest.close();
-    const old = openDatabase(path, undefined, version - 4);
+    const old = openDatabase(path, undefined, version - 5);
     old.exec(`INSERT INTO catalogue_parts (garage_id, code, conditions, removed) VALUES ('default', 'moto_fork_oil_seals', '{}', 1)`);
     old.close();
     const migrated = openDatabase(path);
@@ -717,7 +717,7 @@ describe('migrations', () => {
     const latest = openDatabase(join(dir, 'latest.sqlite'));
     const version = (latest.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
     latest.close();
-    const old = openDatabase(path, undefined, version - 3);
+    const old = openDatabase(path, undefined, version - 4);
     old.exec(`INSERT INTO catalogue_parts (garage_id, code, conditions, removed) VALUES ('default', 'shock_absorbers', '{}', 1)`);
     old.close();
     const migrated = openDatabase(path);
