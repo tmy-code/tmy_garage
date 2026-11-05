@@ -6,7 +6,7 @@ import type { PartUnit, PerformedBy, ServiceKind } from '../../shared/schemas.ts
 import type { OdometerReading, PartUsed, Service, Snapshot, Vehicle, VehiclePart } from '../../shared/types.ts';
 import { newId } from '../api.ts';
 import { confirmDelete, Field, FormError, Layout, StatusChip } from '../components.tsx';
-import { formatKm, formatMoney, formatQuantity, parseNumber, taskName } from '../format.ts';
+import { formatKm, formatMoney, formatQuantity, matchesQuery, parseNumber, taskName } from '../format.ts';
 import { showToast } from '../feedback.ts';
 import { useT, type Messages } from '../i18n.ts';
 import { navigate } from '../router.ts';
@@ -28,6 +28,9 @@ interface PartDraft {
   /** A part typed by hand is also kept in the list, unless the owner unticks it. */
   remember: boolean;
 }
+
+/** A search box shows above the task list once it is longer than this. */
+const SEARCH_FROM = 8;
 
 let nextKey = 1;
 
@@ -101,6 +104,12 @@ export function ServiceForm({
     () => new Set(existing?.taskIds ?? due.filter((d) => d.taskId === preselect).map((d) => d.taskId)),
   );
   const [notes, setNotes] = useState(existing?.notes ?? '');
+  const [taskQuery, setTaskQuery] = useState('');
+  // The list is searched by name; a task already ticked stays shown, so nothing ticked is ever hidden.
+  const shownDue = due.filter((d) => {
+    const task = tasks.get(d.taskId);
+    return selected.has(d.taskId) || !task || matchesQuery([taskName(task, t), task.name, task.nameFr], taskQuery);
+  });
   const [kind, setKind] = useState<ServiceKind>(existing?.kind ?? 'maintenance');
   const [title, setTitle] = useState(existing?.title ?? '');
   const [category, setCategory] = useState<PartCategory | null>(existing?.category ?? null);
@@ -244,9 +253,12 @@ export function ServiceForm({
               hint={
                 lowerThanLatest
                   ? t.service.lowerThanLatest(formatKm(usage.latest!.odometer))
-                  : needsOdometer || selected.size === 0
-                    ? undefined
-                    : t.service.odometerOptional
+                  : [
+                      usage.latest ? t.service.lastReading(formatKm(usage.latest.odometer)) : null,
+                      needsOdometer || selected.size === 0 ? null : t.service.odometerOptional,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ') || undefined
               }
             >
               <input
@@ -296,7 +308,7 @@ export function ServiceForm({
                   ))}
                 </select>
               </Field>
-              <Field label={t.service.totalCost}>
+              <Field label={t.service.totalCost} hint={t.service.totalCostHint}>
                 <input inputMode="decimal" value={costText} onChange={(e) => setCostText(e.target.value)} />
               </Field>
             </div>
@@ -309,8 +321,19 @@ export function ServiceForm({
                 </span>
               ) : null}
               {due.length === 0 ? <p className="muted">{t.service.noTasks}</p> : null}
+              {due.length > SEARCH_FROM ? (
+                <input
+                  type="search"
+                  value={taskQuery}
+                  onChange={(e) => setTaskQuery(e.target.value)}
+                  placeholder={t.service.searchTasks}
+                  aria-label={t.service.searchTasks}
+                  autoComplete="off"
+                />
+              ) : null}
+              {shownDue.length === 0 && due.length > 0 ? <p className="muted">{t.service.noTaskMatches}</p> : null}
               <div className="check-grid">
-                {due.map((d) => (
+                {shownDue.map((d) => (
                   <label key={d.taskId} className={`check ${selected.has(d.taskId) ? 'check-on' : ''}`}>
                     <input type="checkbox" checked={selected.has(d.taskId)} onChange={() => toggle(d.taskId)} />
                     <span className="due-name">{tasks.get(d.taskId) ? taskName(tasks.get(d.taskId)!, t) : null}</span>
@@ -418,9 +441,12 @@ export function ServiceForm({
         </div>
 
         <FormError error={error} />
-        <button type="submit" className="button button-primary button-block">
-          {existing ? t.service.saveChanges : t.service.save}
-        </button>
+        {/* The save button stays in view while the long list of tasks scrolls. */}
+        <div className="sticky-actions">
+          <button type="submit" className="button button-primary button-block">
+            {existing ? t.service.saveChanges : t.service.save}
+          </button>
+        </div>
         {!reachable ? <p className="muted center">{t.service.offlineHint}</p> : null}
         {existing ? (
           <button type="button" className="button button-danger button-block" onClick={remove} disabled={!reachable || pending}>

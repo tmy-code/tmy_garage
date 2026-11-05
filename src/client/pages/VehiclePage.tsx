@@ -179,7 +179,9 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
   const groups = groupByCategory(owned ? due.filter((d) => d.status !== 'unknown') : due, tasks);
   const pending = new Set(outbox.map((op) => op.data.id));
   const specCount = snapshot.specLines.filter((s) => s.vehicleId === vehicle.id).length;
-  const partCount = snapshot.vehicleParts.filter((p) => p.vehicleId === vehicle.id).length;
+  const vehicleParts = snapshot.vehicleParts.filter((p) => p.vehicleId === vehicle.id);
+  const partCount = vehicleParts.length;
+  const toBuyCount = vehicleParts.filter((p) => p.toBuy).length;
   const [allHistory, setAllHistory] = useState(false);
   async function addFromTemplates() {
     try {
@@ -311,12 +313,18 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
             <ul className="list">
               <li>
                 <a href={`#/vehicles/${vehicle.id}/specs`}>
-                  {t.workshop.section} <span className="muted">{t.workshop.count(specCount)}</span>
+                  {t.vehicle.specsLink} <span className="muted">{t.workshop.count(specCount)}</span>
                 </a>
               </li>
+            </ul>
+          </section>
+
+          <section>
+            <h2>{t.parts.title}</h2>
+            <ul className="list">
               <li>
                 <a href={`#/parts/vehicle/${vehicle.id}`}>
-                  {t.workshop.partsListLink} <span className="muted">{t.workshop.count(partCount)}</span>
+                  {t.parts.vehicleLink(partCount, toBuyCount)}
                 </a>
               </li>
             </ul>

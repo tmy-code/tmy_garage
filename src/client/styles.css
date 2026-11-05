@@ -781,6 +781,27 @@ textarea {
   white-space: nowrap;
 }
 
+/* A search box above a list. */
+.search {
+  width: 100%;
+  margin: 0 0 16px;
+}
+
+/* Rows that open another screen react to the pointer, so a mouse user can see what is clickable. */
+@media (hover: hover) {
+  .list li > a:hover,
+  .item-row:hover,
+  .history-row:hover,
+  .task-row:hover,
+  .check:hover {
+    background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  }
+
+  .button:hover {
+    filter: brightness(1.12);
+  }
+}
+
 .check {
   display: flex;
   align-items: center;
@@ -835,6 +856,15 @@ textarea {
 .segmented button.on::before {
   content: '✓ ';
   color: var(--accent);
+}
+
+/* The save button of a long form stays in view, just above the bottom menu bar on a phone. */
+.sticky-actions {
+  position: sticky;
+  bottom: calc(64px + env(safe-area-inset-bottom));
+  z-index: 4;
+  padding: 16px 0 8px;
+  background: linear-gradient(to top, var(--bg) 75%, transparent);
 }
 
 /* Never-done tasks, gathered in one block above the tracked ones. */
@@ -1236,10 +1266,16 @@ body > .banner {
 
   .form-wide > .button-block,
   .form-wide > .banner,
-  .form-wide > .muted {
+  .form-wide > .muted,
+  .form-wide > .sticky-actions .button-block {
     max-width: 480px;
     margin-left: auto;
     margin-right: auto;
+  }
+
+  /* The menu is in the top bar here, so the save button can sit at the very bottom. */
+  .sticky-actions {
+    bottom: 0;
   }
 
   .actions-footer {

@@ -16,6 +16,13 @@ export function formatKm(km: number): string {
   return `${numberFormat.format(km)} km`;
 }
 
+/** Whether any of the texts contains what was typed in a search box, ignoring case and accents. */
+export function matchesQuery(texts: (string | null)[], query: string): boolean {
+  const loose = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
+  const wanted = loose(query);
+  return wanted === '' || texts.some((text) => text !== null && loose(text).includes(wanted));
+}
+
 /** "3.2 litres", "1 piece". */
 export function formatQuantity(quantity: number, unit: PartUnit, m: Messages = messages()): string {
   const word = quantity === 1 ? m.parts.unitSingular[unit] : (unit === 'litre' ? m.workshop.litre : m.workshop.piece).toLowerCase();

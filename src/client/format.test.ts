@@ -5,6 +5,8 @@ import {
   describeDue,
   describeInterval,
   formatDate,
+  formatQuantity,
+  matchesQuery,
   taskName,
 } from './format.ts';
 import { messagesFor } from './i18n.ts';
@@ -69,5 +71,24 @@ describe('format in both languages', () => {
     const overdue = { ...due, status: 'overdue' as const, daysRemaining: -1, kmRemaining: -300 };
     expect(plain(describeDue(overdue, en))).toBe('Was due ≈ 14 Mar 2027 (1 day ago) · at 24 000 km (300 km over)');
     expect(plain(describeDue(overdue, fr))).toBe('Échéance ≈ 14 mars 2027 (il y a 1 jour) · à 24 000 km (300 km de dépassement)');
+  });
+});
+
+describe('matchesQuery', () => {
+  it('finds text ignoring case and accents, and matches everything when nothing is typed', () => {
+    expect(matchesQuery(['Remplacer le liquide de refroidissement'], 'REFROID')).toBe(true);
+    expect(matchesQuery(['Vidange huile', null], 'vidange')).toBe(true);
+    expect(matchesQuery(['Bougies'], 'élec')).toBe(false);
+    expect(matchesQuery(['Électrolyte'], 'electro')).toBe(true);
+    expect(matchesQuery(['Anything'], '  ')).toBe(true);
+  });
+});
+
+describe('formatQuantity', () => {
+  it('uses the singular for one and the plural otherwise', () => {
+    expect(formatQuantity(1, 'piece', en)).toBe('1 piece');
+    expect(formatQuantity(2, 'piece', en)).toBe('2 pieces');
+    expect(formatQuantity(3.2, 'litre', en)).toBe('3.2 litres');
+    expect(formatQuantity(1, 'litre', fr)).toBe('1 litre');
   });
 });

@@ -3,7 +3,7 @@ import { todayIso } from '../../shared/dates.ts';
 import type { PartUnit } from '../../shared/schemas.ts';
 import { purchaseUnitPrice, type Purchase, type Snapshot, type Vehicle, type VehiclePart } from '../../shared/types.ts';
 import { confirmDelete, Field, FormError, Layout, NeedsConnection } from '../components.tsx';
-import { formatDate, formatMoney, formatQuantity, parseNumber, taskName } from '../format.ts';
+import { formatDate, formatMoney, formatQuantity, matchesQuery, parseNumber, taskName } from '../format.ts';
 import { useT } from '../i18n.ts';
 import { navigate } from '../router.ts';
 import { online } from '../store.ts';
@@ -32,9 +32,15 @@ export function PartsPage({ snapshot, vehicleId }: { snapshot: Snapshot; vehicle
   const t = useT();
   const [vehicleFilter, setVehicleFilter] = useState(vehicleId ?? '');
   const [state, setState] = useState<StateFilter>('all');
+  const [query, setQuery] = useState('');
   const vehicles = new Map(snapshot.vehicles.map((v) => [v.id, v]));
-  const parts = snapshot.vehicleParts
-    .filter((p) => (vehicleFilter === '' || p.vehicleId === vehicleFilter) && (state === 'all' || (state === 'toBuy') === p.toBuy))
+  // The counts beside the choices follow the vehicle and the search, so they say what choosing one would show.
+  const matching = snapshot.vehicleParts.filter(
+    (p) => (vehicleFilter === '' || p.vehicleId === vehicleFilter) && matchesQuery([p.name, p.partNumber, p.notes], query),
+  );
+  const counts = { all: matching.length, toBuy: matching.filter((p) => p.toBuy).length, bought: matching.filter((p) => !p.toBuy).length };
+  const parts = matching
+    .filter((p) => state === 'all' || (state === 'toBuy') === p.toBuy)
     .sort((a, b) => Number(b.toBuy) - Number(a.toBuy) || a.name.localeCompare(b.name));
   const addPath = vehicleFilter ? `#/parts/new/${vehicleFilter}` : '#/parts/new';
 
@@ -55,12 +61,15 @@ export function PartsPage({ snapshot, vehicleId }: { snapshot: Snapshot; vehicle
         </Field>
         <Field label={t.parts.show}>
           <select value={state} onChange={(e) => setState(e.target.value as StateFilter)}>
-            <option value="all">{t.parts.states.all}</option>
-            <option value="toBuy">{t.parts.states.toBuy}</option>
-            <option value="bought">{t.parts.states.bought}</option>
+            <option value="all">{`${t.parts.states.all} (${counts.all})`}</option>
+            <option value="toBuy">{`${t.parts.states.toBuy} (${counts.toBuy})`}</option>
+            <option value="bought">{`${t.parts.states.bought} (${counts.bought})`}</option>
           </select>
         </Field>
       </div>
+      {snapshot.vehicleParts.length > 0 ? (
+        <input type="search" className="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t.parts.search} aria-label={t.parts.search} autoComplete="off" />
+      ) : null}
       {parts.length === 0 ? <p className="empty">{snapshot.vehicleParts.length === 0 ? t.parts.empty : t.parts.emptyFiltered}</p> : null}
       <ul className="list list-grid list-even">
         {parts.map((part) => {
