@@ -22,7 +22,7 @@ _Avoid_: Part Spec, Vehicle Spec, Torque Spec
 
 ### In the French interface
 
-Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Due Date → échéance, Interval → intervalle, Spec Line → caractéristique (fiche technique), Vehicle Part → pièce ou fluide, To buy / Bought → à acheter / achetée, Purchase → achat, Total paid → total payé, Build → motorisation, Plan Template → modèle de tâche, Document → document, Reminder → rappel, Performed by → réalisé par, Total cost → coût total.
+Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Due Date → échéance, Interval → intervalle, Spec Line → caractéristique (fiche technique), Vehicle Part → article (une pièce ou un fluide), To buy / Bought → à acheter / achetée, Purchase → achat, Total paid → total payé, Build → motorisation, Plan Template → modèle de tâche, Document → document, Reminder → rappel, Performed by → réalisé par, Total cost → coût total.
 
 ## Maintenance Plan
 
@@ -65,6 +65,7 @@ _Avoid_: Part Used, Part Spec
 
 **Vehicle Part**:
 A part or fluid bought, or to be bought, for one Vehicle ("Motul 7100 10W-40", "Mann HU 7008 z"), with its part number, unit, usual quantity and price per unit, and optionally the Task it is bought for. It is either To buy or Bought. The owner picks from the Vehicle's parts when logging a Service. Not the same as a Spec Line, which is the factory figure.
+On screen the app calls it an **item** (article in French), so the word covers fluids as well as parts; "Vehicle Part" stays the term in the code and in these docs.
 _Avoid_: Catalogue (that word is for the Plan Templates), stock, inventory, wishlist, shopping list
 
 **To buy / Bought**:
