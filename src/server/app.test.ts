@@ -571,7 +571,7 @@ describe('the Parts section: parts to buy and the purchase log', () => {
 
   it('exports every Purchase as a CSV file with the price per unit worked out', async () => {
     const bike = await createVehicle('Test bike');
-    const part = await createPart(bike.id, { name: 'Oil, "special"', partNumber: 'REF-1' });
+    const part = await createPart(bike.id, { name: 'Oil; "special"', partNumber: 'REF-1' });
     await call('POST', `/api/parts/${part.id}/purchases`, { date: '2026-11-02', quantity: 5, totalPaid: 40, shop: 'Exemple Moto', deliveryFees: 4.9 });
     const res = await call('GET', '/api/purchases.csv');
     expect(res.status).toBe(200);
@@ -580,8 +580,8 @@ describe('the Parts section: parts to buy and the purchase log', () => {
     // The byte order mark lets Excel read accents correctly.
     expect([...bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
     expect(new TextDecoder().decode(bytes.slice(3)).split('\r\n')).toEqual([
-      'vehicle,part,part_number,unit,date,quantity,total_paid,price_per_unit,delivery_fees,shop,notes',
-      'Test bike,"Oil, ""special""",REF-1,litre,2026-11-02,5,40,8,4.9,Exemple Moto,',
+      'vehicle;part;part_number;unit;date;quantity;total_paid;price_per_unit;delivery_fees;shop;notes',
+      'Test bike;"Oil; ""special""";REF-1;litre;2026-11-02;5;40;8;4.9;Exemple Moto;',
       '',
     ]);
   });

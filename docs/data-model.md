@@ -271,7 +271,7 @@ How the list grows:
 
 ### `purchases`
 
-The purchase log of a part (see [ADR 0004](adr/0004-parts-section-and-purchase-log.md)). Nothing in the app totals it: it exists to be extracted, with the **Download CSV** button of the Parts section (`GET /api/purchases.csv`, one row per Purchase, the price per unit worked out).
+The purchase log of a part (see [ADR 0004](adr/0004-parts-section-and-purchase-log.md)). Nothing in the app totals it: it exists to be extracted, with the **Download CSV** button of the Parts section (`GET /api/purchases.csv`, one row per Purchase, separated by semicolons, the price per unit worked out).
 
 | Column | Meaning |
 | --- | --- |

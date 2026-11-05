@@ -176,11 +176,11 @@ const toPurchase = (r: Row): Purchase => ({
   notes: r.notes,
 });
 
-/** One cell of a CSV file: quoted when it holds a comma, a quote or a line break. */
+/** One cell of a CSV file (separated by semicolons, as French spreadsheets expect): quoted when it holds a semicolon, a quote or a line break. */
 function csvCell(value: string | number | null): string {
   if (value === null) return '';
   const text = String(value);
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  return /[";\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 /** Groups rows by a key column, keeping their order. */
@@ -857,7 +857,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       )
       .all(garageId) as Row[];
     const lines = [
-      ['vehicle', 'part', 'part_number', 'unit', 'date', 'quantity', 'total_paid', 'price_per_unit', 'delivery_fees', 'shop', 'notes'].join(','),
+      ['vehicle', 'part', 'part_number', 'unit', 'date', 'quantity', 'total_paid', 'price_per_unit', 'delivery_fees', 'shop', 'notes'].join(';'),
       ...rows.map((r) =>
         [
           r.vehicle_name,
@@ -873,7 +873,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
           r.notes,
         ]
           .map(csvCell)
-          .join(','),
+          .join(';'),
       ),
     ];
     // The byte order mark lets Excel read accents correctly.
