@@ -3,7 +3,7 @@ import { todayIso } from '../../shared/dates.ts';
 import type { PartUnit } from '../../shared/schemas.ts';
 import { purchaseUnitPrice, type Purchase, type Snapshot, type Vehicle, type VehiclePart } from '../../shared/types.ts';
 import { confirmDelete, Field, FormError, Layout, NeedsConnection } from '../components.tsx';
-import { formatDate, formatMoney, parseNumber, taskName } from '../format.ts';
+import { formatDate, formatMoney, formatQuantity, parseNumber, taskName } from '../format.ts';
 import { useT } from '../i18n.ts';
 import { navigate } from '../router.ts';
 import { online } from '../store.ts';
@@ -42,7 +42,7 @@ export function PartsPage({ snapshot, vehicleId }: { snapshot: Snapshot; vehicle
     <Layout title={t.parts.title} back={vehicleId ? `/vehicles/${vehicleId}` : undefined} titleAction={<a className="button button-small" href={addPath}>{t.parts.add}</a>}>
       <NeedsConnection />
       <p className="muted">{t.parts.intro}</p>
-      <div className="row">
+      <div className="row filters">
         <Field label={t.parts.vehicle}>
           <select value={vehicleFilter} onChange={(e) => setVehicleFilter(e.target.value)}>
             <option value="">{t.parts.allVehicles}</option>
@@ -62,7 +62,7 @@ export function PartsPage({ snapshot, vehicleId }: { snapshot: Snapshot; vehicle
         </Field>
       </div>
       {parts.length === 0 ? <p className="empty">{snapshot.vehicleParts.length === 0 ? t.parts.empty : t.parts.emptyFiltered}</p> : null}
-      <ul className="list">
+      <ul className="list list-grid list-even">
         {parts.map((part) => {
           const log = purchasesOf(snapshot, part.id);
           return (
@@ -75,8 +75,8 @@ export function PartsPage({ snapshot, vehicleId }: { snapshot: Snapshot; vehicle
                 {part.partNumber ? <span>{part.partNumber}</span> : null}
                 {vehicleFilter === '' ? <span className="muted">{vehicles.get(part.vehicleId)?.name}</span> : null}
                 <span className="muted">
-                  {t.workshop.usualQuantity}: {part.quantity} {unitName(part.unit, t)}
-                  {part.price !== null ? ` · ${formatMoney(part.price, t)} / ${t.parts.unitSingular[part.unit]}` : ''}
+                  {t.workshop.usualQuantity}: {formatQuantity(part.quantity, part.unit, t)}
+                  {part.price !== null ? <> · <span className="nowrap">{formatMoney(part.price, t)} / {t.parts.unitSingular[part.unit]}</span></> : null}
                 </span>
                 {specText(snapshot, part.specLineId) ? <span className="muted">{t.parts.specShown(specText(snapshot, part.specLineId)!)}</span> : null}
                 {log.length > 0 ? (
@@ -151,6 +151,9 @@ export function VehiclePartForm({ snapshot, existing, vehicleId }: { snapshot: S
     <Layout title={existing ? t.parts.editTitle : t.parts.newTitle} back="/parts">
       <NeedsConnection />
       {owned.length === 0 && !existing ? <p className="empty">{t.parts.noOwnedVehicle}</p> : null}
+      {/* The item beside its purchase log on a wide screen; stacked on a phone. */}
+      <div className="split">
+        <div className="split-main">
       <form onSubmit={submit} className="form" noValidate>
         <Field label={t.parts.vehicle} hint={existing ? t.parts.vehicleLocked : undefined}>
           <select
@@ -225,7 +228,11 @@ export function VehiclePartForm({ snapshot, existing, vehicleId }: { snapshot: S
           </button>
         ) : null}
       </form>
-      {existing ? <PurchaseLog snapshot={snapshot} part={existing} /> : <p className="muted">{t.parts.saveFirst}</p>}
+        </div>
+        <div className="split-side">
+          {existing ? <PurchaseLog snapshot={snapshot} part={existing} /> : <p className="muted">{t.parts.saveFirst}</p>}
+        </div>
+      </div>
     </Layout>
   );
 }
@@ -258,7 +265,7 @@ function PurchaseLog({ snapshot, part }: { snapshot: Snapshot; part: VehiclePart
             <li key={p.id}>
               <button type="button" className="item-row" onClick={() => setEditing(p.id)}>
                 <strong>
-                  {formatDate(p.date, t)} · {p.quantity} {p.quantity === 1 ? t.parts.unitSingular[part.unit] : unit} · {formatMoney(p.totalPaid, t)}
+                  {formatDate(p.date, t)} · {formatQuantity(p.quantity, part.unit, t)} · {formatMoney(p.totalPaid, t)}
                 </strong>
                 <span className="muted">
                   {t.parts.perUnit(formatMoney(purchaseUnitPrice(p), t), t.parts.unitSingular[part.unit])}

@@ -1,4 +1,5 @@
 import { effectiveInterval, type DueInfo } from '../shared/due.ts';
+import type { PartUnit } from '../shared/schemas.ts';
 import type { MaintenanceTask } from '../shared/types.ts';
 import { messages, type Messages } from './i18n.ts';
 
@@ -13,6 +14,12 @@ export function formatDate(iso: string, m: Messages = messages()): string {
 
 export function formatKm(km: number): string {
   return `${numberFormat.format(km)} km`;
+}
+
+/** "3.2 litres", "1 piece". */
+export function formatQuantity(quantity: number, unit: PartUnit, m: Messages = messages()): string {
+  const word = quantity === 1 ? m.parts.unitSingular[unit] : (unit === 'litre' ? m.workshop.litre : m.workshop.piece).toLowerCase();
+  return `${quantity} ${word}`;
 }
 
 export function formatMoney(amount: number, m: Messages = messages()): string {

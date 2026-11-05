@@ -6,7 +6,7 @@ import type { PartUnit, PerformedBy, ServiceKind } from '../../shared/schemas.ts
 import type { OdometerReading, PartUsed, Service, Snapshot, Vehicle, VehiclePart } from '../../shared/types.ts';
 import { newId } from '../api.ts';
 import { confirmDelete, Field, FormError, Layout, StatusChip } from '../components.tsx';
-import { formatKm, formatMoney, parseNumber, taskName } from '../format.ts';
+import { formatKm, formatMoney, formatQuantity, parseNumber, taskName } from '../format.ts';
 import { showToast } from '../feedback.ts';
 import { useT, type Messages } from '../i18n.ts';
 import { navigate } from '../router.ts';
@@ -437,9 +437,8 @@ export function ServiceForm({
 
 /** "Motul 7100 10W-40 · 3.2 L · spec 10W-40, 3.2 L" in the picker: the factory spec it is for is shown to compare. */
 function listedLabel(p: VehiclePart, t: Messages, snapshot: Snapshot): string {
-  const unit = p.unit === 'litre' ? t.workshop.litre : t.workshop.piece;
   const spec = snapshot.specLines.find((l) => l.id === p.specLineId);
-  return `${p.name} · ${p.quantity} ${unit.toLowerCase()}${p.price !== null ? ` · ${formatMoney(p.price, t)}` : ''}${spec?.value ? ` · ${t.parts.specShown(spec.value)}` : ''}`;
+  return `${p.name} · ${formatQuantity(p.quantity, p.unit, t)}${p.price !== null ? ` · ${formatMoney(p.price, t)}` : ''}${spec?.value ? ` · ${t.parts.specShown(spec.value)}` : ''}`;
 }
 
 /** Says a Service or Odometer Reading was saved; a new one can be taken back for a few seconds. */

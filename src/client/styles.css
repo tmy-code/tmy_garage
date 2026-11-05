@@ -768,6 +768,19 @@ textarea {
   gap: 12px;
 }
 
+/* The filters above a list, with room before the first row. The first one (the vehicle) has the longer choices. */
+.filters {
+  margin-bottom: 16px;
+}
+
+.filters .field:first-child {
+  flex: 2;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
 .check {
   display: flex;
   align-items: center;
@@ -1139,6 +1152,11 @@ body > .banner {
 
   .list-grid li {
     margin: 0;
+  }
+
+  /* Cards of one row share a height, for lists of similar cards (an item and its details). */
+  .list-grid.list-even {
+    align-items: stretch;
   }
 
   /* An item being edited takes a row of its own instead of stretching its neighbours. */
