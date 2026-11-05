@@ -155,8 +155,10 @@ export function ServiceForm({
 
   /** The Vehicle's listed parts: those usually bought for a ticked Task first. */
   const listed = snapshot.vehicleParts.filter((p) => p.vehicleId === vehicle.id).sort((a, b) => a.name.localeCompare(b.name));
-  const forTasks = listed.filter((p) => p.taskId !== null && selected.has(p.taskId));
-  const others = listed.filter((p) => !forTasks.includes(p));
+  // Bought parts first; those still to buy come last, and picking one marks it bought when the Service is saved.
+  const forTasks = listed.filter((p) => !p.toBuy && p.taskId !== null && selected.has(p.taskId));
+  const others = listed.filter((p) => !p.toBuy && !forTasks.includes(p));
+  const stillToBuy = listed.filter((p) => p.toBuy);
   function pickListed(id: string) {
     const part = listed.find((p) => p.id === id);
     if (part) setParts([...parts, draftOfListed(part)]);
@@ -386,6 +388,15 @@ export function ServiceForm({
                     {others.length > 0 ? (
                       <optgroup label={forTasks.length > 0 ? t.workshop.pickPartOthers : t.workshop.partsListLink}>
                         {others.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {listedLabel(p, t)}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ) : null}
+                    {stillToBuy.length > 0 ? (
+                      <optgroup label={t.workshop.pickPartToBuy}>
+                        {stillToBuy.map((p) => (
                           <option key={p.id} value={p.id}>
                             {listedLabel(p, t)}
                           </option>

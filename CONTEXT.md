@@ -22,7 +22,7 @@ _Avoid_: Part Spec, Vehicle Spec, Torque Spec
 
 ### In the French interface
 
-Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Due Date → échéance, Interval → intervalle, Spec Line → caractéristique (fiche technique), Vehicle Part → pièce ou fluide, Build → motorisation, Plan Template → modèle de tâche, Document → document, Reminder → rappel, Performed by → réalisé par, Total cost → coût total.
+Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Due Date → échéance, Interval → intervalle, Spec Line → caractéristique (fiche technique), Vehicle Part → pièce ou fluide, To buy / Bought → à acheter / achetée, Purchase → achat, Total paid → total payé, Build → motorisation, Plan Template → modèle de tâche, Document → document, Reminder → rappel, Performed by → réalisé par, Total cost → coût total.
 
 ## Maintenance Plan
 
@@ -64,8 +64,18 @@ A line of a Service naming what went in, with brand and variant ("Motul 7100 10W
 _Avoid_: Part Used, Part Spec
 
 **Vehicle Part**:
-A part or fluid bought for one Vehicle ("Motul 7100 10W-40", "Mann HU 7008 z"), with its part number, unit, usual quantity and price per unit, and optionally the Task it is bought for. The Vehicle's parts list is what the owner picks from when logging a Service. Not the same as a Spec Line, which is the factory figure.
-_Avoid_: Catalogue (that word is for the Plan Templates), stock, inventory
+A part or fluid bought, or to be bought, for one Vehicle ("Motul 7100 10W-40", "Mann HU 7008 z"), with its part number, unit, usual quantity and price per unit, and optionally the Task it is bought for. It is either To buy or Bought. The owner picks from the Vehicle's parts when logging a Service. Not the same as a Spec Line, which is the factory figure.
+_Avoid_: Catalogue (that word is for the Plan Templates), stock, inventory, wishlist, shopping list
+
+**To buy / Bought**:
+The two states of a Vehicle Part. To buy covers anything the owner wants or plans to buy, including a part bought before that must be bought again; Bought means the owner has it. Recording a Purchase makes a part Bought; "buy again" makes it To buy. A part that existed before Purchases were introduced is Bought with an empty purchase log. Nothing finer: an idea still being compared goes in the part's Notes.
+
+**Purchase**:
+One occasion on which the owner bought a Vehicle Part: a date, a quantity (in the part's unit) and the Total paid for the goods as on the receipt, with further details (shop, delivery fees, receipt, notes) kept so the owner can analyse spending outside the app. The price per unit is worked out from Total paid and quantity, never typed. Delivery fees are a separate amount and never part of Total paid. A part can have many; together they are its purchase log. The app only records Purchases; it does not total or report them, and a Service's Total cost is unaffected.
+_Avoid_: Order, expense, price per unit (as a typed field)
+
+**Parts section**:
+The garage-wide place in the app that lists the Vehicle Parts of every Vehicle together, filterable by Vehicle and by To buy / Bought. Each part still belongs to exactly one Vehicle.
 
 **Receipt**:
 The photo or PDF of the invoice attached to a Service.

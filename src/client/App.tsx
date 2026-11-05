@@ -8,7 +8,8 @@ import { catalogueOf } from '../shared/catalogue.ts';
 import { ReadingForm, ServiceForm } from './pages/ServiceForm.tsx';
 import { CopyTasks, SellForm, TaskForm, VehicleForm } from './pages/SetupForms.tsx';
 import { VehiclePage } from './pages/VehiclePage.tsx';
-import { PartsPage, SpecsPage, TaskPage, WorkshopPage } from './pages/Workshop.tsx';
+import { PartsPage, VehiclePartForm } from './pages/Parts.tsx';
+import { SpecsPage, TaskPage, WorkshopPage } from './pages/Workshop.tsx';
 import { scrollForNewRoute, useRoute } from './router.ts';
 import { sync, useStore } from './store.ts';
 
@@ -56,6 +57,13 @@ export function App() {
 
   if (section === undefined) return <Dashboard snapshot={snapshot} />;
   if (section === 'workshop') return <WorkshopPage snapshot={snapshot} />;
+  if (section === 'parts') {
+    if (id === undefined) return <PartsPage snapshot={snapshot} />;
+    if (id === 'vehicle' && sub) return <PartsPage key={sub} snapshot={snapshot} vehicleId={sub} />;
+    if (id === 'new') return <VehiclePartForm key={sub ?? 'new'} snapshot={snapshot} vehicleId={sub} />;
+    const part = id === 'part' ? snapshot.vehicleParts.find((p) => p.id === sub) : undefined;
+    return part ? <VehiclePartForm key={part.id} snapshot={snapshot} existing={part} /> : <NotFound what="page" />;
+  }
   // Reminders used to have their own page; links to it (a test notification, say) open the settings.
   if (section === 'settings' && id === 'parts') {
     if (sub === undefined) return <CataloguePage snapshot={snapshot} />;
@@ -88,7 +96,7 @@ export function App() {
       case 'specs':
         return <SpecsPage vehicle={vehicle} snapshot={snapshot} />;
       case 'parts':
-        return <PartsPage vehicle={vehicle} snapshot={snapshot} />;
+        return <PartsPage key={vehicle.id} snapshot={snapshot} vehicleId={vehicle.id} />;
       case 'tasks':
         if (subId === 'new') return <TaskForm vehicle={vehicle} snapshot={snapshot} />;
     }

@@ -211,7 +211,7 @@ section {
   bottom: 0;
   z-index: 5;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   padding: 4px 4px env(safe-area-inset-bottom);
   background: var(--topbar);
   border-top: 1px solid var(--border);

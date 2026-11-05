@@ -202,7 +202,9 @@ erDiagram
   vehicles ||--o{ vehicle_parts : buys
   vehicle_parts |o--o{ service_items : picked_into
   maintenance_tasks |o--o{ vehicle_parts : bought_for
+  vehicle_parts ||--o{ purchases : bought
   services ||--o{ documents : receipt
+  purchases ||--o{ documents : receipt
 ```
 
 ### `services`
@@ -257,21 +259,42 @@ The parts and fluids bought for one Vehicle: the **parts list**. When logging a 
 | `quantity` | Required. How much a Service usually uses (3.2 litres of oil, 1 filter). |
 | `price` | Per piece or per litre; empty when unknown. Changed by hand only: a Service never changes it. |
 | `task_id` | → `maintenance_tasks`, the Task it is usually bought for. When that Task is ticked in the Service form, its parts are listed first. Emptied if the Task is deleted; moves to the kept Task when two Tasks are merged. |
+| `to_buy` | Required, yes/no. The part is **To buy** (wanted or planned, or to be bought again); otherwise it is **Bought**. Parts that existed before Purchases were introduced are 0, so they are Bought with an empty log. Recording a Purchase, or using the part in a Service, sets it to 0; the owner sets it to 1 by hand to buy again. |
+| `notes` | Free text: the shop, a link, a comparison. Links are tappable. |
+
+A Bought part with no Purchase shows "no purchase recorded".
 
 How the list grows:
-- **Parts and fluids page** (Workshop, per Vehicle): add, edit and delete. Online only, like the Specs page. The list travels in the offline snapshot, so the Service form can pick from it with no signal.
-- **From a Service**: a component typed by hand is also kept in the list unless "Keep in the parts list" is unticked. The phone makes the part's id and sends it with the Service, so sending it again never doubles it, and a Service logged offline works the same. If the list already has that name and part number, the component links to it instead of adding a twin. When the Service did exactly one Task, the new part is tied to it.
+- **Parts section** (top-level, all Vehicles, filterable by Vehicle and by To buy / Bought): add, edit and delete parts, record Purchases and attach their receipts. Online only, like the Specs page. The list and the purchase log travel in the offline snapshot, so they can be read, and the Service form can pick from the list, with no signal. A Vehicle's page opens the section filtered to that Vehicle.
+- **From a Service**: a component typed by hand is also kept in the list unless "Keep in the parts list" is unticked. The phone makes the part's id and sends it with the Service, so sending it again never doubles it, and a Service logged offline works the same. If the list already has that name and part number, the component links to it instead of adding a twin. When the Service did exactly one Task, the new part is tied to it. A part picked from the list that was still To buy is marked Bought when the Service is saved (no Purchase is invented). The Service form offers Bought parts first and To buy parts last.
 - Editing the description or part number of a picked component detaches it from the list part (it is then a new part to keep, or a plain copy).
+
+### `purchases`
+
+The purchase log of a part (see [ADR 0004](adr/0004-parts-section-and-purchase-log.md)). Nothing in the app totals it: it exists to be extracted, with the **Download CSV** button of the Parts section (`GET /api/purchases.csv`, one row per Purchase, the price per unit worked out).
+
+| Column | Meaning |
+| --- | --- |
+| `part_id` | Required. → `vehicle_parts`. Deleting the part deletes its Purchases and their receipts. |
+| `vehicle_id` | Required. → `vehicles`. The part's Vehicle, kept for scoping and export. |
+| `date` | Required. |
+| `quantity` | Required. In the part's unit (litres or pieces). |
+| `total_paid` | Required. For the goods only, as on the receipt. Never includes delivery fees. The price per unit is worked out from it and never stored. |
+| `shop` | Optional. |
+| `delivery_fees` | Optional. A separate amount, never inside `total_paid`. |
+| `notes` | Optional. |
+
+A Purchase's receipt is a Document with `owner_kind` `purchase`. Recording a Purchase marks the part Bought (`to_buy` = 0).
 
 ### `documents`
 
-A Document belongs to one owner, named by `owner_kind` and `owner_id`. Only those of a Service (its receipt) and of a Vehicle are shown. Documents of removed features (insurance, inspections) stay stored, unshown. The server checks the owner exists and removes a Service's Documents, files included, when it is deleted.
+A Document belongs to one owner, named by `owner_kind` and `owner_id`. Only those of a Service, of a Purchase (their receipts) and of a Vehicle are shown. Documents of removed features (insurance, inspections) stay stored, unshown. The server checks the owner exists and removes a Service's Documents, files included, when it is deleted.
 
 | Column | Meaning |
 | --- | --- |
 | `garage_id` | Required. → `garages`. |
 | `vehicle_id` | → `vehicles`. |
-| `owner_kind` | Required. `service` or `vehicle` (older rows may hold other kinds). |
+| `owner_kind` | Required. `service`, `purchase` or `vehicle` (older rows may hold other kinds). |
 | `owner_id` | Required. The owner's `id`. |
 | `type` | Required. `invoice` for a receipt. |
 | `title`, `issue_date`, `expiry_date` | Not used for receipts. |
@@ -348,7 +371,8 @@ Foreign keys stop anything from being deleted while other rows still need it, ex
 | Maintenance Task | Refused if a Service used it. Otherwise it goes. |
 | Service | Its Task links, components and Documents go too. |
 | Spec Line | Goes. |
-| Vehicle Part | Goes. The components of past Services keep their copy and lose only the link. |
+| Vehicle Part | Goes, with its Purchases and their receipts. The components of past Services keep their copy and lose only the link. |
+| Purchase | Goes, with its receipts. The part stays as it is. |
 | A Plan Template of the owner's | Goes. Vehicles keep their Tasks. |
 | A built-in Plan Template | It can't be deleted. It can only be taken off the list, or set back to the built-in version. |
 
@@ -356,7 +380,7 @@ Foreign keys stop anything from being deleted while other rows still need it, ex
 
 The phone keeps one `Snapshot` (defined in [`types.ts`](../src/shared/types.ts)) so it works in the garage with no signal. This design is explained in [ADR 0001](adr/0001-offline-service-logging-via-send-queue.md).
 
-- The snapshot holds Vehicles, Tasks, Services, readings, Spec Lines, the parts lists and the Template changes. It holds Document details, but not the files.
+- The snapshot holds Vehicles, Tasks, Services, readings, Spec Lines, the parts lists, their Purchases and the Template changes. It holds Document details, but not the files.
 - It groups data the way screens use it, not the way tables store it. For example, a Service carries its `taskIds` and `partsUsed` as lists.
 - Services and Odometer Readings can be logged offline. They wait in a queue on the phone and are sent when the connection returns. Everything else needs a connection.
 - A phone may hold a snapshot saved by an older version of the app. `normalizeSnapshot` in [`workshop.ts`](../src/shared/workshop.ts) fills in what it lacks, and drops fields that no longer exist.

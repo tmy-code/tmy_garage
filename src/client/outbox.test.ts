@@ -9,6 +9,7 @@ const base: Snapshot = {
   readings: [],
   specLines: [],
   vehicleParts: [],
+  purchases: [],
   documents: [],
   catalogue: [],
 };

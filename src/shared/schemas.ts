@@ -21,7 +21,7 @@ export const drivetrain = z.enum(['fwd', 'rwd', 'awd']);
 export const distribution = z.enum(['belt', 'chain', 'none']);
 export const finalDrive = z.enum(['chain', 'belt', 'shaft', 'gear', 'none']);
 export const cooling = z.enum(['liquid', 'air']);
-export const documentOwnerKind = z.enum(['vehicle', 'service']);
+export const documentOwnerKind = z.enum(['vehicle', 'service', 'purchase']);
 export const documentType = z.enum(['registration', 'invoice', 'manual', 'photo', 'other']);
 export const partUnit = z.enum(['piece', 'litre']);
 /** What is done to the part: replace it, inspect it, clean it or adjust it. */
@@ -233,6 +233,24 @@ export const vehiclePartInput = z.object({
   quantity,
   price: unitPrice,
   taskId: z.string().min(1).nullish().transform((v) => v ?? null),
+  /** Left out when editing, the part keeps its state; a new part is Bought unless this says otherwise. */
+  toBuy: z.boolean().optional(),
+  notes: optionalText(2000),
+});
+
+/** One purchase of a part: what the receipt says, with the delivery fees apart. */
+export const purchaseInput = z.object({
+  date: isoDate,
+  quantity,
+  totalPaid: z.number().min(0).max(1_000_000),
+  shop: optionalText(120),
+  deliveryFees: z
+    .number()
+    .min(0)
+    .max(100_000)
+    .nullish()
+    .transform((v) => v ?? null),
+  notes: optionalText(1000),
 });
 
 export const serviceInput = z

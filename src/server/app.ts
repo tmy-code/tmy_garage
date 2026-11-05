@@ -11,6 +11,7 @@ import {
   copyTasksInput,
   addStandardSpecsInput,
   vehiclePartInput,
+  purchaseInput,
   mergeTaskInput,
   documentInput,
   documentOwner,
@@ -30,6 +31,7 @@ import type {
   MaintenanceTask,
   OdometerReading,
   PartUsed,
+  Purchase,
   VehiclePart,
   Service,
   Snapshot,
@@ -158,7 +160,28 @@ const toVehiclePart = (r: Row): VehiclePart => ({
   quantity: r.quantity,
   price: r.price,
   taskId: r.task_id,
+  toBuy: r.to_buy === 1,
+  notes: r.notes,
 });
+
+const toPurchase = (r: Row): Purchase => ({
+  id: r.id,
+  partId: r.part_id,
+  vehicleId: r.vehicle_id,
+  date: r.date,
+  quantity: r.quantity,
+  totalPaid: r.total_paid,
+  shop: r.shop,
+  deliveryFees: r.delivery_fees,
+  notes: r.notes,
+});
+
+/** One cell of a CSV file: quoted when it holds a comma, a quote or a line break. */
+function csvCell(value: string | number | null): string {
+  if (value === null) return '';
+  const text = String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
 
 /** Groups rows by a key column, keeping their order. */
 function groupBy<T>(rows: Row[], key: string, map: (r: Row) => T): Map<string, T[]> {
@@ -246,7 +269,8 @@ function garageReader(db: DatabaseSync, garageId: string) {
       readings,
       specLines: ownedRows('spec_lines').map(toSpecLine),
       vehicleParts: ownedRows('vehicle_parts').map(toVehiclePart),
-      documents: (db.prepare("SELECT * FROM documents WHERE garage_id = ? AND owner_kind IN ('vehicle', 'service') ORDER BY created_at").all(garageId) as Row[]).map(toDocument),
+      purchases: ownedRows('purchases').map(toPurchase),
+      documents: (db.prepare("SELECT * FROM documents WHERE garage_id = ? AND owner_kind IN ('vehicle', 'service', 'purchase') ORDER BY created_at").all(garageId) as Row[]).map(toDocument),
       catalogue: catalogueEntries(db, garageId),
     };
   }
@@ -758,8 +782,8 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     checkPartTask(vehicleId, p.taskId);
     if (samePart(vehicleId, p.name, p.partNumber)) throw new HttpError(409, 'This part is already on the list');
     const id = randomUUID();
-    db.prepare('INSERT INTO vehicle_parts (id, vehicle_id, name, part_number, unit, quantity, price, task_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-      id, vehicleId, p.name, p.partNumber, p.unit, p.quantity, p.price, p.taskId,
+    db.prepare('INSERT INTO vehicle_parts (id, vehicle_id, name, part_number, unit, quantity, price, task_id, to_buy, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+      id, vehicleId, p.name, p.partNumber, p.unit, p.quantity, p.price, p.taskId, p.toBuy ? 1 : 0, p.notes,
     );
     return c.json(toVehiclePart(ownedRowOrThrow('vehicle_parts', id, 'Part')), 201);
   });
@@ -770,8 +794,9 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     const p = await parse(c, vehiclePartInput);
     checkPartTask(row.vehicle_id, p.taskId);
     if (samePart(row.vehicle_id, p.name, p.partNumber, id)) throw new HttpError(409, 'This part is already on the list');
-    db.prepare('UPDATE vehicle_parts SET name = ?, part_number = ?, unit = ?, quantity = ?, price = ?, task_id = ? WHERE id = ?').run(
-      p.name, p.partNumber, p.unit, p.quantity, p.price, p.taskId, id,
+    const toBuy = p.toBuy === undefined ? row.to_buy : p.toBuy ? 1 : 0;
+    db.prepare('UPDATE vehicle_parts SET name = ?, part_number = ?, unit = ?, quantity = ?, price = ?, task_id = ?, to_buy = ?, notes = ? WHERE id = ?').run(
+      p.name, p.partNumber, p.unit, p.quantity, p.price, p.taskId, toBuy, p.notes, id,
     );
     return c.json(toVehiclePart(ownedRowOrThrow('vehicle_parts', id, 'Part')));
   });
@@ -779,8 +804,83 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
   app.delete('/api/parts/:id', (c) => {
     const id = c.req.param('id');
     ownedRowOrThrow('vehicle_parts', id, 'Part');
-    db.prepare('DELETE FROM vehicle_parts WHERE id = ?').run(id);
+    transaction(() => {
+      // The purchase log goes with the part, and so do the receipts attached to it.
+      for (const purchase of db.prepare('SELECT id FROM purchases WHERE part_id = ?').all(id) as Row[]) deleteDocumentsOf('purchase', purchase.id);
+      db.prepare('DELETE FROM vehicle_parts WHERE id = ?').run(id);
+    });
     return c.body(null, 204);
+  });
+
+  // --- The purchase log of a part (desk work, online only). Recording one makes the part Bought. ---
+
+  app.post('/api/parts/:id/purchases', async (c) => {
+    const part = ownedRowOrThrow('vehicle_parts', c.req.param('id'), 'Part');
+    const p = await parse(c, purchaseInput);
+    const id = randomUUID();
+    transaction(() => {
+      db.prepare('INSERT INTO purchases (id, part_id, vehicle_id, date, quantity, total_paid, shop, delivery_fees, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+        id, part.id, part.vehicle_id, p.date, p.quantity, p.totalPaid, p.shop, p.deliveryFees, p.notes,
+      );
+      db.prepare('UPDATE vehicle_parts SET to_buy = 0 WHERE id = ?').run(part.id);
+    });
+    return c.json(toPurchase(ownedRowOrThrow('purchases', id, 'Purchase')), 201);
+  });
+
+  app.put('/api/purchases/:id', async (c) => {
+    const id = c.req.param('id');
+    ownedRowOrThrow('purchases', id, 'Purchase');
+    const p = await parse(c, purchaseInput);
+    db.prepare('UPDATE purchases SET date = ?, quantity = ?, total_paid = ?, shop = ?, delivery_fees = ?, notes = ? WHERE id = ?').run(
+      p.date, p.quantity, p.totalPaid, p.shop, p.deliveryFees, p.notes, id,
+    );
+    return c.json(toPurchase(ownedRowOrThrow('purchases', id, 'Purchase')));
+  });
+
+  app.delete('/api/purchases/:id', (c) => {
+    const id = c.req.param('id');
+    ownedRowOrThrow('purchases', id, 'Purchase');
+    transaction(() => {
+      deleteDocumentsOf('purchase', id);
+      db.prepare('DELETE FROM purchases WHERE id = ?').run(id);
+    });
+    return c.body(null, 204);
+  });
+
+  /** Every purchase of the Garage as a spreadsheet file, for analysis outside the app. The price per unit is worked out here. */
+  app.get('/api/purchases.csv', (c) => {
+    const rows = db
+      .prepare(
+        `SELECT pu.*, p.name AS part_name, p.part_number, p.unit, v.name AS vehicle_name
+         FROM purchases pu JOIN vehicle_parts p ON p.id = pu.part_id JOIN vehicles v ON v.id = pu.vehicle_id
+         WHERE v.garage_id = ? ORDER BY pu.date, v.name, p.name`,
+      )
+      .all(garageId) as Row[];
+    const lines = [
+      ['vehicle', 'part', 'part_number', 'unit', 'date', 'quantity', 'total_paid', 'price_per_unit', 'delivery_fees', 'shop', 'notes'].join(','),
+      ...rows.map((r) =>
+        [
+          r.vehicle_name,
+          r.part_name,
+          r.part_number,
+          r.unit,
+          r.date,
+          r.quantity,
+          r.total_paid,
+          r.quantity > 0 ? Math.round((r.total_paid / r.quantity) * 10000) / 10000 : null,
+          r.delivery_fees,
+          r.shop,
+          r.notes,
+        ]
+          .map(csvCell)
+          .join(','),
+      ),
+    ];
+    // The byte order mark lets Excel read accents correctly.
+    return c.body(`﻿${lines.join('\r\n')}\r\n`, 200, {
+      'content-type': 'text/csv; charset=utf-8',
+      'content-disposition': 'attachment; filename="purchases.csv"',
+    });
   });
 
   // --- Documents: details in the database, files in uploadsDir under their id ---
@@ -788,7 +888,8 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
   /** The Vehicle a Document's owner belongs to, checking the owner is in this Garage. */
   function ownerVehicle(ownerKind: string, ownerId: string): string {
     if (ownerKind === 'vehicle') return vehicleOrThrow(ownerId).id;
-    const row = ownerKind === 'service' ? ownedRows('services', 'x.id = ?', ownerId)[0] : undefined;
+    const table = ownerKind === 'service' ? 'services' : ownerKind === 'purchase' ? 'purchases' : null;
+    const row = table ? ownedRows(table, 'x.id = ?', ownerId)[0] : undefined;
     if (!row) throw new HttpError(404, 'What this Document is attached to was not found');
     return row.vehicle_id;
   }
@@ -928,6 +1029,9 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
         return { ...p, remember: false, partId: partId !== null && listed.get(partId, s.vehicleId) ? partId : null };
       });
       linked.forEach((p, i) => part.run(s.id, i, p.description, p.partNumber, p.quantity, p.unit, p.price, p.partId));
+      // Using a part that was still to buy means it was bought: no Purchase is invented, so it shows "no purchase recorded".
+      const bought = db.prepare('UPDATE vehicle_parts SET to_buy = 0 WHERE id = ? AND vehicle_id = ?');
+      for (const p of linked) if (p.partId !== null) bought.run(p.partId, s.vehicleId);
       partsUsed.splice(0, partsUsed.length, ...linked);
     });
     return c.json({ ...s, taskIds, partsUsed });

@@ -88,6 +88,31 @@ export interface VehiclePart {
   price: number | null;
   /** The Task it is usually bought for; its parts are suggested first when that Task is ticked. */
   taskId: string | null;
+  /** To buy (wanted or planned, or to be bought again) rather than Bought. */
+  toBuy: boolean;
+  /** Shop, link, comparison. */
+  notes: string | null;
+}
+
+/** One occasion on which the owner bought a Vehicle Part; together they are the part's purchase log. */
+export interface Purchase {
+  id: string;
+  partId: string;
+  vehicleId: string;
+  date: IsoDate;
+  /** In the part's unit. */
+  quantity: number;
+  /** For the goods only, as on the receipt; never includes delivery fees. */
+  totalPaid: number;
+  shop: string | null;
+  /** Apart from totalPaid. */
+  deliveryFees: number | null;
+  notes: string | null;
+}
+
+/** What a unit cost in a Purchase: Total paid over the quantity. Worked out, never stored. */
+export function purchaseUnitPrice(p: Pick<Purchase, 'quantity' | 'totalPaid'>): number {
+  return p.totalPaid / p.quantity;
 }
 
 export interface Service {
@@ -141,6 +166,8 @@ export interface Snapshot {
   readings: OdometerReading[];
   specLines: SpecLine[];
   vehicleParts: VehiclePart[];
+  /** The purchase log of every part. */
+  purchases: Purchase[];
   /** Document details only; the files are fetched on demand. */
   documents: GarageDocument[];
   /** The owner's changes to the parts catalogue; see catalogueOf. */

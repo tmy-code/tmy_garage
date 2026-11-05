@@ -629,6 +629,51 @@ const MIGRATIONS: (string | ((db: DatabaseSync) => void))[] = [
   -- The manufacturer's (OEM) reference of a spec line, kept apart from its value.
   ALTER TABLE spec_lines ADD COLUMN oem TEXT;
 `,
+  `
+  -- A part is either to buy (wanted or planned, or to be bought again) or bought. The parts that exist already were
+  -- bought, so they start as 0. Notes hold the shop, a link, a comparison.
+  ALTER TABLE vehicle_parts ADD COLUMN to_buy INTEGER NOT NULL DEFAULT 0 CHECK (to_buy IN (0, 1));
+  ALTER TABLE vehicle_parts ADD COLUMN notes TEXT;
+
+  -- The purchase log of a part: what the owner paid, kept so spending can be analysed outside the app. total_paid is
+  -- for the goods only, as on the receipt; delivery fees are apart. vehicle_id is the part's, kept for scoping and export.
+  CREATE TABLE purchases (
+    id TEXT PRIMARY KEY,
+    part_id TEXT NOT NULL REFERENCES vehicle_parts(id) ON DELETE CASCADE,
+    vehicle_id TEXT NOT NULL REFERENCES vehicles(id),
+    date TEXT NOT NULL,
+    quantity REAL NOT NULL,
+    total_paid REAL NOT NULL,
+    shop TEXT,
+    delivery_fees REAL,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX purchases_part ON purchases (part_id);
+  CREATE INDEX purchases_vehicle ON purchases (vehicle_id);
+
+  -- A purchase's receipt is a Document, so documents may now belong to a purchase.
+  CREATE TABLE documents_new (
+    id TEXT PRIMARY KEY,
+    garage_id TEXT NOT NULL REFERENCES garages(id),
+    vehicle_id TEXT REFERENCES vehicles(id),
+    owner_kind TEXT NOT NULL CHECK (owner_kind IN ('vehicle', 'service', 'modification', 'inspection', 'policy', 'cover', 'claim', 'purchase')),
+    owner_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    title TEXT,
+    issue_date TEXT,
+    expiry_date TEXT,
+    file_name TEXT NOT NULL,
+    content_type TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  INSERT INTO documents_new SELECT id, garage_id, vehicle_id, owner_kind, owner_id, type, title, issue_date, expiry_date,
+                                   file_name, content_type, size, created_at FROM documents;
+  DROP TABLE documents;
+  ALTER TABLE documents_new RENAME TO documents;
+  CREATE INDEX documents_owner ON documents (owner_kind, owner_id);
+`,
 ];
 
 /** Replaces what the owner changed on a template that was split by the same change on each of the new ones. */

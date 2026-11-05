@@ -68,6 +68,7 @@ function snapshot(vehicles: Vehicle[], tasks: MaintenanceTask[], readings: Odome
     readings,
     specLines: [],
     vehicleParts: [],
+    purchases: [],
     documents: [],
     catalogue: [],
   };

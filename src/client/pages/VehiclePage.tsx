@@ -207,7 +207,7 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
                 </a>
               </li>
               <li>
-                <a href={`#/vehicles/${vehicle.id}/parts`}>
+                <a href={`#/parts/vehicle/${vehicle.id}`}>
                   {t.workshop.partsListLink} <span className="muted">{t.workshop.count(partCount)}</span>
                 </a>
               </li>

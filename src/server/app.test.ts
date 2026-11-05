@@ -7,6 +7,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type {
   GarageDocument,
   MaintenanceTask,
+  Purchase,
   Snapshot,
   SpecLine,
   VehiclePart,
@@ -477,7 +478,7 @@ describe('spec lines and the plan templates', () => {
     expect((await call('PUT', '/api/services/svc-00010', body)).status).toBe(200);
     expect((await call('PUT', '/api/services/svc-00010', body)).status).toBe(200);
     const parts = (await snapshot()).vehicleParts;
-    expect(parts).toEqual([{ id: 'part-0000001', vehicleId: bike.id, name: 'Mann HU 7008 z', partNumber: 'HU 7008 z', unit: 'piece', quantity: 1, price: 9.9, taskId: task.id }]);
+    expect(parts).toEqual([{ id: 'part-0000001', vehicleId: bike.id, name: 'Mann HU 7008 z', partNumber: 'HU 7008 z', unit: 'piece', quantity: 1, price: 9.9, taskId: task.id, toBuy: false, notes: null }]);
     expect((await snapshot()).services[0]!.partsUsed[0]).toMatchObject({ partId: 'part-0000001', price: 9.9 });
     // The same part typed again in another Service links to the list instead of doubling it.
     await call('PUT', '/api/services/svc-00011', { ...body, id: 'svc-00011', partsUsed: [{ ...body.partsUsed[0], partId: 'part-0000002' }] });
@@ -486,6 +487,103 @@ describe('spec lines and the plan templates', () => {
     await call('DELETE', '/api/parts/part-0000001');
     const kept = (await snapshot()).services.find((x) => x.id === 'svc-00010')!.partsUsed[0]!;
     expect(kept).toMatchObject({ description: 'Mann HU 7008 z', partId: null, price: 9.9 });
+  });
+});
+
+describe('the Parts section: parts to buy and the purchase log', () => {
+  let uploads: string;
+  beforeEach(() => {
+    uploads = mkdtempSync(join(tmpdir(), 'garage-uploads-'));
+    app = createApp(db, undefined, { uploadsDir: uploads });
+  });
+  afterEach(() => rmSync(uploads, { recursive: true, force: true }));
+
+  async function createPart(vehicleId: string, body: object = {}): Promise<VehiclePart> {
+    const res = await call('POST', `/api/vehicles/${vehicleId}/parts`, { name: 'Motul 7100 10W-40', unit: 'litre', quantity: 5, ...body });
+    expect(res.status).toBe(201);
+    return res.json();
+  }
+
+  it('keeps a wished part To buy, with notes, until a Purchase is recorded; editing leaves the state alone unless it is sent', async () => {
+    const bike = await createVehicle();
+    const part = await createPart(bike.id, { toBuy: true, notes: 'See https://example.test/oil' });
+    expect(part).toMatchObject({ toBuy: true, notes: 'See https://example.test/oil' });
+    await call('PUT', `/api/parts/${part.id}`, { name: 'Motul 7100 10W-40', unit: 'litre', quantity: 5, notes: 'Cheaper elsewhere' });
+    expect((await snapshot()).vehicleParts[0]).toMatchObject({ toBuy: true, notes: 'Cheaper elsewhere' });
+    const res = await call('POST', `/api/parts/${part.id}/purchases`, { date: '2026-11-02', quantity: 5, totalPaid: 40 });
+    expect(res.status).toBe(201);
+    expect((await snapshot()).vehicleParts[0]!.toBuy).toBe(false);
+    // Buying it again: the owner sets it back to To buy by hand, and the next Purchase clears it.
+    await call('PUT', `/api/parts/${part.id}`, { name: 'Motul 7100 10W-40', unit: 'litre', quantity: 5, toBuy: true });
+    expect((await snapshot()).vehicleParts[0]!.toBuy).toBe(true);
+  });
+
+  it('records, corrects and deletes Purchases, with the delivery fees apart from the Total paid', async () => {
+    const bike = await createVehicle();
+    const part = await createPart(bike.id);
+    const purchase = (await (await call('POST', `/api/parts/${part.id}/purchases`, { date: '2026-11-02', quantity: 5, totalPaid: 40, shop: 'Exemple Moto', deliveryFees: 4.9 })).json()) as Purchase;
+    expect(purchase).toMatchObject({ partId: part.id, vehicleId: bike.id, quantity: 5, totalPaid: 40, shop: 'Exemple Moto', deliveryFees: 4.9, notes: null });
+    expect((await snapshot()).purchases).toEqual([purchase]);
+    await call('PUT', `/api/purchases/${purchase.id}`, { date: '2026-11-03', quantity: 4, totalPaid: 37.9 });
+    expect((await snapshot()).purchases[0]).toMatchObject({ date: '2026-11-03', quantity: 4, totalPaid: 37.9, shop: null, deliveryFees: null });
+    expect((await call('POST', `/api/parts/${part.id}/purchases`, { date: '2026-11-02', quantity: 0, totalPaid: 1 })).status).toBe(422);
+    expect((await call('POST', `/api/parts/${part.id}/purchases`, { date: '2026-11-02', quantity: 1, totalPaid: -1 })).status).toBe(422);
+    expect((await call('POST', '/api/parts/nope/purchases', { date: '2026-11-02', quantity: 1, totalPaid: 1 })).status).toBe(404);
+    expect((await call('DELETE', `/api/purchases/${purchase.id}`)).status).toBe(204);
+    expect((await snapshot()).purchases).toEqual([]);
+  });
+
+  it('removes the Purchases of a deleted part, and their receipts with them', async () => {
+    const bike = await createVehicle();
+    const part = await createPart(bike.id);
+    const purchase = (await (await call('POST', `/api/parts/${part.id}/purchases`, { date: '2026-11-02', quantity: 5, totalPaid: 40 })).json()) as Purchase;
+    const form = new FormData();
+    form.set('file', new File(['%PDF-1.4 test'], 'receipt.pdf', { type: 'application/pdf' }));
+    form.set('ownerKind', 'purchase');
+    form.set('ownerId', purchase.id);
+    form.set('type', 'invoice');
+    expect((await app.request('/api/documents', { method: 'POST', body: form })).status).toBe(201);
+    expect((await snapshot()).documents).toHaveLength(1);
+    expect(readdirSync(uploads)).toHaveLength(1);
+    expect((await call('DELETE', `/api/parts/${part.id}`)).status).toBe(204);
+    expect((await snapshot()).purchases).toEqual([]);
+    expect((await snapshot()).documents).toEqual([]);
+    expect(readdirSync(uploads)).toHaveLength(0);
+  });
+
+  it('marks a To buy part Bought when a Service uses it, without inventing a Purchase', async () => {
+    const bike = await createVehicle();
+    const task = await createTask(bike.id);
+    const part = await createPart(bike.id, { toBuy: true });
+    const body = {
+      id: 'svc-00020',
+      vehicleId: bike.id,
+      date: '2026-11-04',
+      odometer: 18500,
+      taskIds: [task.id],
+      partsUsed: [{ description: part.name, quantity: 5, unit: 'litre', partId: part.id }],
+    };
+    expect((await call('PUT', '/api/services/svc-00020', body)).status).toBe(200);
+    const after = await snapshot();
+    expect(after.vehicleParts[0]!.toBuy).toBe(false);
+    expect(after.purchases).toEqual([]);
+  });
+
+  it('exports every Purchase as a CSV file with the price per unit worked out', async () => {
+    const bike = await createVehicle('Test bike');
+    const part = await createPart(bike.id, { name: 'Oil, "special"', partNumber: 'REF-1' });
+    await call('POST', `/api/parts/${part.id}/purchases`, { date: '2026-11-02', quantity: 5, totalPaid: 40, shop: 'Exemple Moto', deliveryFees: 4.9 });
+    const res = await call('GET', '/api/purchases.csv');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/csv');
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    // The byte order mark lets Excel read accents correctly.
+    expect([...bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    expect(new TextDecoder().decode(bytes.slice(3)).split('\r\n')).toEqual([
+      'vehicle,part,part_number,unit,date,quantity,total_paid,price_per_unit,delivery_fees,shop,notes',
+      'Test bike,"Oil, ""special""",REF-1,litre,2026-11-02,5,40,8,4.9,Exemple Moto,',
+      '',
+    ]);
   });
 });
 
@@ -884,6 +982,24 @@ describe('migrations', () => {
     expect(tasks.find((t) => t.id === 't-own')).toMatchObject({ name: 'Wash', switched_off: 0, category: null });
     expect(migrated.prepare('SELECT description, quantity FROM service_items').all()).toEqual([{ description: 'Motul 7100 (Shop)', quantity: 3 }]);
     expect(migrated.prepare('SELECT total_cost FROM services').get()).toEqual({ total_cost: 40 });
+    migrated.close();
+  });
+
+  it('keeps the parts and receipts already there when purchases arrive: the parts stay Bought, with an empty log', () => {
+    const path = join(dir, 'garage.sqlite');
+    const old = openDatabase(path, undefined, 35);
+    old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v1', 'default', 'motorcycle', 'Old bike')`);
+    old.exec(`INSERT INTO vehicle_parts (id, vehicle_id, name, unit, quantity, price) VALUES ('p1', 'v1', 'Motul 7100 10W-40', 'litre', 5, 8)`);
+    old.exec(`INSERT INTO documents (id, garage_id, vehicle_id, owner_kind, owner_id, type, file_name, content_type, size)
+              VALUES ('d1', 'default', 'v1', 'vehicle', 'v1', 'manual', 'manual.pdf', 'application/pdf', 10)`);
+    old.close();
+    const migrated = openDatabase(path);
+    expect(migrated.prepare('SELECT id, name, to_buy, notes FROM vehicle_parts').all()).toEqual([{ id: 'p1', name: 'Motul 7100 10W-40', to_buy: 0, notes: null }]);
+    expect(migrated.prepare('SELECT count(*) AS n FROM purchases').get()).toEqual({ n: 0 });
+    expect(migrated.prepare('SELECT id, owner_kind FROM documents').all()).toEqual([{ id: 'd1', owner_kind: 'vehicle' }]);
+    // Documents may now belong to a purchase.
+    migrated.exec(`INSERT INTO documents (id, garage_id, vehicle_id, owner_kind, owner_id, type, file_name, content_type, size)
+                   VALUES ('d2', 'default', 'v1', 'purchase', 'x', 'invoice', 'r.pdf', 'application/pdf', 10)`);
     migrated.close();
   });
 

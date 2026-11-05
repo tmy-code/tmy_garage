@@ -226,6 +226,7 @@ describe('vehicleDue', () => {
       readings: [{ id: 'r1', vehicleId: 'bike', date: '2026-10-01', odometer: 21_500 }],
       specLines: [],
       vehicleParts: [],
+      purchases: [],
       documents: [],
       catalogue: [],
     };
@@ -246,6 +247,7 @@ describe('vehicleDue', () => {
       readings: [],
       specLines: [],
       vehicleParts: [],
+      purchases: [],
       documents: [],
       catalogue: [],
     };
