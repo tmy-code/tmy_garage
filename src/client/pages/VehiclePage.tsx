@@ -1,11 +1,11 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useMemo, useState, type FormEvent } from 'react';
 import { todayIso } from '../../shared/dates.ts';
 import { vehicleDue, type DueInfo } from '../../shared/due.ts';
 import { groupByCategory } from '../../shared/workshop.ts';
 import type { PerformedBy } from '../../shared/schemas.ts';
 import type { MaintenanceTask, PartUsed, Snapshot, Vehicle } from '../../shared/types.ts';
-import { Layout, StatusChip } from '../components.tsx';
-import { describeDue, describeInterval, formatDate, formatKm, formatMoney, taskName } from '../format.ts';
+import { Field, FormError, Layout, StatusChip } from '../components.tsx';
+import { describeDue, describeInterval, formatDate, formatKm, formatMoney, parseNumber, taskName } from '../format.ts';
 import { useT } from '../i18n.ts';
 import { makeAsName, VehicleIcon } from '../brands.tsx';
 import { Icon } from '../icons.tsx';
@@ -62,15 +62,122 @@ function TaskList({ due, tasks, owned }: { due: DueInfo[]; tasks: Map<string, Ma
   );
 }
 
+/**
+ * Tasks never done have no due date and no reminder. They are gathered in one block, each with a quick way to say when
+ * it was last done, instead of a wall of identical "no record" rows among the tasks that are tracked.
+ */
+function SetupTasks({ due, tasks, today, open }: { due: DueInfo[]; tasks: Map<string, MaintenanceTask>; today: string; open: boolean }) {
+  const t = useT();
+  const [editing, setEditing] = useState<string | null>(null);
+  return (
+    <details className="setup" open={open}>
+      <summary>{t.vehicle.setupTitle(due.length)}</summary>
+      <p className="muted">{t.vehicle.setupHint}</p>
+      {groupByCategory(due, tasks).groups.map((g) => (
+        <Fragment key={g.category}>
+          <h3 className="due-group">{t.workshop.partCategories[g.category]}</h3>
+          <ul className="list">
+            {g.due.map((d) => (
+              <SetupRow key={d.taskId} task={tasks.get(d.taskId)!} today={today} editing={editing === d.taskId} onEdit={(on) => setEditing(on ? d.taskId : null)} />
+            ))}
+          </ul>
+        </Fragment>
+      ))}
+    </details>
+  );
+}
+
+function SetupRow({ task, today, editing, onEdit }: { task: MaintenanceTask; today: string; editing: boolean; onEdit: (on: boolean) => void }) {
+  const t = useT();
+  const { reachable } = useStore();
+  const [date, setDate] = useState('');
+  const [km, setKm] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    const odometer = km.trim() === '' ? null : parseNumber(km);
+    if (date === '' || date > today || (odometer !== null && (Number.isNaN(odometer) || odometer < 0 || !Number.isInteger(odometer)))) {
+      setError(t.vehicle.setupError);
+      return;
+    }
+    setError(null);
+    setBusy(true);
+    try {
+      // The task keeps everything it had; only its starting point is set. Once saved it leaves this block.
+      await online('PUT', `/api/tasks/${task.id}`, {
+        name: task.name,
+        nameFr: task.nameFr,
+        intervalKm: task.intervalKm,
+        intervalMonths: task.intervalMonths,
+        baselineDate: date,
+        baselineOdometer: odometer,
+        category: task.category,
+        notes: task.notes,
+        switchedOff: task.switchedOff,
+        action: task.action,
+      });
+      showToast(t.feedback.saved);
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <li>
+      <div className="history-row">
+        <div className="section-head">
+          <a href={`#/tasks/${task.id}`}>
+            <strong>{taskName(task, t)}</strong>
+          </a>
+          {!editing ? (
+            <button type="button" className="button button-small" onClick={() => onEdit(true)}>
+              {t.vehicle.setLastDone}
+            </button>
+          ) : null}
+        </div>
+        <span className="muted">{describeInterval(task, t)}</span>
+        {editing ? (
+          <form className="form" onSubmit={save} noValidate>
+            <div className="row">
+              <Field label={t.vehicle.setupDate}>
+                <input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} autoFocus />
+              </Field>
+              {task.intervalKm !== null ? (
+                <Field label={t.vehicle.setupKm} hint={t.vehicle.setupKmHint}>
+                  <input inputMode="numeric" value={km} onChange={(e) => setKm(e.target.value)} />
+                </Field>
+              ) : null}
+            </div>
+            <FormError error={error} />
+            <div className="actions">
+              <button type="submit" className="button button-primary button-small" disabled={busy || !reachable}>
+                {t.workshop.save}
+              </button>
+              <button type="button" className="button button-small" onClick={() => onEdit(false)}>
+                {t.workshop.cancel}
+              </button>
+            </div>
+          </form>
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
 export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: Snapshot }) {
   const t = useT();
   const { outbox } = useStore();
   const today = todayIso();
   const { usage, due } = useMemo(() => vehicleDue(snapshot, vehicle.id, today), [snapshot, vehicle.id, today]);
   const tasks = new Map(snapshot.tasks.filter((task) => task.vehicleId === vehicle.id).map((task) => [task.id, task]));
-  const groups = groupByCategory(due, tasks);
-  const pending = new Set(outbox.map((op) => op.data.id));
+  // Never-done tasks of an owned Vehicle have no due date: they get their own block, the rest stay under their categories.
   const owned = vehicle.status === 'owned';
+  const noRecord = owned ? due.filter((d) => d.status === 'unknown') : [];
+  const groups = groupByCategory(owned ? due.filter((d) => d.status !== 'unknown') : due, tasks);
+  const pending = new Set(outbox.map((op) => op.data.id));
   const specCount = snapshot.specLines.filter((s) => s.vehicleId === vehicle.id).length;
   const partCount = snapshot.vehicleParts.filter((p) => p.vehicleId === vehicle.id).length;
   const [allHistory, setAllHistory] = useState(false);
@@ -180,6 +287,7 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
               </div>
             ) : (
               <>
+                {noRecord.length > 0 ? <SetupTasks due={noRecord} tasks={tasks} today={today} open={groups.groups.length === 0} /> : null}
                 {groups.groups.map((g) => (
                   <Fragment key={g.category}>
                     <h3 className="due-group">{t.workshop.partCategories[g.category]}</h3>

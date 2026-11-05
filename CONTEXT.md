@@ -60,8 +60,8 @@ A Service outside the plan: a title and a Category instead of Tasks (a Task can 
 _Avoid_: Fix, breakdown
 
 **Component Used**:
-A line of a Service naming what went in, with brand and variant ("Motul 7100 10W-40"), a part number, a quantity in pieces or litres and the price paid per unit. It is a copy: the Service keeps it as logged, even if the Vehicle Part it was picked from changes.
-_Avoid_: Part Used, Part Spec
+A line of a Service naming what went in, with brand and variant ("Motul 7100 10W-40"), a part number, a quantity in pieces or litres and the price paid per unit. It is a copy: the Service keeps it as logged, even if the Vehicle Part it was picked from changes. On screen it is an **item** too (articles utilisés), the same word as the Vehicle Part it is usually picked from.
+_Avoid_: Part Used, Part Spec, Element
 
 **Vehicle Part**:
 A part or fluid bought, or to be bought, for one Vehicle ("Motul 7100 10W-40", "Mann HU 7008 z"), with its part number, unit, usual quantity and price per unit, and optionally the Task it is bought for and the Spec Line it is for. It is either To buy or Bought. The owner picks from the Vehicle's parts when logging a Service. Not the same as a Spec Line, which is the factory figure: the item only points at it, so the figure is shown next to what was bought.

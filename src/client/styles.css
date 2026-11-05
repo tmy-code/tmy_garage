@@ -824,10 +824,46 @@ textarea {
   font-weight: 600;
 }
 
+/* The chosen option is outlined and tinted, not filled: the filled accent colour belongs to the button that saves. */
 .segmented button.on {
   border-color: var(--accent);
-  background: var(--accent);
-  color: var(--accent-text);
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.segmented button.on::before {
+  content: '✓ ';
+  color: var(--accent);
+}
+
+/* Never-done tasks, gathered in one block above the tracked ones. */
+.setup {
+  margin: 0 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 4px 14px;
+  background: var(--surface);
+}
+
+.setup > summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 10px 0;
+}
+
+.setup .list li {
+  margin-bottom: 8px;
+}
+
+.setup .section-head a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.setup .section-head .button {
+  flex: none;
+  white-space: nowrap;
 }
 
 .banner {

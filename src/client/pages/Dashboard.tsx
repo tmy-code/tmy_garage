@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { daysBetween, todayIso } from '../../shared/dates.ts';
-import { usageOf } from '../../shared/due.ts';
+import { usageOf, vehicleDue } from '../../shared/due.ts';
 import type { Snapshot, Vehicle } from '../../shared/types.ts';
 import { upcoming, type Upcoming } from '../../shared/upcoming.ts';
 import { FormError, LanguageSwitch, Layout, NeedsConnection } from '../components.tsx';
@@ -132,6 +132,11 @@ function VehicleCard({ vehicle, items, snapshot, today }: { vehicle: Vehicle; it
   const usage = useMemo(() => usageOf(snapshot, vehicle.id), [snapshot, vehicle.id]);
   const reading = items.find((i) => i.kind === 'reading');
   const due = items.filter((i) => i.kind !== 'reading');
+  // Tasks never done have no due date, so "nothing due" would be a guess: say how many cannot be reminded yet.
+  const noHistory = useMemo(
+    () => (vehicle.status === 'owned' ? vehicleDue(snapshot, vehicle.id, today).due.filter((d) => d.status === 'unknown').length : 0),
+    [snapshot, vehicle.id, vehicle.status, today],
+  );
 
   return (
     <section className="card vehicle-card">
@@ -151,7 +156,15 @@ function VehicleCard({ vehicle, items, snapshot, today }: { vehicle: Vehicle; it
           <SoldNote vehicle={vehicle} />
         </p>
       ) : due.length === 0 ? (
-        <p className="muted">{t.dashboard.allClear}</p>
+        noHistory > 0 ? (
+          <p>
+            <a className="nudge" href={`#/vehicles/${vehicle.id}`}>
+              {t.dashboard.noHistoryOnly(noHistory)}
+            </a>
+          </p>
+        ) : (
+          <p className="muted">{t.dashboard.allClear}</p>
+        )
       ) : null}
       {GROUPS.map((status) => {
         const group = due.filter((i) => i.status === status);
@@ -169,6 +182,13 @@ function VehicleCard({ vehicle, items, snapshot, today }: { vehicle: Vehicle; it
           </div>
         );
       })}
+      {due.length > 0 && noHistory > 0 ? (
+        <p>
+          <a className="muted" href={`#/vehicles/${vehicle.id}`}>
+            {t.dashboard.noHistory(noHistory)}
+          </a>
+        </p>
+      ) : null}
     </section>
   );
 }
