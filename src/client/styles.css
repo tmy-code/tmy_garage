@@ -375,6 +375,10 @@ section {
   text-decoration: none;
 }
 
+.vehicle-card .card-action {
+  margin: 8px 0 0;
+}
+
 .vehicle-card .nudge {
   display: block;
 }
@@ -1336,4 +1340,22 @@ body > .banner {
 }
 .spec-oem {
   display: block;
+}
+
+.quick-reading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+
+.quick-reading input {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+
+.quick-reading .field-error {
+  flex-basis: 100%;
+  margin: 0;
 }

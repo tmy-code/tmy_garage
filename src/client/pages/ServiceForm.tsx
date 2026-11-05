@@ -468,7 +468,7 @@ function listedLabel(p: VehiclePart, t: Messages, snapshot: Snapshot): string {
 }
 
 /** Says a Service or Odometer Reading was saved; a new one can be taken back for a few seconds. */
-function toastCreated(op: OutboxOp, text: string, t: Messages, created: boolean) {
+export function toastCreated(op: OutboxOp, text: string, t: Messages, created: boolean) {
   showToast(
     text,
     created

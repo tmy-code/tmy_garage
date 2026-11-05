@@ -1,15 +1,17 @@
-import { useMemo } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { daysBetween, todayIso } from '../../shared/dates.ts';
 import { usageOf, vehicleDue } from '../../shared/due.ts';
 import type { Snapshot, Vehicle } from '../../shared/types.ts';
 import { upcoming, type Upcoming } from '../../shared/upcoming.ts';
 import { FormError, LanguageSwitch, Layout, NeedsConnection } from '../components.tsx';
-import { formatDate, formatKm, taskName } from '../format.ts';
+import { formatDate, formatKm, parseNumber, taskName } from '../format.ts';
 import { useT, type Messages } from '../i18n.ts';
 import { VehicleIcon } from '../brands.tsx';
 import { Icon } from '../icons.tsx';
-import { online } from '../store.ts';
+import { newId } from '../api.ts';
+import { enqueue, online } from '../store.ts';
 import { useSubmit } from './SetupForms.tsx';
+import { toastCreated } from './ServiceForm.tsx';
 
 const GROUPS = ['overdue', 'dueSoon', 'ok'] as const;
 
@@ -146,6 +148,9 @@ function VehicleCard({ vehicle, items, snapshot, today }: { vehicle: Vehicle; it
         </h2>
         {usage.latest ? <span className="muted">{formatKm(usage.latest.odometer)}</span> : null}
       </a>
+      {vehicle.status === 'owned' ? (
+        <QuickReading vehicle={vehicle} latest={usage.latest?.odometer ?? null} today={today} />
+      ) : null}
       {reading ? (
         <a className="nudge" href={`#/vehicles/${vehicle.id}/reading`}>
           {reading.daysSince === null ? t.dashboard.noReading : t.dashboard.staleReading(reading.daysSince)}
@@ -232,5 +237,63 @@ function UpcomingLine({ item, vehicle, snapshot, today }: { item: Upcoming; vehi
       <span>{name}</span>
       <span className="muted">{text}</span>
     </a>
+  );
+}
+
+/** One tap to log an Odometer Reading for today, right on the card: a button that opens a single-field form. */
+function QuickReading({ vehicle, latest, today }: { vehicle: Vehicle; latest: number | null; today: string }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  if (!open) {
+    return (
+      <p className="card-action">
+        <button type="button" className="button button-small" onClick={() => setOpen(true)}>
+          {t.vehicle.odometerReading}
+        </button>
+      </p>
+    );
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const odometer = parseNumber(text);
+    if (odometer === null || Number.isNaN(odometer) || odometer < 0 || !Number.isInteger(odometer)) {
+      setError(t.service.errorOdometer);
+      return;
+    }
+    const op = { kind: 'reading' as const, data: { id: newId(), vehicleId: vehicle.id, date: today, odometer } };
+    await enqueue(op);
+    toastCreated(op, t.feedback.readingSaved, t, true);
+    setOpen(false);
+    setText('');
+    setError(null);
+  }
+
+  return (
+    <form className="quick-reading" onSubmit={submit} noValidate>
+      <input
+        inputMode="numeric"
+        autoComplete="off"
+        autoFocus
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value);
+          setError(null);
+        }}
+        placeholder={latest !== null ? formatKm(latest) : t.service.example}
+        aria-label={t.vehicle.odometerReading}
+        aria-invalid={error ? true : undefined}
+      />
+      <button type="submit" className="button button-primary button-small">
+        {t.feedback.save}
+      </button>
+      <button type="button" className="button button-small" onClick={() => setOpen(false)}>
+        {t.feedback.cancel}
+      </button>
+      {error ? <p className="field-error">{error}</p> : null}
+    </form>
   );
 }
