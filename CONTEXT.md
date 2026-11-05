@@ -64,7 +64,7 @@ A line of a Service naming what went in, with brand and variant ("Motul 7100 10W
 _Avoid_: Part Used, Part Spec
 
 **Vehicle Part**:
-A part or fluid bought, or to be bought, for one Vehicle ("Motul 7100 10W-40", "Mann HU 7008 z"), with its part number, unit, usual quantity and price per unit, and optionally the Task it is bought for. It is either To buy or Bought. The owner picks from the Vehicle's parts when logging a Service. Not the same as a Spec Line, which is the factory figure.
+A part or fluid bought, or to be bought, for one Vehicle ("Motul 7100 10W-40", "Mann HU 7008 z"), with its part number, unit, usual quantity and price per unit, and optionally the Task it is bought for and the Spec Line it is for. It is either To buy or Bought. The owner picks from the Vehicle's parts when logging a Service. Not the same as a Spec Line, which is the factory figure: the item only points at it, so the figure is shown next to what was bought.
 On screen the app calls it an **item** (article in French), so the word covers fluids as well as parts; "Vehicle Part" stays the term in the code and in these docs.
 _Avoid_: Catalogue (that word is for the Plan Templates), stock, inventory, wishlist, shopping list
 

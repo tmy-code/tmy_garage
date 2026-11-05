@@ -314,6 +314,24 @@ section {
   margin-bottom: 16px;
 }
 
+/* A section's heading with its action button right next to it (not pushed to the far edge). Use this, not .section-head,
+   for "+ Add" style buttons; .section-head is for a row's name with a control at the end of that row. */
+.heading-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.heading-row h2 {
+  margin: 0;
+  min-width: 0;
+}
+
+.heading-row .button {
+  flex: none;
+}
+
 .section-head {
   display: flex;
   justify-content: space-between;

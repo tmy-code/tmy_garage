@@ -17,6 +17,12 @@ type StateFilter = 'all' | 'toBuy' | 'bought';
 
 const unitName = (unit: PartUnit, t: ReturnType<typeof useT>) => (unit === 'litre' ? t.workshop.litre : t.workshop.piece).toLowerCase();
 
+/** "Engine oil: 10W-40, 3.2 L" (just the label while its value is still to fill in). */
+function specText(snapshot: Snapshot, specLineId: string | null): string | null {
+  const line = snapshot.specLines.find((l) => l.id === specLineId);
+  return line ? (line.value ? `${line.label}: ${line.value}` : line.label) : null;
+}
+
 function purchasesOf(snapshot: Snapshot, partId: string): Purchase[] {
   return snapshot.purchases.filter((p) => p.partId === partId).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }
@@ -70,8 +76,9 @@ export function PartsPage({ snapshot, vehicleId }: { snapshot: Snapshot; vehicle
                 {vehicleFilter === '' ? <span className="muted">{vehicles.get(part.vehicleId)?.name}</span> : null}
                 <span className="muted">
                   {t.workshop.usualQuantity}: {part.quantity} {unitName(part.unit, t)}
-                  {part.price !== null ? ` · ${formatMoney(part.price, t)} / ${unitName(part.unit, t)}` : ''}
+                  {part.price !== null ? ` · ${formatMoney(part.price, t)} / ${t.parts.unitSingular[part.unit]}` : ''}
                 </span>
+                {specText(snapshot, part.specLineId) ? <span className="muted">{t.parts.specShown(specText(snapshot, part.specLineId)!)}</span> : null}
                 {log.length > 0 ? (
                   <span className="muted">
                     {t.parts.lastBought(formatDate(log[0]!.date, t))} · {t.parts.count(log.length)}
@@ -105,10 +112,12 @@ export function VehiclePartForm({ snapshot, existing, vehicleId }: { snapshot: S
   const [quantity, setQuantity] = useState(String(existing?.quantity ?? 1));
   const [price, setPrice] = useState(existing?.price != null ? String(existing.price) : '');
   const [taskId, setTaskId] = useState(existing?.taskId ?? '');
+  const [specLineId, setSpecLineId] = useState(existing?.specLineId ?? '');
   const [toBuy, setToBuy] = useState(existing?.toBuy ?? true);
   const [notes, setNotes] = useState(existing?.notes ?? '');
   const { error, setError, busy, disabled, run } = useSubmit();
   const tasks = snapshot.tasks.filter((task) => task.vehicleId === vehicle);
+  const specLines = snapshot.specLines.filter((l) => l.vehicleId === vehicle).sort((a, b) => a.label.localeCompare(b.label));
   const owner: Vehicle | undefined = snapshot.vehicles.find((v) => v.id === vehicle);
 
   function submit(event: FormEvent) {
@@ -119,7 +128,7 @@ export function VehiclePartForm({ snapshot, existing, vehicleId }: { snapshot: S
       setError(t.workshop.partError);
       return;
     }
-    const body = { name, partNumber, unit, quantity: qty, price: unitPrice, taskId: taskId || null, toBuy, notes };
+    const body = { name, partNumber, unit, quantity: qty, price: unitPrice, taskId: taskId || null, specLineId: specLineId || null, toBuy, notes };
     void run(async () => {
       if (existing) {
         await online('PUT', `/api/parts/${existing.id}`, body);
@@ -150,6 +159,7 @@ export function VehiclePartForm({ snapshot, existing, vehicleId }: { snapshot: S
             onChange={(e) => {
               setVehicle(e.target.value);
               setTaskId('');
+              setSpecLineId('');
             }}
           >
             {(existing ? snapshot.vehicles : owned).map((v) => (
@@ -189,6 +199,16 @@ export function VehiclePartForm({ snapshot, existing, vehicleId }: { snapshot: S
             ))}
           </select>
         </Field>
+        <Field label={t.parts.forSpec} hint={t.parts.forSpecHint}>
+          <select value={specLineId} onChange={(e) => setSpecLineId(e.target.value)}>
+            <option value="">{t.parts.noSpec}</option>
+            {specLines.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.value ? `${l.label}: ${l.value}` : l.label}
+              </option>
+            ))}
+          </select>
+        </Field>
         <Field label={t.parts.notes} hint={t.parts.notesHint}>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} />
         </Field>
@@ -218,7 +238,7 @@ function PurchaseLog({ snapshot, part }: { snapshot: Snapshot; part: VehiclePart
   const unit = unitName(part.unit, t);
   return (
     <section>
-      <div className="section-head">
+      <div className="heading-row">
         <h2>{t.parts.purchaseLog}</h2>
         {editing !== 'new' ? (
           <button type="button" className="button button-small" onClick={() => setEditing('new')}>

@@ -674,6 +674,10 @@ const MIGRATIONS: (string | ((db: DatabaseSync) => void))[] = [
   ALTER TABLE documents_new RENAME TO documents;
   CREATE INDEX documents_owner ON documents (owner_kind, owner_id);
 `,
+  `
+  -- The Spec Line an item is for (the factory figure it should match). Loose: emptied if the Spec Line is deleted.
+  ALTER TABLE vehicle_parts ADD COLUMN spec_line_id TEXT REFERENCES spec_lines(id) ON DELETE SET NULL;
+`,
 ];
 
 /** Replaces what the owner changed on a template that was split by the same change on each of the new ones. */

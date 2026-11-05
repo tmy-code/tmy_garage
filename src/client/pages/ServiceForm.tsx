@@ -380,7 +380,7 @@ export function ServiceForm({
                       <optgroup label={t.workshop.pickPartForTasks}>
                         {forTasks.map((p) => (
                           <option key={p.id} value={p.id}>
-                            {listedLabel(p, t)}
+                            {listedLabel(p, t, snapshot)}
                           </option>
                         ))}
                       </optgroup>
@@ -389,7 +389,7 @@ export function ServiceForm({
                       <optgroup label={forTasks.length > 0 ? t.workshop.pickPartOthers : t.workshop.partsListLink}>
                         {others.map((p) => (
                           <option key={p.id} value={p.id}>
-                            {listedLabel(p, t)}
+                            {listedLabel(p, t, snapshot)}
                           </option>
                         ))}
                       </optgroup>
@@ -398,7 +398,7 @@ export function ServiceForm({
                       <optgroup label={t.workshop.pickPartToBuy}>
                         {stillToBuy.map((p) => (
                           <option key={p.id} value={p.id}>
-                            {listedLabel(p, t)}
+                            {listedLabel(p, t, snapshot)}
                           </option>
                         ))}
                       </optgroup>
@@ -435,10 +435,11 @@ export function ServiceForm({
   );
 }
 
-/** "Motul 7100 10W-40 · 3.2 L" in the picker. */
-function listedLabel(p: VehiclePart, t: Messages): string {
+/** "Motul 7100 10W-40 · 3.2 L · spec 10W-40, 3.2 L" in the picker: the factory spec it is for is shown to compare. */
+function listedLabel(p: VehiclePart, t: Messages, snapshot: Snapshot): string {
   const unit = p.unit === 'litre' ? t.workshop.litre : t.workshop.piece;
-  return `${p.name} · ${p.quantity} ${unit.toLowerCase()}${p.price !== null ? ` · ${formatMoney(p.price, t)}` : ''}`;
+  const spec = snapshot.specLines.find((l) => l.id === p.specLineId);
+  return `${p.name} · ${p.quantity} ${unit.toLowerCase()}${p.price !== null ? ` · ${formatMoney(p.price, t)}` : ''}${spec?.value ? ` · ${t.parts.specShown(spec.value)}` : ''}`;
 }
 
 /** Says a Service or Odometer Reading was saved; a new one can be taken back for a few seconds. */

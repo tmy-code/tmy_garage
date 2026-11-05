@@ -233,6 +233,8 @@ export const vehiclePartInput = z.object({
   quantity,
   price: unitPrice,
   taskId: z.string().min(1).nullish().transform((v) => v ?? null),
+  /** The Spec Line (of the same Vehicle) it is for. Left out when editing, the link is kept; null removes it. */
+  specLineId: z.string().min(1).nullish(),
   /** Left out when editing, the part keeps its state; a new part is Bought unless this says otherwise. */
   toBuy: z.boolean().optional(),
   notes: optionalText(2000),

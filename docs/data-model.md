@@ -203,6 +203,7 @@ erDiagram
   vehicle_parts |o--o{ service_items : picked_into
   maintenance_tasks |o--o{ vehicle_parts : bought_for
   vehicle_parts ||--o{ purchases : bought
+  spec_lines |o--o{ vehicle_parts : item_for
   services ||--o{ documents : receipt
   purchases ||--o{ documents : receipt
 ```
@@ -248,7 +249,7 @@ The components used in a Service. The key is `service_id` and `sort`.
 
 ### `vehicle_parts`
 
-The parts and fluids bought for one Vehicle: the **parts list**. When logging a Service, the owner picks from it instead of typing, and the form fills in the description, part number, unit, usual quantity and price. It is the list of what is actually bought ("Motul 7100 10W-40"), unlike a Spec Line, which is the factory reference ("Engine oil: 10W-40, 3.2 L"); the two are not linked.
+The parts and fluids bought for one Vehicle: the **parts list**. When logging a Service, the owner picks from it instead of typing, and the form fills in the description, part number, unit, usual quantity and price. It is the list of what is actually bought ("Motul 7100 10W-40"), unlike a Spec Line, which is the factory reference ("Engine oil: 10W-40, 3.2 L"). An item can optionally say which Spec Line it is for (`spec_line_id`), so the factory figure is shown next to it; nothing is copied or kept in sync.
 
 | Column | Meaning |
 | --- | --- |
@@ -259,6 +260,7 @@ The parts and fluids bought for one Vehicle: the **parts list**. When logging a 
 | `quantity` | Required. How much a Service usually uses (3.2 litres of oil, 1 filter). |
 | `price` | Per piece or per litre; empty when unknown. Changed by hand only: a Service never changes it. |
 | `task_id` | → `maintenance_tasks`, the Task it is usually bought for. When that Task is ticked in the Service form, its parts are listed first. Emptied if the Task is deleted; moves to the kept Task when two Tasks are merged. |
+| `spec_line_id` | → `spec_lines`, the factory Spec Line (of the same Vehicle, else refused with 422) the item is for. Shown as "Spec: 10W-40, 3.2 L" on the Parts section and in the Service form picker; nothing is copied from it. Loose: emptied if the Spec Line is deleted. Left out when editing keeps it; null removes it. |
 | `to_buy` | Required, yes/no. The part is **To buy** (wanted or planned, or to be bought again); otherwise it is **Bought**. Parts that existed before Purchases were introduced are 0, so they are Bought with an empty log. Recording a Purchase, or using the part in a Service, sets it to 0; the owner sets it to 1 by hand to buy again. |
 | `notes` | Free text: the shop, a link, a comparison. Links are tappable. |
 
@@ -370,7 +372,7 @@ Foreign keys stop anything from being deleted while other rows still need it, ex
 | Vehicle | Not possible. It can be sold or hidden instead. |
 | Maintenance Task | Refused if a Service used it. Otherwise it goes. |
 | Service | Its Task links, components and Documents go too. |
-| Spec Line | Goes. |
+| Spec Line | Goes. The items that were for it keep everything and lose only the link. |
 | Vehicle Part | Goes, with its Purchases and their receipts. The components of past Services keep their copy and lose only the link. |
 | Purchase | Goes, with its receipts. The part stays as it is. |
 | A Plan Template of the owner's | Goes. Vehicles keep their Tasks. |

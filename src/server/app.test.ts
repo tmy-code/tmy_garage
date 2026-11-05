@@ -478,7 +478,7 @@ describe('spec lines and the plan templates', () => {
     expect((await call('PUT', '/api/services/svc-00010', body)).status).toBe(200);
     expect((await call('PUT', '/api/services/svc-00010', body)).status).toBe(200);
     const parts = (await snapshot()).vehicleParts;
-    expect(parts).toEqual([{ id: 'part-0000001', vehicleId: bike.id, name: 'Mann HU 7008 z', partNumber: 'HU 7008 z', unit: 'piece', quantity: 1, price: 9.9, taskId: task.id, toBuy: false, notes: null }]);
+    expect(parts).toEqual([{ id: 'part-0000001', vehicleId: bike.id, name: 'Mann HU 7008 z', partNumber: 'HU 7008 z', unit: 'piece', quantity: 1, price: 9.9, taskId: task.id, specLineId: null, toBuy: false, notes: null }]);
     expect((await snapshot()).services[0]!.partsUsed[0]).toMatchObject({ partId: 'part-0000001', price: 9.9 });
     // The same part typed again in another Service links to the list instead of doubling it.
     await call('PUT', '/api/services/svc-00011', { ...body, id: 'svc-00011', partsUsed: [{ ...body.partsUsed[0], partId: 'part-0000002' }] });
@@ -516,6 +516,26 @@ describe('the Parts section: parts to buy and the purchase log', () => {
     // Buying it again: the owner sets it back to To buy by hand, and the next Purchase clears it.
     await call('PUT', `/api/parts/${part.id}`, { name: 'Motul 7100 10W-40', unit: 'litre', quantity: 5, toBuy: true });
     expect((await snapshot()).vehicleParts[0]!.toBuy).toBe(true);
+  });
+
+  it('links an item to a Spec Line of its own Vehicle, keeps the link when editing without it, and empties it when the Spec Line goes', async () => {
+    const bike = await createVehicle();
+    const other = await createVehicle('Other bike');
+    const spec = (await (await call('POST', `/api/vehicles/${bike.id}/specs`, { label: 'Engine oil', value: '10W-40, 3.2 L', group: 'fluids' })).json()) as SpecLine;
+    const foreign = (await (await call('POST', `/api/vehicles/${other.id}/specs`, { label: 'Engine oil', value: '5W-30', group: 'fluids' })).json()) as SpecLine;
+    expect((await call('POST', `/api/vehicles/${bike.id}/parts`, { name: 'x', unit: 'litre', quantity: 1, specLineId: foreign.id })).status).toBe(422);
+    expect((await call('POST', `/api/vehicles/${bike.id}/parts`, { name: 'x', unit: 'litre', quantity: 1, specLineId: 'nope' })).status).toBe(422);
+    const part = await createPart(bike.id, { specLineId: spec.id });
+    expect(part.specLineId).toBe(spec.id);
+    // Editing without the field keeps the link; null removes it.
+    await call('PUT', `/api/parts/${part.id}`, { name: part.name, unit: 'litre', quantity: 5 });
+    expect((await snapshot()).vehicleParts[0]!.specLineId).toBe(spec.id);
+    expect((await call('DELETE', `/api/specs/${spec.id}`)).status).toBe(204);
+    expect((await snapshot()).vehicleParts[0]!.specLineId).toBeNull();
+    const again = (await (await call('POST', `/api/vehicles/${bike.id}/specs`, { label: 'Oil 2', value: '10W-40', group: 'fluids' })).json()) as SpecLine;
+    await call('PUT', `/api/parts/${part.id}`, { name: part.name, unit: 'litre', quantity: 5, specLineId: again.id });
+    await call('PUT', `/api/parts/${part.id}`, { name: part.name, unit: 'litre', quantity: 5, specLineId: null });
+    expect((await snapshot()).vehicleParts[0]!.specLineId).toBeNull();
   });
 
   it('records, corrects and deletes Purchases, with the delivery fees apart from the Total paid', async () => {
@@ -1000,6 +1020,17 @@ describe('migrations', () => {
     // Documents may now belong to a purchase.
     migrated.exec(`INSERT INTO documents (id, garage_id, vehicle_id, owner_kind, owner_id, type, file_name, content_type, size)
                    VALUES ('d2', 'default', 'v1', 'purchase', 'x', 'invoice', 'r.pdf', 'application/pdf', 10)`);
+    migrated.close();
+  });
+
+  it('lets the parts already there start with no Spec Line', () => {
+    const path = join(dir, 'garage.sqlite');
+    const old = openDatabase(path, undefined, 36);
+    old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v1', 'default', 'motorcycle', 'Old bike')`);
+    old.exec(`INSERT INTO vehicle_parts (id, vehicle_id, name, unit, quantity) VALUES ('p1', 'v1', 'Motul 7100 10W-40', 'litre', 5)`);
+    old.close();
+    const migrated = openDatabase(path);
+    expect(migrated.prepare('SELECT id, spec_line_id FROM vehicle_parts').all()).toEqual([{ id: 'p1', spec_line_id: null }]);
     migrated.close();
   });
 

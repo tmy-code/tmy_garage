@@ -160,6 +160,7 @@ const toVehiclePart = (r: Row): VehiclePart => ({
   quantity: r.quantity,
   price: r.price,
   taskId: r.task_id,
+  specLineId: r.spec_line_id,
   toBuy: r.to_buy === 1,
   notes: r.notes,
 });
@@ -775,15 +776,23 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     if (!task || task.vehicle_id !== vehicleId) throw new HttpError(422, 'That task is not on this vehicle');
   }
 
+  /** The Spec Line an item is for must be one of the same Vehicle. */
+  function checkPartSpecLine(vehicleId: string, specLineId: string | null | undefined) {
+    if (specLineId === null || specLineId === undefined) return;
+    const line = db.prepare('SELECT vehicle_id FROM spec_lines WHERE id = ?').get(specLineId) as Row | undefined;
+    if (!line || line.vehicle_id !== vehicleId) throw new HttpError(422, 'That spec line is not on this vehicle');
+  }
+
   app.post('/api/vehicles/:id/parts', async (c) => {
     const vehicleId = c.req.param('id');
     vehicleOrThrow(vehicleId);
     const p = await parse(c, vehiclePartInput);
     checkPartTask(vehicleId, p.taskId);
+    checkPartSpecLine(vehicleId, p.specLineId);
     if (samePart(vehicleId, p.name, p.partNumber)) throw new HttpError(409, 'This part is already on the list');
     const id = randomUUID();
-    db.prepare('INSERT INTO vehicle_parts (id, vehicle_id, name, part_number, unit, quantity, price, task_id, to_buy, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
-      id, vehicleId, p.name, p.partNumber, p.unit, p.quantity, p.price, p.taskId, p.toBuy ? 1 : 0, p.notes,
+    db.prepare('INSERT INTO vehicle_parts (id, vehicle_id, name, part_number, unit, quantity, price, task_id, spec_line_id, to_buy, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+      id, vehicleId, p.name, p.partNumber, p.unit, p.quantity, p.price, p.taskId, p.specLineId ?? null, p.toBuy ? 1 : 0, p.notes,
     );
     return c.json(toVehiclePart(ownedRowOrThrow('vehicle_parts', id, 'Part')), 201);
   });
@@ -793,10 +802,12 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     const row = ownedRowOrThrow('vehicle_parts', id, 'Part');
     const p = await parse(c, vehiclePartInput);
     checkPartTask(row.vehicle_id, p.taskId);
+    checkPartSpecLine(row.vehicle_id, p.specLineId);
     if (samePart(row.vehicle_id, p.name, p.partNumber, id)) throw new HttpError(409, 'This part is already on the list');
     const toBuy = p.toBuy === undefined ? row.to_buy : p.toBuy ? 1 : 0;
-    db.prepare('UPDATE vehicle_parts SET name = ?, part_number = ?, unit = ?, quantity = ?, price = ?, task_id = ?, to_buy = ?, notes = ? WHERE id = ?').run(
-      p.name, p.partNumber, p.unit, p.quantity, p.price, p.taskId, toBuy, p.notes, id,
+    const specLineId = p.specLineId === undefined ? row.spec_line_id : p.specLineId;
+    db.prepare('UPDATE vehicle_parts SET name = ?, part_number = ?, unit = ?, quantity = ?, price = ?, task_id = ?, spec_line_id = ?, to_buy = ?, notes = ? WHERE id = ?').run(
+      p.name, p.partNumber, p.unit, p.quantity, p.price, p.taskId, specLineId, toBuy, p.notes, id,
     );
     return c.json(toVehiclePart(ownedRowOrThrow('vehicle_parts', id, 'Part')));
   });

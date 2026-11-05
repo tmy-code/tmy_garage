@@ -2,6 +2,13 @@
 
 Domain vocabulary: [CONTEXT.md](CONTEXT.md). Data model: [docs/data-model.md](docs/data-model.md), kept up to date with every schema change. Architecture decisions: [docs/adr/](docs/adr/).
 
+## Screen layout conventions
+
+The owner uses the app mostly on a phone, and also on a wide screen. Check both widths before calling a screen change done.
+
+- **An add or action button sits right next to the heading it belongs to**, never pushed to the far edge of the screen. On a page, pass it as `titleAction` to `Layout`. On a section inside a page, use `<div className="heading-row"><h2>…</h2><button …/></div>`. `section-head` (name left, control at the far end) is only for a row inside a list, such as a document with its Delete button.
+- Reuse the existing classes in `styles.css` before adding new ones, and look at a similar screen to copy how it is laid out.
+
 ## This repository is public: no personal data, ever
 
 The owner is not technical and relies on these rules being followed in every commit.

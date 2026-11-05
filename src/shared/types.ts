@@ -88,6 +88,8 @@ export interface VehiclePart {
   price: number | null;
   /** The Task it is usually bought for; its parts are suggested first when that Task is ticked. */
   taskId: string | null;
+  /** The Spec Line it is for, shown next to it; nothing is copied from it. */
+  specLineId: string | null;
   /** To buy (wanted or planned, or to be bought again) rather than Bought. */
   toBuy: boolean;
   /** Shop, link, comparison. */
