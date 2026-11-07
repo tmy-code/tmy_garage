@@ -6,6 +6,7 @@ import { confirmDelete, Field, FormError, Layout, NeedsConnection } from '../com
 import { formatDate, formatMoney, formatQuantity, matchesQuery, parseNumber, taskName } from '../format.ts';
 import { useT } from '../i18n.ts';
 import { navigate } from '../router.ts';
+import { serverUrl } from '../server.ts';
 import { online } from '../store.ts';
 import { DocumentsPanel } from './Documents.tsx';
 import { Submit, useSubmit } from './SetupForms.tsx';
@@ -101,7 +102,7 @@ export function PartsPage({ snapshot, vehicleId }: { snapshot: Snapshot; vehicle
         })}
       </ul>
       <p>
-        <a className="button" href="/api/purchases.csv" download>
+        <a className="button" href={serverUrl('/api/purchases.csv')} download>
           {t.parts.downloadCsv}
         </a>
       </p>

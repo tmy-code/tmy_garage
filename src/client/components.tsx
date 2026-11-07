@@ -7,6 +7,19 @@ import { Icon } from './icons.tsx';
 import { useRoute } from './router.ts';
 import { dismissRejected, sync, useStore } from './store.ts';
 
+/** The app and the server speak different API versions: changes stay on the phone until one is updated. */
+function VersionBanner() {
+  const t = useT();
+  const { versionMismatch, outbox } = useStore();
+  if (!versionMismatch) return null;
+  return (
+    <p className="banner banner-warn" role="alert">
+      {versionMismatch === 'app' ? t.version.updateApp : t.version.updateServer}
+      {outbox.length > 0 ? ` ${t.version.kept}` : ''}
+    </p>
+  );
+}
+
 /** Matches the stylesheet's wide-screen breakpoint, where pages split into columns. */
 const WIDE = '(min-width: 1000px)';
 
@@ -55,6 +68,7 @@ export function Layout({
           <SyncBadge />
         </div>
       </header>
+      <VersionBanner />
       <RejectedBanner />
       <main>
         {titleAction ? (
@@ -109,11 +123,14 @@ function NavBar() {
 
 function SyncBadge() {
   const t = useT();
-  const { outbox, reachable, contacted, syncing } = useStore();
+  const { outbox, reachable, contacted, syncing, versionMismatch } = useStore();
   const waiting = outbox.length;
   let label: string;
   let tone: 'syncing' | 'offline' | 'synced';
-  if (reachable && !contacted) {
+  if (versionMismatch) {
+    label = waiting > 0 ? t.sync.blockedWaiting(waiting) : t.sync.blocked;
+    tone = 'offline';
+  } else if (reachable && !contacted) {
     label = t.sync.connecting;
     tone = 'syncing';
   } else if (!reachable) {

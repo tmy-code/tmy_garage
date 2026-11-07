@@ -21,6 +21,13 @@ const en = {
     syncingCount: (n: number) => `Syncing ${n}…`,
     synced: 'Synced',
     tapToSync: 'Tap to sync now',
+    blocked: 'Blocked',
+    blockedWaiting: (n: number) => `Blocked · ${n} waiting`,
+  },
+  version: {
+    updateApp: 'Update the app: this version no longer works with the garage server.',
+    updateServer: 'The garage server is not up to date yet for this version of the app.',
+    kept: 'Your changes stay on this phone in the meantime.',
   },
   rejected: {
     title: (n: number) => (n === 1 ? 'A change made offline could not be saved:' : `${n} changes made offline could not be saved:`),
@@ -482,6 +489,13 @@ const fr: Messages = {
     syncingCount: (n) => `Envoi de ${n}…`,
     synced: 'Synchronisé',
     tapToSync: 'Toucher pour synchroniser',
+    blocked: 'Bloqué',
+    blockedWaiting: (n) => `Bloqué · ${n} en attente`,
+  },
+  version: {
+    updateApp: 'Mettez l’application à jour : cette version ne fonctionne plus avec le serveur du garage.',
+    updateServer: 'Le serveur du garage n’est pas encore à jour pour cette version de l’application.',
+    kept: 'Vos modifications restent sur ce téléphone en attendant.',
   },
   rejected: {
     title: (n) =>

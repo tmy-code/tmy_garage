@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
+import { cors } from 'hono/cors';
 import type { ZodType } from 'zod';
 import {
   catalogueChangeInput,
@@ -37,6 +38,7 @@ import type {
   SpecLine,
 } from '../shared/types.ts';
 import { BUILT_IN_CATALOGUE, Catalogue, tidyConditions, type Build, type Conditions } from '../shared/catalogue.ts';
+import { API_VERSION, API_VERSION_HEADER } from '../shared/api-version.ts';
 import { starterSpecs } from '../shared/spec-templates.ts';
 import { buildOfRow, catalogueEntries } from './catalogue-rows.ts';
 import type { VehicleInput, VehicleKind } from '../shared/schemas.ts';
@@ -277,6 +279,9 @@ export function readSnapshot(db: DatabaseSync, garageId: string = DEFAULT_GARAGE
   return garageReader(db, garageId).snapshot();
 }
 
+/** Where the Android app's bundled screens run (Capacitor's default origin); the browser version is same-origin. */
+export const ANDROID_APP_ORIGIN = 'https://localhost';
+
 /**
  * The HTTP API. Every query is scoped to one Garage; until users exist, that is the default Garage.
  * Services and Odometer Readings are written with PUT and a client-generated id, so the phone's
@@ -384,6 +389,15 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     if (error instanceof HttpError) return c.json({ error: error.message }, error.status);
     console.error(error);
     return c.json({ error: 'Internal error' }, 500);
+  });
+
+  // The Android app's screens are not served from here, so the browser inside it needs permission to call the API.
+  app.use('/api/*', cors({ origin: ANDROID_APP_ORIGIN, exposeHeaders: [API_VERSION_HEADER], maxAge: 86400 }));
+
+  // Every answer says which API version it speaks, so an app from another version stops before sending its queue.
+  app.use('/api/*', async (c, next) => {
+    await next();
+    c.res.headers.set(API_VERSION_HEADER, String(API_VERSION));
   });
 
   app.get('/api/health', (c) => c.json({ ok: true }));

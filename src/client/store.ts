@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { get, set } from 'idb-keyval';
 import type { Snapshot } from '../shared/types.ts';
 import { normalizeSnapshot } from '../shared/workshop.ts';
-import { ApiError, NetworkError, request } from './api.ts';
+import { ApiError, NetworkError, request, VersionError } from './api.ts';
 import { applyOutbox, enqueueOp, opRequest, type OutboxOp } from './outbox.ts';
 
 export interface StoreState {
@@ -16,6 +16,8 @@ export interface StoreState {
   /** Whether the server has been reached since the app opened; until then "synced" would be a guess. */
   contacted: boolean;
   syncing: boolean;
+  /** Set when the server speaks another API version: the queue is kept, and nothing is sent until one side is updated. */
+  versionMismatch: VersionError['behind'] | null;
   /** Queued changes the server refused; shown so nothing disappears silently. */
   rejected: { op: OutboxOp; reason: string }[];
   loaded: boolean;
@@ -28,6 +30,7 @@ let state: StoreState = {
   reachable: true,
   contacted: false,
   syncing: false,
+  versionMismatch: null,
   rejected: [],
   loaded: false,
 };
@@ -88,6 +91,9 @@ function flush(): Promise<void> {
 async function flushOnce(): Promise<void> {
   update({ syncing: true });
   try {
+    // Checks the API version before sending anything, so a queued change never reaches a server that would misread it.
+    await request('GET', '/api/health');
+    update({ versionMismatch: null });
     while (state.outbox.length > 0) {
       const op = state.outbox[0]!;
       const { path, body } = opRequest(op);
@@ -107,6 +113,7 @@ async function flushOnce(): Promise<void> {
     await fetchSnapshot();
   } catch (error) {
     if (error instanceof NetworkError) update({ reachable: false });
+    else if (error instanceof VersionError) update({ reachable: true, contacted: true, versionMismatch: error.behind });
     else throw error;
   } finally {
     update({ syncing: false });
@@ -149,6 +156,7 @@ export async function online<T>(method: string, path: string, body?: unknown): P
     return result;
   } catch (error) {
     if (error instanceof NetworkError) update({ reachable: false });
+    if (error instanceof VersionError) update({ versionMismatch: error.behind });
     throw error;
   }
 }

@@ -15,3 +15,4 @@ The user works on their vehicles in a basement car park with no cell reception, 
 
 - Insurance, Quotes, Documents other than Service photos, and Task setup are online-only, desk-based screens. Extending offline to them means extending the queue, not rewriting it.
 - If a Garage ever gets several editors (e.g. a shared family Garage), "last write wins" must be revisited.
+- On the phone, the installable web app is replaced by a sideloaded Android app (ADR 0006); the send queue described here is unchanged.
