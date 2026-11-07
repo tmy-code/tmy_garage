@@ -6,6 +6,7 @@ import { confirmDelete, Field, FormError, Layout, NeedsConnection } from '../com
 import { formatDate, formatMoney, formatQuantity, matchesQuery, parseNumber, taskName } from '../format.ts';
 import { useT } from '../i18n.ts';
 import { navigate } from '../router.ts';
+import { isAndroidApp, openInBrowser } from '../native.ts';
 import { serverUrl } from '../server.ts';
 import { online } from '../store.ts';
 import { DocumentsPanel } from './Documents.tsx';
@@ -102,9 +103,15 @@ export function PartsPage({ snapshot, vehicleId }: { snapshot: Snapshot; vehicle
         })}
       </ul>
       <p>
-        <a className="button" href={serverUrl('/api/purchases.csv')} download>
-          {t.parts.downloadCsv}
-        </a>
+        {isAndroidApp ? (
+          <button type="button" className="button" onClick={() => void openInBrowser(serverUrl('/api/purchases.csv'))}>
+            {t.parts.downloadCsv}
+          </button>
+        ) : (
+          <a className="button" href={serverUrl('/api/purchases.csv')} download>
+            {t.parts.downloadCsv}
+          </a>
+        )}
       </p>
       <p className="muted">{t.parts.csvHint}</p>
     </Layout>

@@ -6,6 +6,7 @@ import { confirmDelete, Field, FormError } from '../components.tsx';
 import { formatDate } from '../format.ts';
 import { useT, type Messages } from '../i18n.ts';
 import { Icon } from '../icons.tsx';
+import { isAndroidApp, openDocument } from '../native.ts';
 import { serverUrl } from '../server.ts';
 import { online, useStore } from '../store.ts';
 import { Submit, useSubmit } from './SetupForms.tsx';
@@ -29,7 +30,7 @@ function ExpiryNote({ doc, today, t }: { doc: GarageDocument; today: string; t: 
 function DocumentRow({ doc, label }: { doc: GarageDocument; label?: string }) {
   const t = useT();
   const { reachable } = useStore();
-  const { error, disabled, run } = useSubmit();
+  const { error, setError, disabled, run } = useSubmit();
   async function remove() {
     if (!(await confirmDelete(t.papers.confirmDeleteDocument(documentName(doc, t))))) return;
     void run(() => online('DELETE', `/api/documents/${doc.id}`), t.feedback.deleted);
@@ -38,7 +39,20 @@ function DocumentRow({ doc, label }: { doc: GarageDocument; label?: string }) {
     <li>
       <div className="history-row">
         <div className="section-head">
-          <a href={serverUrl(`/api/documents/${doc.id}/file`)} target="_blank" rel="noreferrer">
+          <a
+            href={serverUrl(`/api/documents/${doc.id}/file`)}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => {
+              // The Android app's browser cannot show a PDF: hand the file to the phone's own viewer.
+              if (!isAndroidApp) return;
+              e.preventDefault();
+              setError(null);
+              openDocument(serverUrl(`/api/documents/${doc.id}/file`), doc.fileName, doc.contentType).catch(() =>
+                setError(t.papers.needsConnectionToOpen),
+              );
+            }}
+          >
             <strong className="with-icon">
               <Icon name="document" /> {documentName(doc, t)}
             </strong>
@@ -108,6 +122,12 @@ export function DocumentsPanel({
         <Field label={t.papers.file} hint={t.papers.fileHint}>
           <input type="file" accept="application/pdf,image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
         </Field>
+        {/* Opens the camera straight away: the Android app's file picker offers no camera. */}
+        <label className="button button-block">
+          <Icon name="camera" /> {t.papers.takePhoto}
+          <input type="file" accept="image/*" capture="environment" hidden onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+        </label>
+        {file ? <p className="muted">{t.papers.photoChosen(file.name)}</p> : null}
         <FormError error={error} />
         <Submit disabled={disabled || !file}>{busy ? t.papers.uploading : t.papers.upload}</Submit>
       </form>

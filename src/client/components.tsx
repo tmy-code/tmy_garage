@@ -5,7 +5,7 @@ import { formatDate } from './format.ts';
 import { LANGS, messages, setLang, useT } from './i18n.ts';
 import { Icon } from './icons.tsx';
 import { useRoute } from './router.ts';
-import { dismissRejected, sync, useStore } from './store.ts';
+import { dismissRejected, needsServerAddress, sync, useStore } from './store.ts';
 
 /** The app and the server speak different API versions: changes stay on the phone until one is updated. */
 function VersionBanner() {
@@ -123,8 +123,11 @@ function NavBar() {
 
 function SyncBadge() {
   const t = useT();
-  const { outbox, reachable, contacted, syncing, versionMismatch } = useStore();
+  const store = useStore();
+  const { outbox, reachable, contacted, syncing, versionMismatch } = store;
   const waiting = outbox.length;
+  // Nothing to sync with until the Android app knows the server's address.
+  if (needsServerAddress(store)) return null;
   let label: string;
   let tone: 'syncing' | 'offline' | 'synced';
   if (versionMismatch) {

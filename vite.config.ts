@@ -3,16 +3,19 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
-export default defineConfig({
+// `--mode android` builds the screens bundled in the Android app (ADR 0006): no service worker, the app itself keeps
+// everything offline.
+export default defineConfig(({ mode }) => ({
   root: 'src/client',
   publicDir: 'public',
   build: {
-    outDir: '../../dist/client',
+    outDir: mode === 'android' ? '../../dist/android' : '../../dist/client',
     emptyOutDir: true,
   },
   plugins: [
     react(),
     VitePWA({
+      disable: mode === 'android',
       registerType: 'autoUpdate',
       manifest: {
         name: 'tmy_garage',
@@ -44,4 +47,4 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
     environment: 'node',
   },
-});
+}));

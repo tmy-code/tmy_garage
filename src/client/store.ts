@@ -3,7 +3,9 @@ import { get, set } from 'idb-keyval';
 import type { Snapshot } from '../shared/types.ts';
 import { normalizeSnapshot } from '../shared/workshop.ts';
 import { ApiError, NetworkError, request, VersionError } from './api.ts';
+import { isAndroidApp } from './native.ts';
 import { applyOutbox, enqueueOp, opRequest, type OutboxOp } from './outbox.ts';
+import { serverAddress, setServerAddress } from './server.ts';
 
 export interface StoreState {
   /** The last copy received from the server, kept on the phone for offline use. */
@@ -21,6 +23,8 @@ export interface StoreState {
   /** Queued changes the server refused; shown so nothing disappears silently. */
   rejected: { op: OutboxOp; reason: string }[];
   loaded: boolean;
+  /** The server's address; '' in the browser, where the screens come from the server itself. */
+  server: string;
 }
 
 let state: StoreState = {
@@ -33,7 +37,13 @@ let state: StoreState = {
   versionMismatch: null,
   rejected: [],
   loaded: false,
+  server: serverAddress(),
 };
+
+/** The Android app does not know where the server is until its address is typed on first launch. */
+export function needsServerAddress(s: StoreState = state): boolean {
+  return isAndroidApp && s.server === '';
+}
 
 const listeners = new Set<() => void>();
 
@@ -83,6 +93,7 @@ let flushing: Promise<void> = Promise.resolve();
 
 /** Sends queued changes in order. Stops at the first network failure and keeps the rest for later. */
 function flush(): Promise<void> {
+  if (needsServerAddress()) return Promise.resolve();
   if (state.syncing) return flushing;
   flushing = flushOnce();
   return flushing;
@@ -159,6 +170,24 @@ export async function online<T>(method: string, path: string, body?: unknown): P
     if (error instanceof VersionError) update({ versionMismatch: error.behind });
     throw error;
   }
+}
+
+/**
+ * Checks that a garage server answers at this address with the same API version, then uses it. Throws otherwise, with
+ * `notFound` as the message when nothing answers. The offline copy is kept: it is the same server, reached another way.
+ */
+export async function connectServer(address: string, notFound: string): Promise<void> {
+  const previous = serverAddress();
+  setServerAddress(address);
+  try {
+    await request('GET', '/api/health');
+  } catch (error) {
+    setServerAddress(previous);
+    if (error instanceof VersionError) throw error;
+    throw new Error(notFound);
+  }
+  update({ server: serverAddress(), versionMismatch: null });
+  await flush();
 }
 
 export async function dismissRejected(): Promise<void> {

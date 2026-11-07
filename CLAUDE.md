@@ -22,3 +22,11 @@ The owner is not technical and relies on these rules being followed in every com
 - **No infrastructure details or secrets in code**: server hostnames (including the Tailscale address), tokens and passwords come from environment variables set on the NAS. Document new variables in `.env.example` with placeholder values only.
 - **Runtime data stays out of git**: the SQLite database, uploads and backups live under paths ignored by `.gitignore`. Never weaken those ignore rules.
 - **Before every commit**, check the staged diff for anything above. If personal data was ever committed, stop and tell the owner — deleting the file does not remove it from git history.
+
+## Android app
+
+The phone uses a sideloaded Android app (ADR 0006), built the same way as TMY Fitness: Capacitor wraps the same React screens, bundled in the APK. Android-only behaviour (back button, opening Documents in the phone's viewer, the CSV export) lives in `src/client/native.ts`; the server's address is typed on first launch (`src/client/server.ts`) and never written in the repo.
+
+- Build: `npm run build:android`, then `./gradlew assembleDebug` in `android/` with `JAVA_HOME` on a **JDK 21**.
+- Releases: merging to `main` makes `.github/workflows/android.yml` sign the APK with the key in the repo's secrets (made by `C:\Projects\infra\android\new-signing-key.ps1`) and publish a GitHub Release, which Obtainium installs on the phone.
+- Test on the owner's phone over USB with `adb`. Bump `API_VERSION` in `src/shared/api-version.ts` whenever a change to `/api` would break an older app.
