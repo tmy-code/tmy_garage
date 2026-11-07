@@ -2,6 +2,8 @@
 
 Domain vocabulary: [CONTEXT.md](CONTEXT.md). Data model: [docs/data-model.md](docs/data-model.md), kept up to date with every schema change. Architecture decisions: [docs/adr/](docs/adr/).
 
+Naming: the project, package, container and NAS folder are snake_case (`tmy_garage`); files are kebab-case (`spec-templates.ts`), except React component files in PascalCase (`Vehicle.tsx`) and upper-case docs (`CONTEXT.md`).
+
 ## Screen layout conventions
 
 The owner uses the app mostly on a phone, and also on a wide screen. Check both widths before calling a screen change done.
