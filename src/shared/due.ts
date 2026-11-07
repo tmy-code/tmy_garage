@@ -65,13 +65,46 @@ export function estimateUsage(points: OdometerPoint[]): Usage {
   return { latest, kmPerDay };
 }
 
-export function usageOf(snapshot: Snapshot, vehicleId: string): Usage {
-  const points: OdometerPoint[] = [
+/**
+ * Best guess of the odometer on a past date, from what was logged: between two logged values it is a straight
+ * line; before the first one it goes back at the overall rate; after the last one it goes forward at the recent
+ * rate. Null when nothing was logged. Never below zero, and never above the next logged value.
+ */
+export function estimateOdometerAt(points: OdometerPoint[], date: IsoDate): number | null {
+  const sorted = [...points].sort(byDateThenOdometer);
+  const first = sorted[0];
+  const last = sorted.at(-1);
+  if (!first || !last) return null;
+
+  const exact = sorted.filter((p) => p.date === date);
+  if (exact.length > 0) return exact[0]!.odometer;
+
+  const after = sorted.find((p) => p.date > date);
+  const before = sorted.findLast((p) => p.date < date);
+  if (before && after) {
+    const span = daysBetween(before.date, after.date);
+    const share = daysBetween(before.date, date) / span;
+    return Math.round(before.odometer + (after.odometer - before.odometer) * share);
+  }
+  if (after) {
+    // Before the first logged value: the overall rate, since the recent one may not apply that far back.
+    const rate = rateBetween(first, last) ?? 0;
+    return Math.max(0, Math.min(after.odometer, Math.round(after.odometer - rate * daysBetween(date, after.date))));
+  }
+  const rate = estimateUsage(sorted).kmPerDay ?? 0;
+  return Math.round(last.odometer + rate * daysBetween(last.date, date));
+}
+
+export function pointsOf(snapshot: Snapshot, vehicleId: string): OdometerPoint[] {
+  return [
     ...snapshot.readings.filter((r) => r.vehicleId === vehicleId),
     // A Service may have left the odometer out.
     ...snapshot.services.filter((s): s is Service & { odometer: number } => s.vehicleId === vehicleId && s.odometer !== null),
   ].map(({ date, odometer }) => ({ date, odometer }));
-  return estimateUsage(points);
+}
+
+export function usageOf(snapshot: Snapshot, vehicleId: string): Usage {
+  return estimateUsage(pointsOf(snapshot, vehicleId));
 }
 
 /** The Interval that applies, for distance and time separately. */
