@@ -1495,3 +1495,17 @@ body > .banner {
     bottom: calc(16px + env(safe-area-inset-bottom));
   }
 }
+
+/* A history row's date and distance stay on one line; if the "Edit" hint does not fit beside them it drops below. */
+.history-head {
+  flex-wrap: wrap;
+  gap: 0 12px;
+}
+
+.history-head > span:first-child {
+  white-space: nowrap;
+}
+
+.history-head .edit-hint {
+  margin-left: auto;
+}
