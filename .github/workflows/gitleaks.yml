@@ -1,0 +1,28 @@
+# Secret scan on GitHub, a second layer behind the local gitleaks pre-commit hook.
+# It also catches commits that skipped the hook: a clone without it, `--no-verify`, edits in the web UI.
+# Uses gitleaks' built-in rules only: the private rules (NAS and tailnet names) must never be in a public repo.
+name: Secret scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write # lets gitleaks comment on the line that leaks
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      # Pinned to commit SHAs: a moved tag cannot change what runs here.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Public repo: anyone can download artifacts, so don't publish a report of what leaked.
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
