@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addMonths, daysBetween } from './dates.ts';
-import { computeDue, effectiveInterval, estimateUsage, vehicleDue, type Usage } from './due.ts';
+import { computeDue, effectiveInterval, estimateOdometerAt, estimateUsage, vehicleDue, type Usage } from './due.ts';
 import type { MaintenanceTask, Service, Snapshot } from './types.ts';
 
 function task(overrides: Partial<MaintenanceTask> = {}): MaintenanceTask {
@@ -257,5 +257,25 @@ describe('vehicleDue', () => {
       ['chain', 'paused'],
     ]);
     expect(due[1]).toMatchObject({ lastDone: { date: '2025-09-01' }, dueDate: null });
+  });
+});
+
+describe('estimateOdometerAt', () => {
+  const points = [
+    { date: '2026-01-01', odometer: 10_000 },
+    { date: '2026-03-02', odometer: 12_000 },
+  ];
+  it('is null without any logged value', () => {
+    expect(estimateOdometerAt([], '2026-01-01')).toBeNull();
+  });
+  it('interpolates between two logged values', () => {
+    expect(estimateOdometerAt(points, '2026-01-31')).toBe(11_000);
+  });
+  it('goes back at the overall rate before the first value, never below zero', () => {
+    expect(estimateOdometerAt(points, '2025-12-02')).toBe(9_000);
+    expect(estimateOdometerAt([{ date: '2026-01-01', odometer: 100 }, { date: '2026-03-02', odometer: 12_000 }], '2025-06-01')).toBe(0);
+  });
+  it('goes forward at the recent rate after the last value', () => {
+    expect(estimateOdometerAt(points, '2026-04-01')).toBe(13_000);
   });
 });

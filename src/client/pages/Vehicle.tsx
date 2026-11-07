@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { todayIso } from '../../shared/dates.ts';
-import { vehicleDue, type DueInfo } from '../../shared/due.ts';
+import { estimateOdometerAt, pointsOf, vehicleDue, type DueInfo, type OdometerPoint } from '../../shared/due.ts';
 import { groupByCategory } from '../../shared/workshop.ts';
 import type { PerformedBy } from '../../shared/schemas.ts';
 import type { MaintenanceTask, PartUsed, Snapshot, Vehicle } from '../../shared/types.ts';
@@ -67,7 +67,7 @@ function TaskList({ due, tasks, owned }: { due: DueInfo[]; tasks: Map<string, Ma
  * Tasks never done have no due date. They are gathered in one block, each with a quick way to say when
  * it was last done, instead of a wall of identical "no record" rows among the tasks that are tracked.
  */
-function SetupTasks({ due, tasks, today, open }: { due: DueInfo[]; tasks: Map<string, MaintenanceTask>; today: string; open: boolean }) {
+function SetupTasks({ due, tasks, today, open, points }: { due: DueInfo[]; tasks: Map<string, MaintenanceTask>; today: string; open: boolean; points: OdometerPoint[] }) {
   const t = useT();
   const [editing, setEditing] = useState<string | null>(null);
   return (
@@ -79,7 +79,7 @@ function SetupTasks({ due, tasks, today, open }: { due: DueInfo[]; tasks: Map<st
           <h3 className="due-group">{t.workshop.partCategories[g.category]}</h3>
           <ul className="list">
             {g.due.map((d) => (
-              <SetupRow key={d.taskId} task={tasks.get(d.taskId)!} today={today} editing={editing === d.taskId} onEdit={(on) => setEditing(on ? d.taskId : null)} />
+              <SetupRow key={d.taskId} task={tasks.get(d.taskId)!} today={today} points={points} editing={editing === d.taskId} onEdit={(on) => setEditing(on ? d.taskId : null)} />
             ))}
           </ul>
         </Fragment>
@@ -88,7 +88,7 @@ function SetupTasks({ due, tasks, today, open }: { due: DueInfo[]; tasks: Map<st
   );
 }
 
-function SetupRow({ task, today, editing, onEdit }: { task: MaintenanceTask; today: string; editing: boolean; onEdit: (on: boolean) => void }) {
+function SetupRow({ task, today, points, editing, onEdit }: { task: MaintenanceTask; today: string; points: OdometerPoint[]; editing: boolean; onEdit: (on: boolean) => void }) {
   const t = useT();
   const { reachable } = useStore();
   const [date, setDate] = useState('');
@@ -98,11 +98,13 @@ function SetupRow({ task, today, editing, onEdit }: { task: MaintenanceTask; tod
 
   async function save(event: FormEvent) {
     event.preventDefault();
-    const odometer = km.trim() === '' ? null : parseNumber(km);
+    let odometer = km.trim() === '' ? null : parseNumber(km);
     if (date === '' || date > today || (odometer !== null && (Number.isNaN(odometer) || odometer < 0 || !Number.isInteger(odometer)))) {
       setError(t.vehicle.setupError);
       return;
     }
+    // Only the date given: the odometer is estimated from the logged history.
+    if (odometer === null && task.intervalKm !== null) odometer = estimateOdometerAt(points, date);
     setError(null);
     setBusy(true);
     try {
@@ -336,7 +338,7 @@ export function VehiclePage({ vehicle, snapshot, openSetup = false }: { vehicle:
               <>
                 {noRecord.length > 0 ? (
                   <div ref={setupBlock}>
-                    <SetupTasks due={noRecord} tasks={tasks} today={today} open={openSetup || groups.groups.length === 0} />
+                    <SetupTasks due={noRecord} tasks={tasks} today={today} points={pointsOf(snapshot, vehicle.id)} open={openSetup || groups.groups.length === 0} />
                   </div>
                 ) : null}
                 {groups.groups.map((g) => (
