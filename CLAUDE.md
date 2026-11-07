@@ -1,6 +1,16 @@
 # TMY Garage
 
-Domain vocabulary: [CONTEXT.md](CONTEXT.md). Data model: [docs/data-model.md](docs/data-model.md), kept up to date with every schema change. Architecture decisions: [docs/adr/](docs/adr/).
+## Docs: read only what the task needs
+
+| Doc | Read when |
+|---|---|
+| [CONTEXT.md](CONTEXT.md) | Writing code, API names or screen text (glossary) |
+| [docs/data-model.md](docs/data-model.md) (28 KB) | Changing the schema or stored data: read the section you touch with Grep, not the whole file; keep it up to date with every schema change |
+| [docs/adr/](docs/adr/) | Changing offline sync, hosting, parts, the Notion copy or the Android app |
+| [docs/plan-templates.md](docs/plan-templates.md) | Changing the built-in maintenance templates (`src/shared/catalogue.ts` is the source of truth) |
+| [docs/notion-copy.md](docs/notion-copy.md) | Working on `npm run notion-sync` |
+| [docs/deploy.md](docs/deploy.md) | Installing or updating on the NAS |
+| `docs/ux-review-2026-11*.md` | Only when working through those reviews' recommended changes |
 
 Naming: the project, package, container and NAS folder are snake_case (`tmy_garage`); files are kebab-case (`spec-templates.ts`), except React component files in PascalCase (`Vehicle.tsx`) and upper-case docs (`CONTEXT.md`).
 
