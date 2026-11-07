@@ -5,9 +5,9 @@ services:
     image: ghcr.io/tmy-code/tmy_garage:latest
     # Without this, "Build" in Container Manager reuses the image already on the NAS.
     pull_policy: always
-    container_name: tmy-garage
+    container_name: tmy_garage
     restart: unless-stopped
     ports:
       - "3010:3000"
     volumes:
-      - /volume1/docker/tmy-garage:/data
+      - /volume1/docker/tmy_garage:/data

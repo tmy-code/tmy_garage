@@ -9,7 +9,7 @@ import { Icon } from '../icons.tsx';
 import { online, useStore } from '../store.ts';
 import { Submit, useSubmit } from './SetupForms.tsx';
 
-// Papers are desk work and need a connection; their details stay readable offline from the phone's copy.
+// Documents are desk work and need a connection; their details stay readable offline from the phone's copy.
 
 function documentName(doc: GarageDocument, t: Messages): string {
   return doc.title ?? t.papers.types[doc.type];

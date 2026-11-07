@@ -5,9 +5,9 @@
 1. **Make the image downloadable.** After the first successful build on GitHub, open
    github.com/tmy-code → *Packages* → *tmy_garage* → *Package settings* → *Change visibility* → **Public**.
    (GitHub creates container images as private even for a public repository.)
-2. **Create the data folder.** In *File Station*, create `docker/tmy-garage` on `volume1`.
+2. **Create the data folder.** In *File Station*, create `docker/tmy_garage` on `volume1`.
    This is where the database and its automatic backups live. Include it in Hyper Backup.
-3. **Create the container.** In *Container Manager* → *Project* → *Create*: name it `tmy-garage`,
+3. **Create the container.** In *Container Manager* → *Project* → *Create*: name it `tmy_garage`,
    choose the folder above, and paste the contents of [`docker-compose.yml`](../docker-compose.yml).
    Start it. The app now answers on port 3010 of the NAS.
 4. **Turn on HTTPS through Tailscale.** The phone app needs HTTPS to install and to work offline.
@@ -23,10 +23,10 @@
 
 ## Updating
 
-When a new version has been pushed, in *Container Manager* → *Project* → `tmy-garage` → *Action* → **Stop**, then
+When a new version has been pushed, in *Container Manager* → *Project* → `tmy_garage` → *Action* → **Stop**, then
 *Action* → **Build**. With `pull_policy: always` in the project YAML (as in [`docker-compose.yml`](../docker-compose.yml)),
-Build downloads the new image. Your data is in `docker/tmy-garage`, not in the image, so it is not affected.
-Before changing the database structure, the app saves a copy in `docker/tmy-garage/backups`.
+Build downloads the new image. Your data is in `docker/tmy_garage`, not in the image, so it is not affected.
+Before changing the database structure, the app saves a copy in `docker/tmy_garage/backups`.
 
 **Check which version is running:** the dashboard shows the *Langue / Language* switch and true-black dark mode from
 commit `48ac066` onwards.

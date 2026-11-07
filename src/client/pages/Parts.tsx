@@ -7,7 +7,7 @@ import { formatDate, formatMoney, formatQuantity, matchesQuery, parseNumber, tas
 import { useT } from '../i18n.ts';
 import { navigate } from '../router.ts';
 import { online } from '../store.ts';
-import { DocumentsPanel } from './Papers.tsx';
+import { DocumentsPanel } from './Documents.tsx';
 import { Submit, useSubmit } from './SetupForms.tsx';
 
 // The Parts section: every Vehicle's parts and fluids in one place, what is still to buy and what was bought, and the
