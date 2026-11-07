@@ -12,7 +12,7 @@ import { useT, type Messages } from '../i18n.ts';
 import { navigate } from '../router.ts';
 import { enqueue, online, undoCreate, useStore } from '../store.ts';
 import type { OutboxOp } from '../outbox.ts';
-import { DocumentsPanel } from './Papers.tsx';
+import { DocumentsPanel } from './Documents.tsx';
 
 /** A Part Used as typed in the form: numbers stay text until saved. */
 interface PartDraft {
