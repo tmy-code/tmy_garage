@@ -63,7 +63,7 @@ function TaskList({ due, tasks, owned }: { due: DueInfo[]; tasks: Map<string, Ma
 }
 
 /**
- * Tasks never done have no due date and no reminder. They are gathered in one block, each with a quick way to say when
+ * Tasks never done have no due date. They are gathered in one block, each with a quick way to say when
  * it was last done, instead of a wall of identical "no record" rows among the tasks that are tracked.
  */
 function SetupTasks({ due, tasks, today, open }: { due: DueInfo[]; tasks: Map<string, MaintenanceTask>; today: string; open: boolean }) {

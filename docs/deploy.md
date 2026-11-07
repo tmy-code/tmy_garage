@@ -21,6 +21,24 @@
 5. **Install it on your phone.** Open that address in Safari (iPhone: *Share* → *Add to Home Screen*)
    or Chrome (Android: *⋮* → *Install app*). Open it once with a connection so it stores an offline copy.
 
+## Todoist reminders (optional)
+
+The app can put a task in Todoist when a Maintenance Task becomes due soon, with the estimated date; it moves the date when
+the estimate changes, and completes the task once the job is logged.
+
+It is configured with two environment variables on the server:
+
+| Variable | Meaning |
+| --- | --- |
+| `TODOIST_API_TOKEN` | Your Todoist API token (*Settings* → *Integrations* → *Developer*). Without it the sync is off. |
+| `TODOIST_PROJECT_ID` | Optional. The project for the tasks (the number at the end of its web address); the Inbox when not set. |
+
+Give them to the container the way your setup supplies environment variables, for example an `env_file` that lives only on the
+server (see the commented `environment` block in [`docker-compose.yml`](../docker-compose.yml)). **Never put the token in the
+repository.** Once the container restarts, the app compares the logbook with Todoist every 10 minutes and only contacts Todoist
+when something changed. Every task already due soon or overdue then gets a Todoist task at once. A task you delete in Todoist
+is not created again.
+
 ## Updating
 
 When a new version has been pushed, in *Container Manager* → *Project* → `tmy_garage` → *Action* → **Stop**, then

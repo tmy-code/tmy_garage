@@ -4,7 +4,6 @@ import { confirmAction, dismissToast, useFeedback } from './feedback.ts';
 import { formatDate } from './format.ts';
 import { LANGS, messages, setLang, useT } from './i18n.ts';
 import { Icon } from './icons.tsx';
-import { refreshPushSubscription } from './push.ts';
 import { useRoute } from './router.ts';
 import { dismissRejected, sync, useStore } from './store.ts';
 
@@ -88,7 +87,7 @@ function sectionOf([section, , sub]: string[]): Section {
   if (section === 'workshop' || section === 'tasks') return 'workshop';
   if (section === 'parts' || (section === 'vehicles' && sub === 'parts')) return 'parts';
   if (section === 'vehicles' && sub === 'specs') return 'workshop';
-  if (section === 'settings' || section === 'reminders') return 'settings';
+  if (section === 'settings') return 'settings';
   return 'garage';
 }
 
@@ -347,11 +346,7 @@ export function LanguageSwitch() {
           role="radio"
           aria-checked={t.lang === code}
           className={t.lang === code ? 'on' : ''}
-          onClick={() => {
-            setLang(code);
-            // Reminders are written in the language the device last chose.
-            void refreshPushSubscription();
-          }}
+          onClick={() => setLang(code)}
         >
           {label}
         </button>

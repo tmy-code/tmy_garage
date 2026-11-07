@@ -43,7 +43,6 @@ Everything below sits in the folder set by the `DATA_DIR` environment variable. 
 | The database | `garage.sqlite` | One SQLite file holding every table on this page (see [ADR 0002](adr/0002-self-hosted-on-nas-with-sqlite.md)). |
 | Document files | `uploads/<document id>` | The database only holds their details. |
 | Automatic backups | `backups/garage-v<version>-<time>.sqlite` | Written before any schema update of an existing database. |
-| Push notification keys | `push-keys.json` | The server's own keys for sending Reminders. |
 
 Two more places hold data:
 
@@ -160,7 +159,7 @@ History: spec lines replaced the earlier Part Specs and Vehicle Specs (see the m
 | `baseline_odometer` | The odometer at that time. Needs a baseline date. |
 | `category` | `engine`, `transmission`, `brakes`, `chassis`, `electrical`, `cooling_climate` or `other`. Empty means `other`. |
 | `notes` | Instructions, torque values, fluid reminders, standard part codes, links. |
-| `switched_off` | Required, yes/no. Paused on this Vehicle: no Due Date, no Reminder. |
+| `switched_off` | Required, yes/no. Paused on this Vehicle: no Due Date. |
 | `template_code` | The Plan Template (part code) the Task came from, empty for the owner's own Tasks. Shown as a "Standard" badge on the Vehicle page and the Task form. Unique per Vehicle, so adding templates again never doubles a Task, whatever it was renamed to. |
 
 ### Plan Templates
@@ -327,41 +326,18 @@ These values are always calculated from the records above, so they can't drift o
 | Due Date | From the last Service (or the baseline): the time Interval added to its date, and the distance Interval added to its odometer, projected to a date with the daily distance. The earlier of the two. A date from a distance is a projection, and the screens mark it "≈". |
 | Status | `overdue` when either Interval is used up. `dueSoon` when 10% or less of either is left (of the distance, or of the days between the last Service and the time due date). `ok` otherwise. `unknown` when the Task was never done, and `paused` when it is switched off. |
 
-## Reminders
+## Todoist
 
-These tables are for the server only and never reach the phone's offline copy. A Reminder is sent when a Task becomes Due soon or Overdue.
+### `todoist_tasks`
 
-### `push_subscriptions`
-
-A device that asked for Reminders. The key is `endpoint`.
-
-| Column | Meaning |
-| --- | --- |
-| `endpoint` | The device's address at its browser's push service. |
-| `garage_id` | Required. → `garages`. |
-| `p256dh` | Required. The device's encryption key. |
-| `auth` | Required. The device's authentication secret. |
-| `lang` | Required. `en` or `fr`. |
-
-### `reminders_sent`
-
-What has already gone out, so that each Reminder is sent once per status, and weekly while overdue. The key is `garage_id`, `key` and `status`.
+The Todoist task made for a Maintenance Task that became Due soon or Overdue, kept so its date can be updated and it can be completed. For the server only: it never reaches the phone's offline copy. The key is `garage_id` and `key`.
 
 | Column | Meaning |
 | --- | --- |
 | `garage_id` | Required. → `garages`. |
-| `key` | Required. Names one occurrence: a Task since it was last done. Doing the job starts a new key. |
-| `status` | Required. `dueSoon` or `overdue`. |
-| `sent_on` | Required. |
-
-### `reminder_runs`
-
-The day's run is recorded here so that it happens once. The key is `garage_id`.
-
-| Column | Meaning |
-| --- | --- |
-| `garage_id` | → `garages`. |
-| `last_date` | Required. |
+| `key` | Required. Names one occurrence: a Task since it was last done. Doing the job starts a new key, so the next occurrence gets its own Todoist task. |
+| `todoist_id` | Required. The task's id in Todoist. |
+| `due_date` | Required. The date last sent to Todoist. |
 
 ## Deleting things
 

@@ -30,8 +30,6 @@ export default defineConfig({
         // The app shell is cached by the service worker; garage data is cached in IndexedDB by the app.
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
-        // Shows the Reminders the server pushes.
-        importScripts: ['push-sw.js'],
       },
     }),
   ],

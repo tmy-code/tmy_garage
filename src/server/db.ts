@@ -678,6 +678,21 @@ const MIGRATIONS: (string | ((db: DatabaseSync) => void))[] = [
   -- The Spec Line an item is for (the factory figure it should match). Loose: emptied if the Spec Line is deleted.
   ALTER TABLE vehicle_parts ADD COLUMN spec_line_id TEXT REFERENCES spec_lines(id) ON DELETE SET NULL;
 `,
+  `
+  -- Reminders now go to Todoist instead of push notifications, so the push tables are no longer needed.
+  DROP TABLE push_subscriptions;
+  DROP TABLE reminders_sent;
+  DROP TABLE reminder_runs;
+
+  -- The Todoist task made for a Maintenance Task that is due soon, so its date can be updated and it can be completed.
+  CREATE TABLE todoist_tasks (
+    garage_id TEXT NOT NULL REFERENCES garages(id),
+    key TEXT NOT NULL,
+    todoist_id TEXT NOT NULL,
+    due_date TEXT NOT NULL,
+    PRIMARY KEY (garage_id, key)
+  );
+`,
 ];
 
 /** Replaces what the owner changed on a template that was split by the same change on each of the new ones. */

@@ -40,7 +40,7 @@ export interface MaintenanceTask {
   notes: string | null;
   /** The owner's category; empty is 'other'. */
   category: PartCategory | null;
-  /** Paused on this Vehicle: no status and no reminder. */
+  /** Paused on this Vehicle: no status. */
   switchedOff: boolean;
   /** Set when the Task comes from a standard Plan Template; null for a Task the owner added. */
   templateCode?: string | null;
