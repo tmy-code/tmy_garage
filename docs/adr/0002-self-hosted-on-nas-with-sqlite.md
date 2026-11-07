@@ -16,3 +16,4 @@ The app runs as a single Docker container on the user's Synology NAS, next to th
 - Releases are built by GitHub Actions into a container image; the user updates manually from Synology Container Manager, and the app backs up the database before applying any migration.
 - The repository and image are public, so the NAS can pull without a stored access token that would expire. In exchange, no personal data, documents, hostnames or secrets may ever enter the repo: runtime data is git-ignored and configuration comes from environment variables on the NAS (see CLAUDE.md).
 - Opening access to friends means either sharing the NAS through Tailscale or exposing the app publicly with real logins — a decision deferred until it is needed.
+- The phone reaches this server from a sideloaded Android app whose address is typed on first launch (ADR 0006); the server allows that app's origin through CORS.

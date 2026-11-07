@@ -6,6 +6,7 @@ import { confirmDelete, Field, FormError } from '../components.tsx';
 import { formatDate } from '../format.ts';
 import { useT, type Messages } from '../i18n.ts';
 import { Icon } from '../icons.tsx';
+import { serverUrl } from '../server.ts';
 import { online, useStore } from '../store.ts';
 import { Submit, useSubmit } from './SetupForms.tsx';
 
@@ -37,7 +38,7 @@ function DocumentRow({ doc, label }: { doc: GarageDocument; label?: string }) {
     <li>
       <div className="history-row">
         <div className="section-head">
-          <a href={`/api/documents/${doc.id}/file`} target="_blank" rel="noreferrer">
+          <a href={serverUrl(`/api/documents/${doc.id}/file`)} target="_blank" rel="noreferrer">
             <strong className="with-icon">
               <Icon name="document" /> {documentName(doc, t)}
             </strong>
