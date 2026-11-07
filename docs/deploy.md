@@ -26,14 +26,18 @@
 The app can put a task in Todoist when a Maintenance Task becomes due soon, with the estimated date; it moves the date when
 the estimate changes, and completes the task once the job is logged.
 
-1. In Todoist: *Settings* → *Integrations* → *Developer* → copy your **API token**.
-2. In *Container Manager* → *Project* → `tmy_garage` → *Action* → **Stop**, edit the YAML and add the `environment` block shown
-   (commented) in [`docker-compose.yml`](../docker-compose.yml), with your token. To use a project other than the Inbox, set
-   `TODOIST_PROJECT_ID` to its id (the number at the end of the project's web address).
-3. *Action* → **Build**. The app compares the logbook with Todoist every 10 minutes and only contacts Todoist when something changed.
+It is configured with two environment variables on the server:
 
-The token stays in the NAS project settings; never put it in the repository. A task you delete in Todoist is not created again.
-Without `TODOIST_API_TOKEN` the sync is off.
+| Variable | Meaning |
+| --- | --- |
+| `TODOIST_API_TOKEN` | Your Todoist API token (*Settings* → *Integrations* → *Developer*). Without it the sync is off. |
+| `TODOIST_PROJECT_ID` | Optional. The project for the tasks (the number at the end of its web address); the Inbox when not set. |
+
+Give them to the container the way your setup supplies environment variables, for example an `env_file` that lives only on the
+server (see the commented `environment` block in [`docker-compose.yml`](../docker-compose.yml)). **Never put the token in the
+repository.** Once the container restarts, the app compares the logbook with Todoist every 10 minutes and only contacts Todoist
+when something changed. Every task already due soon or overdue then gets a Todoist task at once. A task you delete in Todoist
+is not created again.
 
 ## Updating
 
