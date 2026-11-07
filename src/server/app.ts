@@ -54,7 +54,7 @@ class HttpError extends Error {
   }
 }
 
-async function parse<T>(c: Context, schema: ZodType<T, any, any>): Promise<T> {
+async function parse<T>(c: Context, schema: ZodType<T>): Promise<T> {
   const body = await c.req.json().catch(() => {
     throw new HttpError(400, 'Body must be JSON');
   });
@@ -912,7 +912,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     return row.vehicle_id;
   }
 
-  function validated<T>(schema: ZodType<T, any, any>, value: unknown): T {
+  function validated<T>(schema: ZodType<T>, value: unknown): T {
     const result = schema.safeParse(value);
     if (!result.success) {
       const issue = result.error.issues[0]!;
