@@ -3,8 +3,8 @@ import { daysBetween, todayIso } from '../../shared/dates.ts';
 import { usageOf, vehicleDue } from '../../shared/due.ts';
 import type { Snapshot, Vehicle } from '../../shared/types.ts';
 import { upcoming, type Upcoming } from '../../shared/upcoming.ts';
-import { FormError, LanguageSwitch, Layout, NeedsConnection } from '../components.tsx';
-import { formatDate, formatKm, parseNumber, taskName } from '../format.ts';
+import { FormError, Layout, NeedsConnection } from '../components.tsx';
+import { formatDate, formatDueIn, formatKm, parseNumber, taskName } from '../format.ts';
 import { useT, type Messages } from '../i18n.ts';
 import { VehicleIcon } from '../brands.tsx';
 import { Icon } from '../icons.tsx';
@@ -25,16 +25,6 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
 
   return (
     <Layout title={t.garage}>
-      {snapshot.vehicles.length > 0 ? (
-        <div className="heading-row page-buttons">
-          <a className="button button-small" href="#/vehicles/manage">
-            {t.dashboard.manage}
-          </a>
-          <a className="button button-small" href="#/vehicles/new">
-            {t.dashboard.addVehicle}
-          </a>
-        </div>
-      ) : null}
       {snapshot.vehicles.length === 0 ? (
         <div className="empty">
           <p>{t.dashboard.noVehicles}</p>
@@ -62,6 +52,16 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
           ))}
         </div>
       )}
+      {snapshot.vehicles.length > 0 ? (
+        <div className="actions page-buttons">
+          <a className="button" href="#/vehicles/manage">
+            {t.dashboard.manage}
+          </a>
+          <a className="button" href="#/vehicles/new">
+            {t.dashboard.addVehicle}
+          </a>
+        </div>
+      ) : null}
       {others.length > 0 ? (
         <details className="sold">
           <summary>{t.dashboard.otherVehicles(others.length)}</summary>
@@ -76,7 +76,6 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
           </ul>
         </details>
       ) : null}
-      <LanguageSwitch />
     </Layout>
   );
 }
@@ -162,11 +161,7 @@ function VehicleCard({ vehicle, items, snapshot, today }: { vehicle: Vehicle; it
         </p>
       ) : due.length === 0 ? (
         noHistory > 0 ? (
-          <p>
-            <a className="nudge" href={`#/vehicles/${vehicle.id}`}>
-              {t.dashboard.noHistoryOnly(noHistory)}
-            </a>
-          </p>
+          <SetupLink vehicle={vehicle} text={t.dashboard.noHistoryOnly(noHistory)} />
         ) : (
           <p className="muted">{t.dashboard.allClear}</p>
         )
@@ -187,14 +182,19 @@ function VehicleCard({ vehicle, items, snapshot, today }: { vehicle: Vehicle; it
           </div>
         );
       })}
-      {due.length > 0 && noHistory > 0 ? (
-        <p>
-          <a className="muted" href={`#/vehicles/${vehicle.id}`}>
-            {t.dashboard.noHistory(noHistory)}
-          </a>
-        </p>
-      ) : null}
+      {due.length > 0 && noHistory > 0 ? <SetupLink vehicle={vehicle} text={t.dashboard.noHistory(noHistory)} /> : null}
     </section>
+  );
+}
+
+/** Tasks never done have no due date and cannot remind: a full-height row that opens the vehicle's set-up block. */
+function SetupLink({ vehicle, text }: { vehicle: Vehicle; text: string }) {
+  const t = useT();
+  return (
+    <a className="setup-link" href={`#/vehicles/${vehicle.id}/setup`}>
+      <span>{text}</span>
+      <span className="setup-link-go">{t.dashboard.setUp} ›</span>
+    </a>
   );
 }
 
@@ -206,8 +206,7 @@ function keyOf(item: Upcoming): string {
 /** How soon, in a few words: days for what is urgent, the date for what can wait. */
 function when(date: string, status: Upcoming['status'], today: string, t: Messages): string {
   if (status === 'ok') return formatDate(date, t);
-  const days = daysBetween(today, date);
-  return days < 0 ? t.due.daysAgo(-days) : days === 0 ? t.due.today : t.due.inDays(days);
+  return formatDueIn(daysBetween(today, date), t);
 }
 
 /** One line: what it is, and when. Opens the screen where it is dealt with. */
@@ -232,11 +231,20 @@ function UpcomingLine({ item, vehicle, snapshot, today }: { item: Upcoming; vehi
     .filter(Boolean)
     .join(' · ');
 
+  // What is urgent can be dealt with right there: a second target next to the link to the task.
+  const urgent = item.kind === 'task' && item.status !== 'ok';
   return (
-    <a href={href}>
-      <span>{name}</span>
-      <span className="muted">{text}</span>
-    </a>
+    <div className="due-line">
+      <a href={href}>
+        <span>{name}</span>
+        <span className="muted">{text}</span>
+      </a>
+      {urgent ? (
+        <a className="button button-small due-line-act" href={`#/vehicles/${vehicle.id}/service/${item.due.taskId}`} aria-label={t.dashboard.addFor(name)}>
+          {t.dashboard.addShort}
+        </a>
+      ) : null}
+    </div>
   );
 }
 
@@ -249,11 +257,14 @@ function QuickReading({ vehicle, latest, today }: { vehicle: Vehicle; latest: nu
 
   if (!open) {
     return (
-      <p className="card-action">
-        <button type="button" className="button button-small" onClick={() => setOpen(true)}>
+      <div className="actions card-action">
+        <a className="button button-primary" href={`#/vehicles/${vehicle.id}/service`}>
+          {t.vehicle.logService}
+        </a>
+        <button type="button" className="button" onClick={() => setOpen(true)}>
           {t.vehicle.odometerReading}
         </button>
-      </p>
+      </div>
     );
   }
 

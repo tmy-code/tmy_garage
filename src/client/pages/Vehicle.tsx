@@ -1,11 +1,11 @@
-import { Fragment, useMemo, useState, type FormEvent } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { todayIso } from '../../shared/dates.ts';
 import { vehicleDue, type DueInfo } from '../../shared/due.ts';
 import { groupByCategory } from '../../shared/workshop.ts';
 import type { PerformedBy } from '../../shared/schemas.ts';
 import type { MaintenanceTask, PartUsed, Snapshot, Vehicle } from '../../shared/types.ts';
-import { Field, FormError, Layout, StatusChip } from '../components.tsx';
-import { describeDue, describeInterval, formatDate, formatKm, formatMoney, parseNumber, taskName } from '../format.ts';
+import { Field, FormError, Layout, segmentedKeys, StatusChip, useWide } from '../components.tsx';
+import { describeDueShort, describeInterval, formatDate, formatKm, formatMoney, parseNumber, taskName } from '../format.ts';
 import { useT } from '../i18n.ts';
 import { makeAsName, VehicleIcon } from '../brands.tsx';
 import { Icon } from '../icons.tsx';
@@ -37,18 +37,19 @@ function TaskList({ due, tasks, owned }: { due: DueInfo[]; tasks: Map<string, Ma
     <ul className="list">
       {due.map((d) => {
         const task = tasks.get(d.taskId)!;
+        const short = describeDueShort(d, t);
         return (
           <li key={d.taskId}>
             <a href={`#/tasks/${task.id}`} className="task-row">
               <div className="task-title">
-                {owned ? <StatusChip status={d.status} /> : null}
+                {/* A task that is on track needs no label; the text always says what is wrong, never colour alone. */}
+                {owned && d.status !== 'ok' ? <StatusChip status={d.status} /> : null}
                 <span className="due-name">{taskName(task, t)}</span>
-                {task.templateCode ? <span className="chip chip-standard">{t.vehicle.standardTask}</span> : null}
               </div>
-              <span className="muted">{describeInterval(task, t)}</span>
-              {owned ? <span className="due-text">{describeDue(d, t)}</span> : null}
+              {owned ? <span className="due-text task-due">{[short.when, short.distance].filter(Boolean).join(' · ')}</span> : null}
+              <span className="muted task-interval">{describeInterval(task, t)}</span>
               {d.lastDone ? (
-                <span className="muted">
+                <span className="muted task-last">
                   {t.vehicle.lastDone(formatDate(d.lastDone.date, t))}
                   {d.lastDone.odometer !== null ? ` ${t.due.at(formatKm(d.lastDone.odometer))}` : ''}
                   {d.lastDone.source === 'baseline' ? t.vehicle.beforeTracking : ''}
@@ -167,7 +168,20 @@ function SetupRow({ task, today, editing, onEdit }: { task: MaintenanceTask; tod
   );
 }
 
-export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: Snapshot }) {
+type Tab = 'plan' | 'history' | 'specs' | 'parts';
+const TABS: Tab[] = ['plan', 'history', 'specs', 'parts'];
+
+/** The tab last used on this vehicle, kept for the session so coming back from a task lands where you were. */
+function savedTab(vehicleId: string): Tab {
+  try {
+    const saved = sessionStorage.getItem(`vehicle-tab-${vehicleId}`);
+    return TABS.find((x) => x === saved) ?? 'plan';
+  } catch {
+    return 'plan';
+  }
+}
+
+export function VehiclePage({ vehicle, snapshot, openSetup = false }: { vehicle: Vehicle; snapshot: Snapshot; openSetup?: boolean }) {
   const t = useT();
   const { outbox } = useStore();
   const today = todayIso();
@@ -183,6 +197,23 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
   const partCount = vehicleParts.length;
   const toBuyCount = vehicleParts.filter((p) => p.toBuy).length;
   const [allHistory, setAllHistory] = useState(false);
+  const wide = useWide();
+  const [tab, setTabState] = useState<Tab>(() => (openSetup ? 'plan' : savedTab(vehicle.id)));
+  const setupBlock = useRef<HTMLDivElement>(null);
+  function setTab(next: Tab) {
+    setTabState(next);
+    try {
+      sessionStorage.setItem(`vehicle-tab-${vehicle.id}`, next);
+    } catch {
+      // the choice then lasts until the page is left
+    }
+  }
+  // Coming from the garage page's "to set up" link: bring the block into view.
+  useEffect(() => {
+    if (openSetup) setupBlock.current?.scrollIntoView({ block: 'start' });
+  }, [openSetup]);
+  // On a phone one tab shows at a time; a wide screen shows every section.
+  const panel = (name: Tab) => ({ role: wide ? undefined : 'tabpanel', hidden: !wide && tab !== name });
   async function addFromTemplates() {
     try {
       const { added } = await online<{ added: number }>('POST', `/api/vehicles/${vehicle.id}/add-from-templates`);
@@ -209,6 +240,10 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
       })),
     ...snapshot.readings.filter((r) => r.vehicleId === vehicle.id).map((r) => ({ kind: 'reading' as const, ...r })),
   ].sort((a, b) => (a.date === b.date ? (b.odometer ?? 0) - (a.odometer ?? 0) : a.date < b.date ? 1 : -1));
+
+  // Services first; the odometer readings, which are many and say little, wait in their own fold.
+  const services = history.filter((h): h is Extract<HistoryEntry, { kind: 'service' }> => h.kind === 'service');
+  const readings = history.filter((h): h is Extract<HistoryEntry, { kind: 'reading' }> => h.kind === 'reading');
 
   // A motorbike's make is already shown in capitals in front.
   const subtitle = [makeAsName(vehicle) ? null : vehicle.make, vehicle.model, vehicle.year].filter(Boolean).join(' · ');
@@ -269,7 +304,17 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
             ) : null}
           </section>
 
-          <section>
+          {wide ? null : (
+            <div className="segmented tabs" role="tablist" aria-label={t.vehicle.tabsLabel} onKeyDown={segmentedKeys}>
+              {TABS.map((name) => (
+                <button type="button" key={name} role="tab" id={`tab-${name}`} aria-selected={tab === name} className={tab === name ? 'on' : ''} onClick={() => setTab(name)}>
+                  {t.vehicle.tabs[name]}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <section {...panel('plan')} aria-labelledby={wide ? undefined : 'tab-plan'}>
             <div className="heading-row">
               <h2>{t.vehicle.tasks}</h2>
               {owned ? (
@@ -289,7 +334,11 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
               </div>
             ) : (
               <>
-                {noRecord.length > 0 ? <SetupTasks due={noRecord} tasks={tasks} today={today} open={groups.groups.length === 0} /> : null}
+                {noRecord.length > 0 ? (
+                  <div ref={setupBlock}>
+                    <SetupTasks due={noRecord} tasks={tasks} today={today} open={openSetup || groups.groups.length === 0} />
+                  </div>
+                ) : null}
                 {groups.groups.map((g) => (
                   <Fragment key={g.category}>
                     <h3 className="due-group">{t.workshop.partCategories[g.category]}</h3>
@@ -308,7 +357,7 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
         </div>
 
         <div className="split-side">
-          <section>
+          <section {...panel('specs')} aria-labelledby={wide ? undefined : 'tab-specs'}>
             <h2>{t.workshop.section}</h2>
             <ul className="list">
               <li>
@@ -319,7 +368,7 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
             </ul>
           </section>
 
-          <section>
+          <section {...panel('parts')} aria-labelledby={wide ? undefined : 'tab-parts'}>
             <h2>{t.parts.title}</h2>
             <ul className="list">
               <li>
@@ -330,59 +379,67 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
             </ul>
           </section>
 
-          <section>
+          <section {...panel('history')} aria-labelledby={wide ? undefined : 'tab-history'}>
             <h2>{t.vehicle.history}</h2>
             {history.length === 0 ? <p className="empty">{t.vehicle.nothingLogged}</p> : null}
             <ul className="list">
-              {(allHistory ? history : history.slice(0, HISTORY_PREVIEW)).map((h) => (
+              {(allHistory ? services : services.slice(0, HISTORY_PREVIEW)).map((h) => (
                 <li key={`${h.kind}-${h.id}`}>
-                  {h.kind === 'service' ? (
-                    <a href={`#/services/${h.id}/edit`} className="history-row">
-                      <span className="history-head">
-                        <span>
-                          <strong>{formatDate(h.date, t)}</strong>
-                          {h.odometer !== null ? ` · ${formatKm(h.odometer)}` : ''}
-                          {pending.has(h.id) ? <span className="chip chip-pending">{t.vehicle.waitingToSync}</span> : null}
-                        </span>
-                        <EditHint />
+                  <a href={`#/services/${h.id}/edit`} className="history-row">
+                    <span className="history-head">
+                      <span>
+                        <strong>{formatDate(h.date, t)}</strong>
+                        {h.odometer !== null ? ` · ${formatKm(h.odometer)}` : ''}
+                        {pending.has(h.id) ? <span className="chip chip-pending">{t.vehicle.waitingToSync}</span> : null}
                       </span>
-                      <span className="with-icon">
-                        <Icon name="wrench" /> {[h.repair, h.text].filter(Boolean).join(' · ')}
+                      <EditHint />
+                    </span>
+                    {h.repair ? <strong className="history-title">{h.repair}</strong> : null}
+                    <span className="with-icon">
+                      <Icon name="wrench" /> {h.text}
+                    </span>
+                    <span className="muted">
+                      {t.service.performers[h.performedBy]}
+                      {h.totalCost !== null ? ` · ${formatMoney(h.totalCost, t)}` : ''}
+                    </span>
+                    {h.partsUsed.length > 0 ? (
+                      <span className="muted with-icon">
+                        <Icon name="part" /> {h.partsUsed.map(describePart).join(', ')}
                       </span>
-                      <span className="muted">
-                        {t.service.performers[h.performedBy]}
-                        {h.totalCost !== null ? ` · ${formatMoney(h.totalCost, t)}` : ''}
-                      </span>
-                      {h.partsUsed.length > 0 ? (
-                        <span className="muted with-icon">
-                          <Icon name="part" /> {h.partsUsed.map(describePart).join(', ')}
-                        </span>
-                      ) : null}
-                      {h.notes ? <span className="muted">{h.notes}</span> : null}
-                    </a>
-                  ) : (
-                    <a href={`#/readings/${h.id}/edit`} className="history-row">
-                      <span className="history-head">
-                        <span>
-                          <strong>{formatDate(h.date, t)}</strong> · {formatKm(h.odometer)}
-                          {pending.has(h.id) ? <span className="chip chip-pending">{t.vehicle.waitingToSync}</span> : null}
-                        </span>
-                        <EditHint />
-                      </span>
-                      <span className="muted">{t.vehicle.readingEntry}</span>
-                    </a>
-                  )}
+                    ) : null}
+                    {h.notes ? <span className="muted">{h.notes}</span> : null}
+                  </a>
                 </li>
               ))}
             </ul>
-            {!allHistory && history.length > HISTORY_PREVIEW ? (
+            {!allHistory && services.length > HISTORY_PREVIEW ? (
               <button type="button" className="button button-block" onClick={() => setAllHistory(true)}>
-                {t.vehicle.showAllHistory(history.length)}
+                {t.vehicle.showAllHistory(services.length)}
               </button>
+            ) : null}
+            {readings.length > 0 ? (
+              <details className="sold readings">
+                <summary>{t.vehicle.readingsSummary(readings.length)}</summary>
+                <ul className="list">
+                  {readings.map((h) => (
+                    <li key={h.id}>
+                      <a href={`#/readings/${h.id}/edit`} className="history-row">
+                        <span className="history-head">
+                          <span>
+                            <strong>{formatDate(h.date, t)}</strong> · {formatKm(h.odometer)}
+                            {pending.has(h.id) ? <span className="chip chip-pending">{t.vehicle.waitingToSync}</span> : null}
+                          </span>
+                          <EditHint />
+                        </span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </details>
             ) : null}
           </section>
 
-          <section className="actions actions-footer">
+          <section className="actions actions-footer" {...panel('plan')}>
             {owned ? (
               <button type="button" className="button" onClick={() => void addFromTemplates()}>
                 {t.vehicle.addFromTemplates}
@@ -393,7 +450,7 @@ export function VehiclePage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot:
                 {t.vehicle.copyTasksShort}
               </a>
             ) : null}
-            <a className={`button ${owned ? 'button-danger' : ''}`} href={`#/vehicles/${vehicle.id}/sell`}>
+            <a className="button" href={`#/vehicles/${vehicle.id}/sell`}>
               {owned ? t.vehicle.markSold : t.vehicle.saleDetails}
             </a>
           </section>

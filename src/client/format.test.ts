@@ -3,6 +3,8 @@ import type { DueInfo } from '../shared/due.ts';
 import type { MaintenanceTask } from '../shared/types.ts';
 import {
   describeDue,
+  describeDueShort,
+  formatDueIn,
   describeInterval,
   formatDate,
   formatQuantity,
@@ -69,8 +71,33 @@ describe('format in both languages', () => {
 
   it('describes an overdue task', () => {
     const overdue = { ...due, status: 'overdue' as const, daysRemaining: -1, kmRemaining: -300 };
-    expect(plain(describeDue(overdue, en))).toBe('Was due ≈ 14 Mar 2027 (1 day ago) · at 24 000 km (300 km over)');
-    expect(plain(describeDue(overdue, fr))).toBe('Échéance ≈ 14 mars 2027 (il y a 1 jour) · à 24 000 km (300 km de dépassement)');
+    expect(plain(describeDue(overdue, en))).toBe('Was due ≈ 14 Mar 2027 (Overdue by 1 day) · at 24 000 km (300 km over)');
+    expect(plain(describeDue(overdue, fr))).toBe('Échéance ≈ 14 mars 2027 (En retard de 1 jour) · à 24 000 km (300 km de dépassement)');
+  });
+});
+
+describe('formatDueIn', () => {
+  it('says how late something is, in days up to 90 and in years and months after', () => {
+    expect(formatDueIn(-1, en)).toBe('Overdue by 1 day');
+    expect(formatDueIn(-45, en)).toBe('Overdue by 45 days');
+    expect(formatDueIn(-90, fr)).toBe('En retard de 90 jours');
+    expect(formatDueIn(-91, en)).toBe('Overdue by 2 months');
+    expect(formatDueIn(-1010, en)).toBe('Overdue by 2 years 9 months');
+    expect(formatDueIn(-1010, fr)).toBe('En retard de 2 ans 9 mois');
+    expect(formatDueIn(-400, fr)).toBe('En retard de 1 an 1 mois');
+  });
+
+  it('groups digits like kilometres and keeps the future as it was', () => {
+    expect(plain(formatDueIn(1010, fr))).toBe('dans 1 010 jours');
+    expect(formatDueIn(1, en)).toBe('in 1 day');
+    expect(formatDueIn(0, fr)).toBe('aujourd’hui');
+  });
+});
+
+describe('describeDueShort', () => {
+  it('splits when and how far', () => {
+    expect(describeDueShort(due, en)).toEqual({ when: '≈ 14 Mar 2027 · in 141 days', distance: expect.any(String) });
+    expect(plain(describeDueShort(due, fr).distance!)).toBe('encore 1 200 km');
   });
 });
 

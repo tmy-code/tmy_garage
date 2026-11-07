@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from 'react';
 import type { DueInfo } from '../shared/due.ts';
 import { confirmAction, dismissToast, useFeedback } from './feedback.ts';
 import { formatDate } from './format.ts';
@@ -35,16 +35,35 @@ export function useWide(): boolean {
   );
 }
 
+/**
+ * Arrow keys move through the choices of a segmented control (radio group or tab list) and pick the one reached,
+ * as a keyboard user expects. Put it on the container as `onKeyDown`.
+ */
+export function segmentedKeys(event: KeyboardEvent<HTMLElement>): void {
+  const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+  if (step === undefined) return;
+  const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button[role="radio"], button[role="tab"]'));
+  const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
+  if (at < 0) return;
+  event.preventDefault();
+  const next = buttons[(at + step + buttons.length) % buttons.length]!;
+  next.focus();
+  next.click();
+}
+
 export function Layout({
   title,
   back,
   titleAction,
+  entry,
   children,
 }: {
   title: string;
   back?: string;
   /** Sits right next to the page's name, for acting on what it names. */
   titleAction?: ReactNode;
+  /** A screen with typed input: on a phone the bottom menu is hidden so it does not cover the keyboard and the save button. */
+  entry?: boolean;
   children: ReactNode;
 }) {
   const t = useT();
@@ -63,7 +82,7 @@ export function Layout({
         <a className="home-link" href="#/">
           {t.garage}
         </a>
-        <NavBar />
+        <NavBar entry={entry} />
         <div className="topbar-side topbar-end">
           <SyncBadge />
         </div>
@@ -106,11 +125,11 @@ function sectionOf([section, , sub]: string[]): Section {
 }
 
 /** The main sections, one tap away: a bar along the bottom on a phone, in the top bar on a wide screen. */
-function NavBar() {
+function NavBar({ entry }: { entry?: boolean }) {
   const t = useT();
   const current = sectionOf(useRoute());
   return (
-    <nav className="tabbar" aria-label={t.nav.label}>
+    <nav className={`tabbar${entry ? ' tabbar-entry' : ''}`} aria-label={t.nav.label}>
       {SECTIONS.map(([key, path, icon]) => (
         <a key={key} href={`#${path}`} className={key === current ? 'active' : undefined} aria-current={key === current ? 'page' : undefined}>
           <Icon name={icon} />
@@ -305,7 +324,7 @@ export function IntervalFields({
 
   return (
     <>
-      <div className="segmented" role="radiogroup" aria-label={t.setup.interval}>
+      <div className="segmented" role="radiogroup" aria-label={t.setup.interval} onKeyDown={segmentedKeys}>
         {(['distance', 'time', 'both'] as const).map((m) => (
           <button type="button" key={m} role="radio" aria-checked={mode === m} className={mode === m ? 'on' : ''} onClick={() => choose(m)}>
             {t.setup.intervalModes[m]}
@@ -357,7 +376,7 @@ export function NotFound({ what }: { what: 'vehicle' | 'task' | 'service' | 'pag
 export function LanguageSwitch() {
   const t = useT();
   return (
-    <div className="language" role="radiogroup" aria-label={t.language}>
+    <div className="language" role="radiogroup" aria-label={t.language} onKeyDown={segmentedKeys}>
       <span className="muted">{t.language}</span>
       {LANGS.map(({ code, label }) => (
         <button

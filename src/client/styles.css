@@ -2,9 +2,9 @@
   --bg: #f3f4f6;
   --surface: #ffffff;
   --text: #111827;
-  --muted: #6b7280;
+  --muted: #4b5563;
   --border: #e5e7eb;
-  --accent: #d97706;
+  --accent: #2c6aa0;
   --accent-text: #ffffff;
   --overdue: #b91c1c;
   --overdue-bg: #fee2e2;
@@ -31,7 +31,7 @@
     --text: #f3f4f6;
     --muted: #9ca3af;
     --border: #374151;
-    --accent: #f59e0b;
+    --accent: #8fb8e6;
     --accent-text: #111827;
     --overdue: #fca5a5;
     --overdue-bg: #450a0a;
@@ -223,7 +223,7 @@ section {
   align-items: center;
   gap: 2px;
   padding: 6px 0;
-  font-size: 0.7rem;
+  font-size: 0.85rem;
   color: #9ca3af;
   text-decoration: none;
 }
@@ -239,22 +239,28 @@ section {
 }
 
 .back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  min-height: 48px;
+  margin: -8px 0 -8px -8px;
   font-size: 2rem;
   line-height: 1;
   text-decoration: none;
-  padding: 0 8px 4px 0;
 }
 
 .sync {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  min-height: 32px;
+  min-height: 44px;
+  margin: -6px 0;
   border: 0;
   border-radius: 999px;
-  padding: 4px 10px;
+  padding: 4px 12px;
   font: inherit;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
@@ -308,10 +314,6 @@ section {
 
 .heading-row .button {
   flex: none;
-}
-
-.page-buttons {
-  margin-bottom: 16px;
 }
 
 /* A section's heading with its action button right next to it (not pushed to the far edge). Use this, not .section-head,
@@ -369,14 +371,51 @@ section {
 .vehicle-head {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
   color: inherit;
   text-decoration: none;
 }
 
+/* The card is a column and its action row sits at the bottom, so the buttons line up across cards of different content. */
+.vehicle-card {
+  display: flex;
+  flex-direction: column;
+}
+
 .vehicle-card .card-action {
+  margin: auto 0 0;
+  padding-top: 8px;
+}
+
+.vehicle-card .card-action .button {
+  min-height: 48px;
+}
+
+/* Tasks with no history: the most important message on the card, so a full-height row, not a small grey link. */
+.setup-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
   margin: 8px 0 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--unknown-bg);
+  color: inherit;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.setup-link-go {
+  flex: none;
+  color: var(--accent);
+}
+
+.page-buttons {
+  margin: 16px 0;
 }
 
 .vehicle-card .nudge {
@@ -385,7 +424,7 @@ section {
 
 .due-group {
   margin: 14px 0 2px;
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -406,7 +445,24 @@ section {
   padding: 0;
 }
 
-.due-lines a {
+.due-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.due-lines .due-line > a:first-child {
+  flex: 1;
+  min-width: 0;
+  min-height: 48px;
+  align-items: center;
+}
+
+.due-line-act {
+  flex: none;
+}
+
+.due-lines a:not(.button) {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
@@ -417,7 +473,7 @@ section {
   text-decoration: none;
 }
 
-.due-lines li + li a {
+.due-lines li + li .due-line {
   border-top: 1px solid var(--border);
 }
 
@@ -505,7 +561,7 @@ section {
   display: inline-block;
   border-radius: 999px;
   padding: 1px 8px;
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -602,7 +658,7 @@ section {
 }
 
 .button-small {
-  min-height: 36px;
+  min-height: 44px;
   padding: 4px 12px;
   font-size: 0.9rem;
 }
@@ -676,7 +732,7 @@ section {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(76px + env(safe-area-inset-bottom));
+  bottom: calc(80px + env(safe-area-inset-bottom));
   z-index: 10;
   display: flex;
   justify-content: center;
@@ -865,7 +921,7 @@ textarea {
 /* The save button of a long form stays in view, just above the bottom menu bar on a phone. */
 .sticky-actions {
   position: sticky;
-  bottom: calc(64px + env(safe-area-inset-bottom));
+  bottom: calc(68px + env(safe-area-inset-bottom));
   z-index: 4;
   padding: 16px 0 8px;
   background: linear-gradient(to top, var(--bg) 75%, transparent);
@@ -1205,7 +1261,7 @@ body > .banner {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
     gap: 16px;
-    align-items: start;
+    align-items: stretch;
   }
 
   .card-grid > .card,
@@ -1358,4 +1414,73 @@ body > .banner {
 .quick-reading .field-error {
   flex-basis: 100%;
   margin: 0;
+}
+
+/* The vehicle page on a phone: one section at a time, chosen from a tab list (outlined, not filled, like the other toggles). */
+.tabs {
+  margin-bottom: 16px;
+}
+
+.tabs button {
+  padding: 0 4px;
+  font-size: 0.95rem;
+}
+
+.history-title {
+  display: block;
+}
+
+.readings {
+  margin-top: 12px;
+}
+
+/* A task on track: its name, then when it is next due, then the interval and when it was last done. */
+.task-due {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 1000px) {
+  /* One line per task: name, interval, next due, last done. */
+  .task-row {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1.8fr) minmax(0, 1.4fr);
+    grid-template-areas: 'title interval due last';
+    align-items: baseline;
+    column-gap: 16px;
+  }
+
+  .task-row .task-title {
+    grid-area: title;
+  }
+
+  .task-row .task-interval {
+    grid-area: interval;
+  }
+
+  .task-row .task-due {
+    grid-area: due;
+  }
+
+  .task-row .task-last {
+    grid-area: last;
+  }
+}
+
+/* Screens with typed input hide the bottom menu on a phone, so it does not sit on the keyboard and the save button. */
+@media (max-width: 999px) {
+  .tabbar-entry {
+    display: none;
+  }
+
+  body:has(.tabbar-entry) main {
+    padding-bottom: 32px;
+  }
+
+  body:has(.tabbar-entry) .sticky-actions {
+    bottom: 0;
+  }
+
+  body:has(.tabbar-entry) .toast-host {
+    bottom: calc(16px + env(safe-area-inset-bottom));
+  }
 }
