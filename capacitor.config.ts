@@ -4,7 +4,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 // first launch, never written here.
 const config: CapacitorConfig = {
   appId: 'com.tmycode.tmy_garage',
-  appName: 'TMY Garage',
+  appName: '_garage',
   webDir: 'dist/android',
   android: {
     // Only for testing in the emulator against the dev server over plain HTTP. Release builds never set it.
