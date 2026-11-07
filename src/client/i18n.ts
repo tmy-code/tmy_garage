@@ -11,7 +11,7 @@ const plural = (n: number, one: string, many: string) => (Math.abs(n) === 1 ? on
 const en = {
   lang: 'en' as Lang,
   locale: 'en-GB',
-  garage: 'Garage',
+  garage: '_garage',
   back: 'Back',
   sync: {
     connecting: 'Connecting…',
@@ -498,7 +498,7 @@ export type Messages = typeof en;
 const fr: Messages = {
   lang: 'fr',
   locale: 'fr-FR',
-  garage: 'Garage',
+  garage: '_garage',
   back: 'Retour',
   sync: {
     connecting: 'Connexion…',
