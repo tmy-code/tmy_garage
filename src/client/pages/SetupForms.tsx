@@ -16,7 +16,7 @@ import {
 import { todayIso } from '../../shared/dates.ts';
 import type { Cooling, Distribution, Drivetrain, FinalDrive, FuelType, TaskAction, Transmission } from '../../shared/schemas.ts';
 import type { MaintenanceTask, Snapshot, Vehicle } from '../../shared/types.ts';
-import { confirmDelete, Field, FormError, IntervalFields, Layout, NeedsConnection } from '../components.tsx';
+import { confirmDelete, Field, FormError, IntervalFields, Layout, NeedsConnection, segmentedKeys } from '../components.tsx';
 import { showToast } from '../feedback.ts';
 import { parseNumber, taskName } from '../format.ts';
 import { messages, useT, type Messages } from '../i18n.ts';
@@ -154,10 +154,10 @@ export function VehicleForm({ existing, returnTo }: { existing?: Vehicle; return
   }
 
   return (
-    <Layout title={existing ? t.setup.editVehicle : t.setup.newVehicle} back={back}>
+    <Layout title={existing ? t.setup.editVehicle : t.setup.newVehicle} back={back} entry>
       <NeedsConnection />
       <form onSubmit={submit} className="form">
-        <div className="segmented" role="radiogroup" aria-label={t.setup.kind}>
+        <div className="segmented" role="radiogroup" aria-label={t.setup.kind} onKeyDown={segmentedKeys}>
           {(['motorcycle', 'car'] as const).map((k) => (
             <button
               type="button"
@@ -298,7 +298,7 @@ export function SellForm({ vehicle }: { vehicle: Vehicle }) {
   }
 
   return (
-    <Layout title={t.setup.sellTitle(vehicle.name)} back={back}>
+    <Layout title={t.setup.sellTitle(vehicle.name)} back={back} entry>
       <NeedsConnection />
       <p className="muted">{t.setup.sellIntro}</p>
       <form onSubmit={submit} className="form">
@@ -382,7 +382,7 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
   }
 
   return (
-    <Layout title={existing ? t.setup.editTask : t.setup.newTask(vehicle.name)} back={back}>
+    <Layout title={existing ? t.setup.editTask : t.setup.newTask(vehicle.name)} back={back} entry>
       <NeedsConnection />
       <form onSubmit={submit} className="form">
         {existing?.templateCode ? <p className="muted">{t.setup.standardTaskHint}</p> : null}

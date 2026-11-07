@@ -16,6 +16,34 @@ export function formatKm(km: number): string {
   return `${numberFormat.format(km)} km`;
 }
 
+/** Overdue for longer than this many days is said in years and months. */
+const DAYS_BEFORE_YEARS = 90;
+
+/** "1 010 days", digits grouped like the kilometres. */
+export function formatDays(days: number, m: Messages = messages()): string {
+  return m.due.dayCount(days, numberFormat.format(days));
+}
+
+/** "in 91 days" or "today", for a date that is not past. */
+export function formatUntil(days: number, m: Messages = messages()): string {
+  return days === 0 ? m.due.today : m.due.inDays(formatDays(days, m));
+}
+
+/** "Overdue by 45 days", or "Overdue by 2 years 9 months" once it is long past. */
+export function formatOverdue(days: number, m: Messages = messages()): string {
+  if (days <= DAYS_BEFORE_YEARS) return m.due.overdueBy(formatDays(days, m));
+  const months = Math.floor(days / 30.44);
+  const span = [months >= 12 ? m.due.years(Math.floor(months / 12)) : null, months % 12 > 0 ? m.due.months(months % 12) : null]
+    .filter(Boolean)
+    .join(' ');
+  return m.due.overdueBy(span);
+}
+
+/** Past or coming: how far the date is from today, in a few words. */
+export function formatDueIn(days: number, m: Messages = messages()): string {
+  return days < 0 ? formatOverdue(-days, m) : formatUntil(days, m);
+}
+
 /** Whether any of the texts contains what was typed in a search box, ignoring case and accents. */
 export function matchesQuery(texts: (string | null)[], query: string): boolean {
   const loose = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
@@ -73,9 +101,8 @@ export function describeDue(due: DueInfo, m: Messages = messages()): string {
   const parts: string[] = [];
   if (due.dueDate !== null && due.daysRemaining !== null) {
     const estimated = due.dueDate === due.distanceDueDate && due.dueDate !== due.timeDueDate ? '≈ ' : '';
-    const days = due.daysRemaining;
-    const when = days < 0 ? m.due.daysAgo(-days) : days === 0 ? m.due.today : m.due.inDays(days);
-    parts.push(`${days < 0 ? m.due.wasDue : m.due.due} ${estimated}${formatDate(due.dueDate, m)} (${when})`);
+    const when = formatDueIn(due.daysRemaining, m);
+    parts.push(`${due.daysRemaining < 0 ? m.due.wasDue : m.due.due} ${estimated}${formatDate(due.dueDate, m)} (${when})`);
   }
   if (due.dueOdometer !== null) {
     const left =
@@ -85,6 +112,24 @@ export function describeDue(due: DueInfo, m: Messages = messages()): string {
     parts.push(`${m.due.at(formatKm(due.dueOdometer))}${left}`);
   }
   return parts.join(' · ');
+}
+
+/**
+ * The same facts as `describeDue`, as two short lines for a list row: when ("6 Feb 2027 · in 91 days") and how far
+ * ("3 035 km left"). The distance the task is due at is left for the task page.
+ */
+export function describeDueShort(due: DueInfo, m: Messages = messages()): { when: string | null; distance: string | null } {
+  if (due.status === 'paused') return { when: m.due.paused, distance: null };
+  if (due.status === 'unknown') return { when: due.lastDone ? m.due.noOdometer : m.due.never, distance: null };
+  const estimated = due.dueDate === due.distanceDueDate && due.dueDate !== due.timeDueDate ? '≈ ' : '';
+  return {
+    when:
+      due.dueDate !== null && due.daysRemaining !== null
+        ? `${estimated}${formatDate(due.dueDate, m)} · ${formatDueIn(due.daysRemaining, m)}`
+        : null,
+    distance:
+      due.kmRemaining === null ? null : due.kmRemaining < 0 ? m.due.over(formatKm(-due.kmRemaining)) : m.due.left(formatKm(due.kmRemaining)),
+  };
 }
 
 /** Parses a numeric text field: empty means "not set". Spaces are allowed ("24 000"). */

@@ -4,7 +4,7 @@ import { todayIso } from '../../shared/dates.ts';
 import { vehicleDue } from '../../shared/due.ts';
 import type { PartUnit, SpecGroup } from '../../shared/schemas.ts';
 import type { MaintenanceTask, PartUsed, Snapshot, SpecLine, Vehicle, VehiclePart } from '../../shared/types.ts';
-import { confirmDelete, Field, FormError, Layout, NeedsConnection, StatusChip } from '../components.tsx';
+import { confirmDelete, Field, FormError, Layout, NeedsConnection, segmentedKeys, StatusChip } from '../components.tsx';
 import { describeDue, describeInterval, formatDate, formatKm, formatMoney, parseNumber, taskName } from '../format.ts';
 import { VehicleIcon } from '../brands.tsx';
 import { Icon } from '../icons.tsx';
@@ -146,7 +146,7 @@ function SpecEditor({ vehicle, existing, editor }: { vehicle: Vehicle; existing?
       disabled={editor.disabled}
       error={editor.error}
     >
-      <div className="segmented" role="radiogroup" aria-label={t.workshop.specGroup}>
+      <div className="segmented" role="radiogroup" aria-label={t.workshop.specGroup} onKeyDown={segmentedKeys}>
         {GROUPS.map((g) => (
           <button type="button" key={g} role="radio" aria-checked={group === g} className={group === g ? 'on' : ''} onClick={() => setGroup(g)}>
             {t.workshop.specGroups[g]}

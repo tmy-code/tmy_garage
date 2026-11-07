@@ -165,7 +165,7 @@ export function VehiclePartForm({ snapshot, existing, vehicleId }: { snapshot: S
   }
 
   return (
-    <Layout title={existing ? t.parts.editTitle : t.parts.newTitle} back="/parts">
+    <Layout title={existing ? t.parts.editTitle : t.parts.newTitle} back="/parts" entry>
       <NeedsConnection />
       {owned.length === 0 && !existing ? <p className="empty">{t.parts.noOwnedVehicle}</p> : null}
       {/* The item beside its purchase log on a wide screen; stacked on a phone. */}

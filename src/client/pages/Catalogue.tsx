@@ -225,7 +225,7 @@ export function PartForm({ part, kind }: { part?: CataloguePart; kind: VehicleKi
   }
 
   return (
-    <Layout title={part ? listName(part, t) : t.settings.newPart(t.setup[kind])} back={LIST}>
+    <Layout title={part ? listName(part, t) : t.settings.newPart(t.setup[kind])} back={LIST} entry>
       <NeedsConnection />
       <form onSubmit={submit} className="form">
         {part?.removed ? <p className="banner banner-warn">{t.settings.removedNotice}</p> : null}

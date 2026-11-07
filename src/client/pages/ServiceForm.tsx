@@ -5,7 +5,7 @@ import { PART_CATEGORIES, type PartCategory } from '../../shared/catalogue.ts';
 import type { PartUnit, PerformedBy, ServiceKind } from '../../shared/schemas.ts';
 import type { OdometerReading, PartUsed, Service, Snapshot, Vehicle, VehiclePart } from '../../shared/types.ts';
 import { newId } from '../api.ts';
-import { confirmDelete, Field, FormError, Layout, StatusChip } from '../components.tsx';
+import { confirmDelete, Field, FormError, Layout, segmentedKeys, StatusChip } from '../components.tsx';
 import { formatKm, formatMoney, formatQuantity, matchesQuery, parseNumber, taskName } from '../format.ts';
 import { showToast } from '../feedback.ts';
 import { useT, type Messages } from '../i18n.ts';
@@ -240,10 +240,63 @@ export function ServiceForm({
   }
 
   return (
-    <Layout title={existing ? t.service.titleEdit : t.service.titleNew(vehicle.name)} back={back}>
+    <Layout title={existing ? t.service.titleEdit : t.service.titleNew(vehicle.name)} back={back} entry>
       <form onSubmit={submit} className="form form-wide">
         <div className="form-columns">
           <div className="form">
+            <div className="segmented" role="radiogroup" aria-label={t.service.kind} onKeyDown={segmentedKeys}>
+              {(['maintenance', 'repair'] as const).map((k) => (
+                <button type="button" key={k} role="radio" aria-checked={kind === k} className={kind === k ? 'on' : ''} onClick={() => setKind(k)}>
+                  {t.service.kinds[k]}
+                </button>
+              ))}
+            </div>
+            {kind === 'repair' ? (
+              <>
+                <Field label={t.service.repairTitle} hint={t.service.repairTitleHint} error={titleError}>
+                  <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} />
+                </Field>
+                <Field label={t.setup.taskCategory}>
+                  <select value={category ?? 'other'} onChange={(e) => setCategory(e.target.value === 'other' ? null : (e.target.value as PartCategory))}>
+                    {PART_CATEGORIES.map((c) => (
+                      <option key={c} value={c}>
+                        {t.workshop.partCategories[c]}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </>
+            ) : null}
+            <fieldset ref={tasksField} className={`field ${tasksError ? 'field-invalid' : ''}`}>
+              <legend className="field-label">{t.service.tasksDone}</legend>
+              {tasksError ? (
+                <span className="field-error" role="alert">
+                  {tasksError}
+                </span>
+              ) : null}
+              {due.length === 0 ? <p className="muted">{t.service.noTasks}</p> : null}
+              {due.length > SEARCH_FROM ? (
+                <input
+                  type="search"
+                  value={taskQuery}
+                  onChange={(e) => setTaskQuery(e.target.value)}
+                  placeholder={t.service.searchTasks}
+                  aria-label={t.service.searchTasks}
+                  autoComplete="off"
+                />
+              ) : null}
+              {shownDue.length === 0 && due.length > 0 ? <p className="muted">{t.service.noTaskMatches}</p> : null}
+              <div className="check-grid">
+                {shownDue.map((d) => (
+                  <label key={d.taskId} className={`check ${selected.has(d.taskId) ? 'check-on' : ''}`}>
+                    <input type="checkbox" checked={selected.has(d.taskId)} onChange={() => toggle(d.taskId)} />
+                    <span className="due-name">{tasks.get(d.taskId) ? taskName(tasks.get(d.taskId)!, t) : null}</span>
+                    <StatusChip status={d.status} />
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
             <Field label={t.service.date}>
               <input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} required />
             </Field>
@@ -275,29 +328,6 @@ export function ServiceForm({
               />
             </Field>
 
-            <div className="segmented" role="radiogroup" aria-label={t.service.kind}>
-              {(['maintenance', 'repair'] as const).map((k) => (
-                <button type="button" key={k} role="radio" aria-checked={kind === k} className={kind === k ? 'on' : ''} onClick={() => setKind(k)}>
-                  {t.service.kinds[k]}
-                </button>
-              ))}
-            </div>
-            {kind === 'repair' ? (
-              <>
-                <Field label={t.service.repairTitle} hint={t.service.repairTitleHint} error={titleError}>
-                  <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} />
-                </Field>
-                <Field label={t.setup.taskCategory}>
-                  <select value={category ?? 'other'} onChange={(e) => setCategory(e.target.value === 'other' ? null : (e.target.value as PartCategory))}>
-                    {PART_CATEGORIES.map((c) => (
-                      <option key={c} value={c}>
-                        {t.workshop.partCategories[c]}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              </>
-            ) : null}
             <div className="row">
               <Field label={t.service.performedBy}>
                 <select value={performedBy} onChange={(e) => setPerformedBy(e.target.value as PerformedBy)}>
@@ -312,36 +342,6 @@ export function ServiceForm({
                 <input inputMode="decimal" value={costText} onChange={(e) => setCostText(e.target.value)} />
               </Field>
             </div>
-
-            <fieldset ref={tasksField} className={`field ${tasksError ? 'field-invalid' : ''}`}>
-              <legend className="field-label">{t.service.tasksDone}</legend>
-              {tasksError ? (
-                <span className="field-error" role="alert">
-                  {tasksError}
-                </span>
-              ) : null}
-              {due.length === 0 ? <p className="muted">{t.service.noTasks}</p> : null}
-              {due.length > SEARCH_FROM ? (
-                <input
-                  type="search"
-                  value={taskQuery}
-                  onChange={(e) => setTaskQuery(e.target.value)}
-                  placeholder={t.service.searchTasks}
-                  aria-label={t.service.searchTasks}
-                  autoComplete="off"
-                />
-              ) : null}
-              {shownDue.length === 0 && due.length > 0 ? <p className="muted">{t.service.noTaskMatches}</p> : null}
-              <div className="check-grid">
-                {shownDue.map((d) => (
-                  <label key={d.taskId} className={`check ${selected.has(d.taskId) ? 'check-on' : ''}`}>
-                    <input type="checkbox" checked={selected.has(d.taskId)} onChange={() => toggle(d.taskId)} />
-                    <span className="due-name">{tasks.get(d.taskId) ? taskName(tasks.get(d.taskId)!, t) : null}</span>
-                    <StatusChip status={d.status} />
-                  </label>
-                ))}
-              </div>
-            </fieldset>
           </div>
           <div className="form">
             <fieldset className="field">
@@ -529,7 +529,7 @@ export function ReadingForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
   }
 
   return (
-    <Layout title={existing ? t.service.readingEditTitle : t.service.readingTitle(vehicle.name)} back={back}>
+    <Layout title={existing ? t.service.readingEditTitle : t.service.readingTitle(vehicle.name)} back={back} entry>
       <form onSubmit={submit} className="form" noValidate>
         <Field label={t.service.date}>
           <input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} required />

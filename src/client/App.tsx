@@ -96,6 +96,8 @@ export function App() {
     switch (sub) {
       case undefined:
         return <VehiclePage vehicle={vehicle} snapshot={snapshot} />;
+      case 'setup':
+        return <VehiclePage vehicle={vehicle} snapshot={snapshot} openSetup />;
       case 'edit':
         return <VehicleForm existing={vehicle} />;
       case 'sell':
