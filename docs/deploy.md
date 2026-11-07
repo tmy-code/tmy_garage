@@ -21,6 +21,20 @@
 5. **Install it on your phone.** Open that address in Safari (iPhone: *Share* → *Add to Home Screen*)
    or Chrome (Android: *⋮* → *Install app*). Open it once with a connection so it stores an offline copy.
 
+## Todoist reminders (optional)
+
+The app can put a task in Todoist when a Maintenance Task becomes due soon, with the estimated date; it moves the date when
+the estimate changes, and completes the task once the job is logged.
+
+1. In Todoist: *Settings* → *Integrations* → *Developer* → copy your **API token**.
+2. In *Container Manager* → *Project* → `tmy_garage` → *Action* → **Stop**, edit the YAML and add the `environment` block shown
+   (commented) in [`docker-compose.yml`](../docker-compose.yml), with your token. To use a project other than the Inbox, set
+   `TODOIST_PROJECT_ID` to its id (the number at the end of the project's web address).
+3. *Action* → **Build**. The app compares the logbook with Todoist every 10 minutes and only contacts Todoist when something changed.
+
+The token stays in the NAS project settings; never put it in the repository. A task you delete in Todoist is not created again.
+Without `TODOIST_API_TOKEN` the sync is off.
+
 ## Updating
 
 When a new version has been pushed, in *Container Manager* → *Project* → `tmy_garage` → *Action* → **Stop**, then

@@ -22,12 +22,12 @@ _Avoid_: Part Spec, Vehicle Spec, Torque Spec
 
 ### In the French interface
 
-Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Due Date → échéance, Interval → intervalle, Spec Line → caractéristique (fiche technique), Vehicle Part → article (une pièce ou un fluide), To buy / Bought → à acheter / achetée, Purchase → achat, Total paid → total payé, Build → motorisation, Plan Template → modèle de tâche, Document → document, Reminder → rappel, Performed by → réalisé par, Total cost → coût total.
+Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Due Date → échéance, Interval → intervalle, Spec Line → caractéristique (fiche technique), Vehicle Part → article (une pièce ou un fluide), To buy / Bought → à acheter / achetée, Purchase → achat, Total paid → total payé, Build → motorisation, Plan Template → modèle de tâche, Document → document, Performed by → réalisé par, Total cost → coût total.
 
 ## Maintenance Plan
 
 **Maintenance Task**:
-A recurring job defined for one Vehicle, named for what is to be done ("Change engine oil and filter", "Lubricate the chain"), with an Action, an Interval, a Category and Notes. A Vehicle's Tasks are its own: it can edit, add, remove or switch off any of them. A switched-off Task is paused: no Due Date, no Reminder.
+A recurring job defined for one Vehicle, named for what is to be done ("Change engine oil and filter", "Lubricate the chain"), with an Action, an Interval, a Category and Notes. A Vehicle's Tasks are its own: it can edit, add, remove or switch off any of them. A switched-off Task is paused: no Due Date.
 _Avoid_: Job, service item, schedule entry
 
 **Action**:
@@ -102,9 +102,9 @@ _Avoid_: Deadline, next service
 **Status**:
 Worked out from the plan, the history and the mileage, never stored: Overdue when the Interval is used up, Due soon when 10% of the Interval (by distance or by time) or less is left, On track otherwise. A Task never done has no record yet; a switched-off one is Paused.
 
-**Reminder**:
-A notification to a subscribed device when a Task becomes Due soon or Overdue.
-_Avoid_: Alert
+**Todoist task**:
+The task the app creates in the owner's Todoist when a Maintenance Task becomes Due soon or Overdue, dated with its Due Date. The app moves the date when the estimate changes and completes it once the job is logged.
+_Avoid_: Reminder, alert
 
 ## Other
 

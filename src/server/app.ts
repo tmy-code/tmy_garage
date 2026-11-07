@@ -17,8 +17,6 @@ import {
   documentOwner,
   odometerReadingInput,
   ownPartInput,
-  pushEndpointInput,
-  pushSubscriptionInput,
   sellInput,
   garagePageInput,
   serviceInput,
@@ -42,10 +40,7 @@ import { BUILT_IN_CATALOGUE, Catalogue, tidyConditions, type Build, type Conditi
 import { starterSpecs } from '../shared/spec-templates.ts';
 import { buildOfRow, catalogueEntries } from './catalogue-rows.ts';
 import type { VehicleInput, VehicleKind } from '../shared/schemas.ts';
-import { todayIso } from '../shared/dates.ts';
 import { DEFAULT_GARAGE_ID } from './db.ts';
-import type { PushSender } from './push.ts';
-import { sendReminders, testMessage } from './reminders.ts';
 
 type ErrorStatus = 400 | 404 | 409 | 413 | 415 | 422 | 503;
 
@@ -138,8 +133,6 @@ export const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
 export interface AppOptions {
   /** Where Document files are kept; uploads are refused when not set. */
   uploadsDir?: string;
-  /** Sends Reminders to subscribed devices; the Reminders API answers 503 when not set. */
-  push?: PushSender;
 }
 
 const toPartUsed = (r: Row): PartUsed => ({
@@ -289,7 +282,7 @@ export function readSnapshot(db: DatabaseSync, garageId: string = DEFAULT_GARAGE
  * Services and Odometer Readings are written with PUT and a client-generated id, so the phone's
  * offline send queue can safely replay them.
  */
-export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID, { uploadsDir, push }: AppOptions = {}): Hono {
+export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID, { uploadsDir }: AppOptions = {}): Hono {
   const app = new Hono();
   const { ownedRows, snapshot } = garageReader(db, garageId);
   if (uploadsDir) mkdirSync(uploadsDir, { recursive: true });
@@ -1083,55 +1076,6 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       .get(id, garageId);
     if (!row) throw new HttpError(404, 'Odometer Reading not found');
     db.prepare('DELETE FROM odometer_readings WHERE id = ?').run(id);
-    return c.body(null, 204);
-  });
-
-  // --- Reminders (push notifications) ---
-
-  function pushOrThrow(): PushSender {
-    if (!push) throw new HttpError(503, 'Reminders are not set up on this server');
-    return push;
-  }
-
-  app.get('/api/push', (c) => c.json({ publicKey: pushOrThrow().publicKey }));
-
-  app.put('/api/push/subscription', async (c) => {
-    const sender = pushOrThrow();
-    const s = await parse(c, pushSubscriptionInput);
-    const known = db.prepare('SELECT 1 FROM push_subscriptions WHERE endpoint = ? AND garage_id = ?').get(s.endpoint, garageId);
-    db.prepare(
-      `INSERT INTO push_subscriptions (endpoint, garage_id, p256dh, auth, lang) VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT (endpoint) DO UPDATE SET garage_id = excluded.garage_id, p256dh = excluded.p256dh, auth = excluded.auth, lang = excluded.lang`,
-    ).run(s.endpoint, garageId, s.keys.p256dh, s.keys.auth, s.lang);
-    if (!known) {
-      // A new device hears straight away about what is already due, or gets a confirmation when nothing is.
-      const device = { endpoint: s.endpoint, p256dh: s.keys.p256dh, auth: s.keys.auth };
-      void sendReminders(db, sender, garageId, snapshot(), todayIso())
-        .then((delivered) => (delivered === 0 ? sender.send(device, testMessage(s.lang)) : undefined))
-        .catch((error) => console.error('Push notification failed', error));
-    }
-    return c.body(null, 204);
-  });
-
-  app.post('/api/push/unsubscribe', async (c) => {
-    const { endpoint } = await parse(c, pushEndpointInput);
-    db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ? AND garage_id = ?').run(endpoint, garageId);
-    return c.body(null, 204);
-  });
-
-  app.post('/api/push/test', async (c) => {
-    const sender = pushOrThrow();
-    const { endpoint } = await parse(c, pushEndpointInput);
-    const device = db.prepare('SELECT * FROM push_subscriptions WHERE endpoint = ? AND garage_id = ?').get(endpoint, garageId) as
-      Row | undefined;
-    if (!device) throw new HttpError(404, 'This device is not subscribed');
-    const result = await sender.send({ endpoint, p256dh: device.p256dh, auth: device.auth }, testMessage(device.lang)).catch(() => {
-      throw new HttpError(503, 'The push service could not be reached');
-    });
-    if (result === 'gone') {
-      db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(endpoint);
-      throw new HttpError(404, 'This device is not subscribed');
-    }
     return c.body(null, 204);
   });
 

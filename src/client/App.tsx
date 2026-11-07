@@ -64,14 +64,13 @@ export function App() {
     const part = id === 'part' ? snapshot.vehicleParts.find((p) => p.id === sub) : undefined;
     return part ? <VehiclePartForm key={part.id} snapshot={snapshot} existing={part} /> : <NotFound what="page" />;
   }
-  // Reminders used to have their own page; links to it (a test notification, say) open the settings.
   if (section === 'settings' && id === 'parts') {
     if (sub === undefined) return <CataloguePage snapshot={snapshot} />;
     if (sub === 'new' && (subId === 'car' || subId === 'motorcycle')) return <PartForm key={subId} kind={subId} />;
     const part = catalogueOf(snapshot).known(sub);
     return part ? <PartForm key={part.code} part={part} kind={part.kind} /> : <NotFound what="page" />;
   }
-  if (section === 'settings' || section === 'reminders') return <SettingsPage />;
+  if (section === 'settings') return <SettingsPage />;
   if (section === 'vehicles' && id === 'new') return <VehicleForm />;
   if (section === 'vehicles' && id === 'manage') {
     if (sub === undefined) return <ManageGaragePage snapshot={snapshot} />;

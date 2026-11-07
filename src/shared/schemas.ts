@@ -131,7 +131,7 @@ export const taskInput = z
       .transform((v) => v ?? null),
     /** Instructions, torque and fluid reminders, standard part codes. */
     notes: optionalText(20_000),
-    /** Paused on this Vehicle: no status and no reminder. */
+    /** Paused on this Vehicle: no status. */
     switchedOff: z.boolean().default(false),
     action: taskAction.default('replace'),
   })
@@ -304,15 +304,6 @@ export const documentInput = z.object({
 });
 
 export const documentOwner = z.object({ ownerKind: documentOwnerKind, ownerId: z.string().min(1) });
-
-/** What a browser hands over when it agrees to receive notifications (PushSubscription.toJSON()), plus its language. */
-export const pushSubscriptionInput = z.object({
-  endpoint: z.string().url().max(2000).startsWith('https://'),
-  keys: z.object({ p256dh: z.string().min(1).max(200), auth: z.string().min(1).max(100) }),
-  lang: z.enum(['en', 'fr']),
-});
-
-export const pushEndpointInput = z.object({ endpoint: z.string().max(2000) });
 
 export type VehicleKind = z.infer<typeof vehicleKind>;
 export type FuelType = z.infer<typeof fuelType>;
