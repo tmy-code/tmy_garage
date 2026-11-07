@@ -75,6 +75,10 @@ The two states of a Vehicle Part. To buy covers anything the owner wants or plan
 One occasion on which the owner bought a Vehicle Part: a date, a quantity (in the part's unit) and the Total paid for the goods as on the receipt, with further details (shop, delivery fees, receipt, notes) kept so the owner can analyse spending outside the app. The price per unit is worked out from Total paid and quantity, never typed. Delivery fees are a separate amount and never part of Total paid. A part can have many; together they are its purchase log. The app only records Purchases; it does not total or report them, and a Service's Total cost is unaffected.
 _Avoid_: Order, expense, price per unit (as a typed field)
 
+**Deal**:
+An offer the owner found online for a Vehicle Part while looking for a good price: a link, a price, a shop and the day it was checked. It is not a Purchase: buying it is still recorded as a Purchase.
+_Avoid_: Offer, quote, bargain
+
 **Parts section**:
 The garage-wide place in the app that lists the Vehicle Parts of every Vehicle together, filterable by Vehicle and by To buy / Bought. Each part still belongs to exactly one Vehicle.
 
