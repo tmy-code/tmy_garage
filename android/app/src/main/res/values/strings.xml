@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">TMY Garage</string>
+    <string name="title_activity_main">TMY Garage</string>
+    <string name="package_name">com.tmycode.tmy_garage</string>
+    <string name="custom_url_scheme">com.tmycode.tmy_garage</string>
+</resources>

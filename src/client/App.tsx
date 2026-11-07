@@ -11,11 +11,13 @@ import { VehiclePage } from './pages/Vehicle.tsx';
 import { PartsPage, VehiclePartForm } from './pages/Parts.tsx';
 import { SpecsPage, TaskPage, WorkshopPage } from './pages/Workshop.tsx';
 import { scrollForNewRoute, useRoute } from './router.ts';
-import { sync, useStore } from './store.ts';
+import { ServerAddress } from './pages/Server.tsx';
+import { needsServerAddress, sync, useStore } from './store.ts';
 
 export function App() {
   const t = useT();
-  const { view: snapshot, loaded, reachable, syncing } = useStore();
+  const store = useStore();
+  const { view: snapshot, loaded, reachable, syncing } = store;
   const route = useRoute();
   const path = route.join('/');
 
@@ -28,6 +30,18 @@ export function App() {
     return (
       <Layout title={t.garage}>
         <p className="empty loading">{t.startup.loading}</p>
+      </Layout>
+    );
+  }
+  if (needsServerAddress(store)) {
+    return (
+      <Layout title={t.garage}>
+        <section className="card">
+          <h2>{t.server.welcome}</h2>
+          <p className="muted">{t.server.intro}</p>
+          <ServerAddress />
+        </section>
+        <LanguageSwitch />
       </Layout>
     );
   }

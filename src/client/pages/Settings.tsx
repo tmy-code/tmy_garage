@@ -1,6 +1,8 @@
 import { LanguageSwitch, NeedsConnection, Layout } from '../components.tsx';
 import { useT } from '../i18n.ts';
 import { Icon } from '../icons.tsx';
+import { isAndroidApp } from '../native.ts';
+import { ServerAddress } from './Server.tsx';
 
 /** What the owner sets up for the app on this device: the parts catalogue and the language. */
 export function SettingsPage() {
@@ -21,6 +23,12 @@ export function SettingsPage() {
           </li>
         </ul>
       </section>
+      {isAndroidApp ? (
+        <section>
+          <h2>{t.server.title}</h2>
+          <ServerAddress />
+        </section>
+      ) : null}
       <section>
         <LanguageSwitch />
       </section>

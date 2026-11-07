@@ -1,0 +1,69 @@
+# Builds the Android app (ADR 0006). On a pull request it only checks that the APK builds. On main it signs the APK and
+# attaches it to a GitHub Release, where Obtainium on the owner's phone picks it up.
+# The APK holds nothing personal: the server's address is typed in the app. The signing key comes from the repo's
+# secrets, set once with C:\Projects\infra\android\new-signing-key.ps1.
+name: Android app
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write # creates the Release
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    env:
+      PUBLISH: ${{ github.event_name != 'pull_request' }}
+      ANDROID_VERSION_CODE: ${{ github.run_number }}
+      ANDROID_VERSION_NAME: 1.${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - run: npm ci
+      - run: npm run build:android
+
+      - name: Unpack the signing key
+        if: env.PUBLISH == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then echo "::error::No signing key in the repo's secrets. Run new-signing-key.ps1 first."; exit 1; fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+          echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      - name: Build the APK
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: ./gradlew assembleRelease --console=plain
+
+      - name: Publish the Release
+        if: env.PUBLISH == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          apk="tmy_garage-$ANDROID_VERSION_NAME.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk "$apk"
+          git log -1 --format=%s > notes.txt
+          gh release create "v$ANDROID_VERSION_NAME" "$apk" --target "$GITHUB_SHA" --title "TMY Garage $ANDROID_VERSION_NAME" --notes-file notes.txt
+
+      - name: Remove the signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
