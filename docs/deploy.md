@@ -46,7 +46,7 @@ When a new version has been pushed, in *Container Manager* → *Project* → `tm
 Build downloads the new image. Your data is in `docker/tmy_garage`, not in the image, so it is not affected.
 Before changing the database structure, the app saves a copy in `docker/tmy_garage/backups`.
 
-**Check which version is running:** the dashboard shows the *Langue / Language* switch and true-black dark mode from
+**Check which version is running:** the dashboard shows the *Langue / Language* switch from
 commit `48ac066` onwards.
 
 **Rolling back:** every build is also tagged with its commit, e.g. `ghcr.io/tmy-code/tmy_garage:sha-e48cb83`.

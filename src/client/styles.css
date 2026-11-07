@@ -47,17 +47,6 @@
   }
 }
 
-/* On phones, dark mode is true black so OLED screens switch those pixels off; cards are told apart by borders.
-   Keyed on the touchscreen, so a desktop browser keeps the grey dark theme even in a narrow window. */
-@media (prefers-color-scheme: dark) and (pointer: coarse) {
-  :root {
-    --bg: #000000;
-    --surface: #000000;
-    --border: #2a2a2a;
-    --topbar: #000000;
-  }
-}
-
 * {
   box-sizing: border-box;
 }
