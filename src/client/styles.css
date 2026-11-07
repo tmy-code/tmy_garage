@@ -1426,6 +1426,17 @@ body > .banner {
   font-size: 0.95rem;
 }
 
+/* Four tabs are too narrow for the tick, which would wrap above the word: the chosen one is bold, underlined and outlined. */
+.tabs button.on {
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.tabs button.on::before {
+  content: none;
+}
+
 .history-title {
   display: block;
 }
