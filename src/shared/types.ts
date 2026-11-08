@@ -145,6 +145,23 @@ export interface OdometerReading {
   odometer: number;
 }
 
+/**
+ * One visit to the pump. The price per litre is never stored: work it out with fillupUnitPrice.
+ * A top-up (fullTank false) does not fill the tank, so it gives no consumption of its own.
+ */
+export interface Fillup {
+  id: string;
+  vehicleId: string;
+  date: IsoDate;
+  /** Null when the owner did not note it; such a Fill-up gives no distance. */
+  odometer: number | null;
+  litres: number;
+  /** What was paid for the whole fill-up. */
+  totalPaid: number;
+  fullTank: boolean;
+  notes: string | null;
+}
+
 /** A stored file (PDF or photo), attached to one Vehicle or Service; on a Service it is the receipt. */
 export interface GarageDocument {
   id: string;
@@ -166,6 +183,8 @@ export interface Snapshot {
   tasks: MaintenanceTask[];
   services: Service[];
   readings: OdometerReading[];
+  /** The fuel log of every Vehicle. */
+  fillups: Fillup[];
   specLines: SpecLine[];
   vehicleParts: VehiclePart[];
   /** The purchase log of every part. */

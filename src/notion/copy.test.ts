@@ -87,6 +87,7 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     ],
     specLines: [spec('s1', 'v1', 'fluids'), spec('s2', 'v1', 'torque'), spec('s3', 'v2', 'parts')],
     vehicleParts: [part('p1', 'v1', { taskId: 't1', specLineId: 's1' }), part('p2', 'v1', { specLineId: 's2' }), part('p3', 'v2')],
+    fillups: [],
     purchases: [
       { id: 'b1', partId: 'p1', vehicleId: 'v1', date: '2026-01-10', quantity: 4, totalPaid: 40, shop: 'Boutique A', deliveryFees: 5, notes: null },
       { id: 'b2', partId: 'p1', vehicleId: 'v1', date: '2026-06-10', quantity: 3, totalPaid: 31, shop: null, deliveryFees: null, notes: null },

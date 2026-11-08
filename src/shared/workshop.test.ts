@@ -59,6 +59,7 @@ const base: Snapshot = {
   readings: [],
   specLines: [],
   vehicleParts: [],
+  fillups: [],
   purchases: [],
   documents: [],
   catalogue: [],
@@ -89,6 +90,13 @@ describe('groupByCategory', () => {
 });
 
 describe('normalizeSnapshot', () => {
+  it('gives an offline copy saved before the fuel log an empty list of fill-ups, and fills in a fill-up default', () => {
+    const old = { vehicles: [], tasks: [], services: [], readings: [] } as unknown as Snapshot;
+    expect(normalizeSnapshot(old).fillups).toEqual([]);
+    const partial = { ...old, fillups: [{ id: 'f1', vehicleId: 'v1', date: '2026-01-01', litres: 40, totalPaid: 68 }] } as unknown as Snapshot;
+    expect(normalizeSnapshot(partial).fillups[0]).toMatchObject({ odometer: null, notes: null, fullTank: true });
+  });
+
   it('fills in what an offline copy saved before the rework lacks', () => {
     const old = { vehicles: [], tasks: [{ id: 't' }], services: [{ id: 's', partsUsed: [{ description: 'Oil', quantity: 1, unit: 'litre', price: 5 }] }], readings: [] } as unknown as Snapshot;
     const s = normalizeSnapshot(old);

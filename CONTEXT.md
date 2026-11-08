@@ -22,7 +22,7 @@ _Avoid_: Part Spec, Vehicle Spec, Torque Spec
 
 ### In the French interface
 
-Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Due Date → échéance, Interval → intervalle, Spec Line → caractéristique (fiche technique), Vehicle Part → article (une pièce ou un fluide), To buy / Bought → à acheter / achetée, Purchase → achat, Total paid → total payé, Build → motorisation, Plan Template → modèle de tâche, Document → document, Performed by → réalisé par, Total cost → coût total.
+Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Fill-up → plein, Top-up → appoint, Full tank → plein complet, Consumption → consommation, Due Date → échéance, Interval → intervalle, Spec Line → caractéristique (fiche technique), Vehicle Part → article (une pièce ou un fluide), To buy / Bought → à acheter / achetée, Purchase → achat, Total paid → total payé, Build → motorisation, Plan Template → modèle de tâche, Document → document, Performed by → réalisé par, Total cost → coût total.
 
 ## Maintenance Plan
 
@@ -86,12 +86,26 @@ The garage-wide place in the app that lists the Vehicle Parts of every Vehicle t
 The photo or PDF of the invoice attached to a Service.
 _Avoid_: Invoice (as a record), paper
 
+**Fill-up**:
+One visit to the pump: the date, the litres, the total paid and, if noted, the odometer. It is either a full tank or a top-up. The price per litre is worked out from the total paid and the litres, never typed.
+_Avoid_: Refuel, fuel entry
+
+**Top-up**:
+A Fill-up that does not fill the tank. It gives no consumption of its own: its litres count towards the next full tank.
+
+**Full tank**:
+A Fill-up that fills the tank. Two full tanks with a known odometer give the Consumption of the stretch between them.
+
+**Consumption**:
+Litres used per 100 km over a stretch between two full tanks, and its average over all stretches (all litres over all kilometres). Always worked out, never stored.
+_Avoid_: Mileage (that word is for distance), efficiency
+
 **Odometer Reading**:
-The distance on a Vehicle's odometer on a date, logged at any time. A Service records one too. Together they form the Mileage Log.
+The distance on a Vehicle's odometer on a date, logged at any time. A Service or a Fill-up may record one too. Together they form the Mileage Log.
 _Avoid_: Mileage entry, km log
 
 **Mileage Log**:
-A Vehicle's dated odometer values (readings and Services). It gives the current mileage and the average distance per day, which turns a distance Interval into a forecast date.
+A Vehicle's dated odometer values (readings, Services and Fill-ups). It gives the current mileage and the average distance per day, which turns a distance Interval into a forecast date.
 
 ## Status
 

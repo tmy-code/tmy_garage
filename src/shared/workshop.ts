@@ -66,6 +66,7 @@ export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
       hasAirSuspension: v.hasAirSuspension ?? false,
       onGaragePage: v.onGaragePage ?? v.status === 'owned',
     })),
+    fillups: (snapshot.fillups ?? []).map((f) => ({ ...f, odometer: f.odometer ?? null, notes: f.notes ?? null, fullTank: f.fullTank ?? true })),
     documents: snapshot.documents ?? [],
   };
 }

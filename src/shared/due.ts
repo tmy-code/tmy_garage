@@ -1,5 +1,5 @@
 import { addDays, addMonths, daysBetween, minDate, type IsoDate } from './dates.ts';
-import type { MaintenanceTask, Service, Snapshot } from './types.ts';
+import type { Fillup, MaintenanceTask, Service, Snapshot } from './types.ts';
 
 /** Only the last months of readings are used, so the projection follows seasonal use. */
 const USAGE_WINDOW_DAYS = 180;
@@ -15,7 +15,7 @@ export interface OdometerPoint {
 
 /** What was logged about a Vehicle's distance: never a guess at today's odometer. */
 export interface Usage {
-  /** The latest odometer value logged (a reading or a Service). */
+  /** The latest odometer value logged (a reading, a Service or a Fill-up). */
   latest: OdometerPoint | null;
   /** The recent rate, from logged values, for projecting distance-based Due Dates. */
   kmPerDay: number | null;
@@ -95,11 +95,14 @@ export function estimateOdometerAt(points: OdometerPoint[], date: IsoDate): numb
   return Math.round(last.odometer + rate * daysBetween(last.date, date));
 }
 
-export function pointsOf(snapshot: Snapshot, vehicleId: string): OdometerPoint[] {
+/** Every odometer value logged for a Vehicle; `exceptId` leaves out the record being edited. */
+export function pointsOf(snapshot: Snapshot, vehicleId: string, exceptId?: string): OdometerPoint[] {
+  const mine = <T extends { id: string; vehicleId: string }>(items: T[]) => items.filter((i) => i.vehicleId === vehicleId && i.id !== exceptId);
   return [
-    ...snapshot.readings.filter((r) => r.vehicleId === vehicleId),
-    // A Service may have left the odometer out.
-    ...snapshot.services.filter((s): s is Service & { odometer: number } => s.vehicleId === vehicleId && s.odometer !== null),
+    ...mine(snapshot.readings),
+    // A Service or a Fill-up may have left the odometer out.
+    ...mine(snapshot.services).filter((s): s is Service & { odometer: number } => s.odometer !== null),
+    ...mine(snapshot.fillups).filter((f): f is Fillup & { odometer: number } => f.odometer !== null),
   ].map(({ date, odometer }) => ({ date, odometer }));
 }
 

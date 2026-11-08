@@ -693,6 +693,21 @@ const MIGRATIONS: (string | ((db: DatabaseSync) => void))[] = [
     PRIMARY KEY (garage_id, key)
   );
 `,
+  `
+  -- Fill-ups: one visit to the pump. The price per litre is worked out from total_paid and litres, never stored.
+  CREATE TABLE fuel_fillups (
+    id TEXT PRIMARY KEY,
+    vehicle_id TEXT NOT NULL REFERENCES vehicles(id),
+    date TEXT NOT NULL,
+    odometer INTEGER,
+    litres REAL NOT NULL,
+    total_paid REAL NOT NULL,
+    full_tank INTEGER NOT NULL DEFAULT 1,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX fuel_fillups_vehicle ON fuel_fillups (vehicle_id, date);
+`,
 ];
 
 /** Replaces what the owner changed on a template that was split by the same change on each of the new ones. */
