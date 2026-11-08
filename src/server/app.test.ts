@@ -403,6 +403,15 @@ describe('spec lines and the plan templates', () => {
     expect((await snapshot()).specLines.filter((l) => l.vehicleId === bike.id)).toHaveLength(lines.length);
   });
 
+  it('gives every new car and motorcycle a monthly tyre pressure check that replaces no part', async () => {
+    for (const [base, code] of [[CAR, 'tyre_pressure'], [BIKE, 'moto_tyre_pressure']] as const) {
+      const v = (await (await call('POST', '/api/vehicles', { ...base, name: `Pressure ${code}` })).json()) as Vehicle;
+      const task = (await snapshot()).tasks.find((t) => t.vehicleId === v.id && t.templateCode === code);
+      expect(task, code).toBeDefined();
+      expect(task).toMatchObject({ name: 'Check and adjust tyre pressure', action: 'adjust', category: 'chassis', intervalKm: null, intervalMonths: 1 });
+    }
+  });
+
   it('chooses the usual spec lines by the Build', async () => {
     const car = (await (await call('POST', '/api/vehicles', { ...CAR, name: 'Diesel', fuel: 'diesel', distribution: 'belt', hasAc: true })).json()) as Vehicle;
     await call('POST', `/api/vehicles/${car.id}/add-standard-specs`, { lang: 'en' });

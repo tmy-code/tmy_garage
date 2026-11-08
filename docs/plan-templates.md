@@ -5,6 +5,7 @@ The built-in maintenance tasks a vehicle can start with, by kind of vehicle. The
 - A **new vehicle** gets the templates whose "Applies to" matches its build (fuel, gearbox, drivetrain and so on). After that its plan is its own.
 - **Intervals** are the defaults. Whichever of distance or time comes first applies. They can be changed in Settings, and only affect vehicles added afterwards.
 - A template marked "uses a part" or "uses a fluid" also gives the task a part or fluid to buy, to be filled in on the vehicle.
+- A template marked **replaces no part** is a check or adjustment (tyre pressure): nothing to buy, and no usual spec line.
 - A template with **no task of its own** is done with another one (the oil filter with the engine oil).
 - A template that is **always done together with** another also logs that one when a service is saved (the fork seals also log the fork oil), though the other can be done alone.
 - Tasks are named in English and French: the French names are in the catalogue.
@@ -56,6 +57,7 @@ The built-in maintenance tasks a vehicle can start with, by kind of vehicle. The
 | --- | --- | --- | --- |
 | Replace front tyres | 40 000 km / 6 y | Every vehicle | uses a part |
 | Replace rear tyres | 40 000 km / 6 y | Every vehicle | uses a part |
+| Check and adjust tyre pressure | 1 month | Every vehicle | an adjustment: replaces no part |
 | Replace front shock absorbers | 100 000 km | Every vehicle | uses a part |
 | Replace rear shock absorbers | 100 000 km | Every vehicle | uses a part |
 | Replace wiper blades | 1 y | Every vehicle | uses a part |
@@ -120,6 +122,7 @@ The built-in maintenance tasks a vehicle can start with, by kind of vehicle. The
 | --- | --- | --- | --- |
 | Replace front tyre | 15 000 km / 5 y | Every vehicle | uses a part |
 | Replace rear tyre | 10 000 km / 5 y | Every vehicle | uses a part |
+| Check and adjust tyre pressure | 1 month | Every vehicle | an adjustment: replaces no part |
 | Change fork oil | 30 000 km / 3 y | Every vehicle | uses a fluid |
 | Replace fork seals | 60 000 km / 6 y | Every vehicle | always done together with "Change fork oil"; uses a part |
 
