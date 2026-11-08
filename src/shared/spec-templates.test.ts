@@ -78,6 +78,8 @@ describe('usual spec lines', () => {
 
   it('has a line for every Standard Part, of the same kind of Vehicle', () => {
     for (const part of PART_TEMPLATES) {
+      // A check that replaces no part (tyre pressure) has nothing to buy, so no spec line is needed for it.
+      if (part.unit === null) continue;
       const code = SPEC_OF_PART[part.code];
       expect(code, `no spec line named for the part ${part.code}`).toBeDefined();
       expect(specs.get(code!)?.kind, `spec line ${code} for the part ${part.code}`).toBe(part.kind);

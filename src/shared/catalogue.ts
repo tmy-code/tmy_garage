@@ -125,7 +125,8 @@ interface PartTemplate {
   kind: VehicleKind;
   en: string;
   fr: string;
-  unit: PartUnit;
+  /** What the Task has the owner buy; null for a check or adjustment that replaces no part (tyre pressure). */
+  unit: PartUnit | null;
   category: Exclude<PartCategory, 'other'>;
   /** The generic default interval, given to the Maintenance Task a new Vehicle gets for this part. */
   intervalKm: number | null;
@@ -136,6 +137,8 @@ interface PartTemplate {
   turboIntervalKm?: number;
   /** The Maintenance Task's name: what is to be done (e.g. "Replace front brake pads"), not the part's name. */
   task?: { en: string; fr: string };
+  /** What the Task does, when its name does not say it (see `actionOfName`). */
+  action?: TaskAction;
   /** The part whose Maintenance Task also replaces this one (the oil filter goes with the oil), instead of its own. */
   goesWith?: string;
   /** The part whose Task is always done together with this one's, though it can be done alone (fork seals imply the fork oil). */
@@ -154,6 +157,7 @@ export const PART_TEMPLATES = [
   // --- Cars ---
   { code: 'tires_front', kind: 'car', en: 'Front tyres', fr: 'Pneus avant', unit: 'piece', category: 'chassis', intervalKm: 40_000, intervalMonths: 72, task: { en: 'Replace front tyres', fr: 'Remplacer les pneus avant' } },
   { code: 'tires_rear', kind: 'car', en: 'Rear tyres', fr: 'Pneus arrière', unit: 'piece', category: 'chassis', intervalKm: 40_000, intervalMonths: 72, task: { en: 'Replace rear tyres', fr: 'Remplacer les pneus arrière' } },
+  { code: 'tyre_pressure', kind: 'car', en: 'Tyre pressure', fr: 'Pression des pneus', unit: null, category: 'chassis', intervalKm: null, intervalMonths: 1, action: 'adjust', task: { en: 'Check and adjust tyre pressure', fr: 'Contrôler et ajuster la pression des pneus' } },
   { code: 'shock_absorbers_front', kind: 'car', en: 'Front shock absorbers', fr: 'Amortisseurs avant', unit: 'piece', category: 'chassis', intervalKm: 100_000, intervalMonths: null, task: { en: 'Replace front shock absorbers', fr: 'Remplacer les amortisseurs avant' } },
   { code: 'shock_absorbers_rear', kind: 'car', en: 'Rear shock absorbers', fr: 'Amortisseurs arrière', unit: 'piece', category: 'chassis', intervalKm: 100_000, intervalMonths: null, task: { en: 'Replace rear shock absorbers', fr: 'Remplacer les amortisseurs arrière' } },
   { code: 'brake_pads_front', kind: 'car', en: 'Front brake pads', fr: 'Plaquettes avant', unit: 'piece', category: 'brakes', intervalKm: 40_000, intervalMonths: null, task: { en: 'Replace front brake pads', fr: 'Remplacer les plaquettes avant' } },
@@ -191,6 +195,7 @@ export const PART_TEMPLATES = [
   // --- Motorcycles ---
   { code: 'moto_tire_front', kind: 'motorcycle', en: 'Front tyre', fr: 'Pneu avant', unit: 'piece', category: 'chassis', intervalKm: 15_000, intervalMonths: 60, task: { en: 'Replace front tyre', fr: 'Remplacer le pneu avant' } },
   { code: 'moto_tire_rear', kind: 'motorcycle', en: 'Rear tyre', fr: 'Pneu arrière', unit: 'piece', category: 'chassis', intervalKm: 10_000, intervalMonths: 60, task: { en: 'Replace rear tyre', fr: 'Remplacer le pneu arrière' } },
+  { code: 'moto_tyre_pressure', kind: 'motorcycle', en: 'Tyre pressure', fr: 'Pression des pneus', unit: null, category: 'chassis', intervalKm: null, intervalMonths: 1, action: 'adjust', task: { en: 'Check and adjust tyre pressure', fr: 'Contrôler et ajuster la pression des pneus' } },
   { code: 'moto_brake_pads_front', kind: 'motorcycle', en: 'Front brake pads', fr: 'Plaquettes avant', unit: 'piece', category: 'brakes', intervalKm: 20_000, intervalMonths: null, task: { en: 'Replace front brake pads', fr: 'Remplacer les plaquettes avant' } },
   { code: 'moto_brake_pads_rear', kind: 'motorcycle', en: 'Rear brake pads', fr: 'Plaquettes arrière', unit: 'piece', category: 'brakes', intervalKm: 25_000, intervalMonths: null, task: { en: 'Replace rear brake pads', fr: 'Remplacer les plaquettes arrière' } },
   { code: 'moto_brake_discs_front', kind: 'motorcycle', en: 'Front brake discs', fr: 'Disques avant', unit: 'piece', category: 'brakes', intervalKm: 50_000, intervalMonths: null, task: { en: 'Replace front brake discs', fr: 'Remplacer les disques avant' } },
@@ -396,7 +401,7 @@ export class Catalogue {
         intervalMonths: change?.interval ? change.interval.intervalMonths : t.intervalMonths,
         conditions: change?.conditions ?? conditionsOf(t.kind, t.when ?? []),
         characteristics: change?.characteristics ?? null,
-        action: o?.action ?? actionOfName(t.task?.en ?? t.en),
+        action: o?.action ?? t.action ?? actionOfName(t.task?.en ?? t.en),
         builtIn: true,
         changed: change !== undefined,
         removed: change?.removed ?? false,
