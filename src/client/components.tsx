@@ -69,7 +69,7 @@ export function Layout({
   children: ReactNode;
 }) {
   const t = useT();
-  // "Garage" sits in the middle of every top bar and leads home; the page's own name is its heading below.
+  // "Garage" sits at the left of every top bar, like the other apps, and leads home; the page's own name is its heading below.
   // Home screens (no back arrow) would only repeat "Garage", so their heading is for screen readers only.
   return (
     <>
@@ -80,10 +80,10 @@ export function Layout({
               ‹
             </a>
           ) : null}
+          <a className="home-link" href="#/">
+            {t.garage}
+          </a>
         </div>
-        <a className="home-link" href="#/">
-          {t.garage}
-        </a>
         <NavBar entry={entry} />
         <div className="topbar-side topbar-end">
           <SyncBadge />
