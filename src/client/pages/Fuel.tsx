@@ -7,7 +7,7 @@ import type { Fillup, Snapshot, Vehicle } from '../../shared/types.ts';
 import { newId } from '../api.ts';
 import { confirmDelete, ConsistencyWarnings, EditHint, Field, FormError, Layout, segmentedKeys } from '../components.tsx';
 import { showToast } from '../feedback.ts';
-import { currencySymbol, formatDate, formatDecimal, formatKm, formatMoney, parseNumber } from '../format.ts';
+import { currencySymbol, formatDate, formatDecimal, formatKm, formatMoney, matchesQuery, parseNumber } from '../format.ts';
 import { useT } from '../i18n.ts';
 import type { OutboxOp } from '../outbox.ts';
 import { navigate } from '../router.ts';
@@ -16,17 +16,23 @@ import { toastCreated } from './ServiceForm.tsx';
 
 /** Phones show the latest few fill-ups; the rest are one tap away. */
 const FUEL_PREVIEW = 5;
+/** A long list gets a search box once it is expanded (CLAUDE.md: more than about eight rows). */
+const FUEL_SEARCH_FROM = 8;
 
 /** A Vehicle's fuel log: average consumption, then the fill-ups newest first. */
 export function FuelSection({ vehicle, snapshot, pending }: { vehicle: Vehicle; snapshot: Snapshot; pending: Set<string> }) {
   const t = useT();
   const owned = vehicle.status === 'owned';
   const [all, setAll] = useState(false);
+  const [query, setQuery] = useState('');
   const fillups = useMemo(() => snapshot.fillups.filter((f) => f.vehicleId === vehicle.id), [snapshot.fillups, vehicle.id]);
   const spans = useMemo(() => consumptionOf(fillups), [fillups]);
   const average = averageConsumption(spans.values());
   const newestFirst = useMemo(() => sortFillups(fillups).reverse(), [fillups]);
-  const shown = all ? newestFirst : newestFirst.slice(0, FUEL_PREVIEW);
+  const searchable = all && newestFirst.length > FUEL_SEARCH_FROM;
+  const shown = all
+    ? newestFirst.filter((f) => !searchable || matchesQuery([formatDate(f.date, t), f.date, f.odometer === null ? null : String(f.odometer), f.notes], query))
+    : newestFirst.slice(0, FUEL_PREVIEW);
 
   return (
     <>
@@ -45,6 +51,10 @@ export function FuelSection({ vehicle, snapshot, pending }: { vehicle: Vehicle; 
           <p className="muted">
             {average !== null ? `${t.fuel.average(formatDecimal(average, 1, t))} · ${t.fuel.count(fillups.length)}` : `${t.fuel.needTwoFull} · ${t.fuel.count(fillups.length)}`}
           </p>
+          {searchable ? (
+            <input type="search" className="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t.fuel.search} aria-label={t.fuel.search} autoComplete="off" />
+          ) : null}
+          {shown.length === 0 ? <p className="empty">{t.fuel.noMatch}</p> : null}
           <ul className="list">
             {shown.map((f) => {
               const span = spans.get(f.id);
