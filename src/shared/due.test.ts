@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addMonths, daysBetween } from './dates.ts';
-import { computeDue, effectiveInterval, estimateOdometerAt, estimateUsage, pointsOf, usageOf, vehicleDue, type Usage } from './due.ts';
+import { computeDue, effectiveInterval, estimateOdometerAt, estimateUsage, pointsOf, readingOn, usageOf, vehicleDue, type Usage } from './due.ts';
 import type { MaintenanceTask, Service, Snapshot } from './types.ts';
 
 function task(overrides: Partial<MaintenanceTask> = {}): MaintenanceTask {
@@ -279,6 +279,25 @@ describe('estimateOdometerAt', () => {
   });
   it('goes forward at the recent rate after the last value', () => {
     expect(estimateOdometerAt(points, '2026-04-01')).toBe(13_000);
+  });
+  it('uses the value logged on that very day instead of a guess', () => {
+    expect(estimateOdometerAt(points, '2026-01-01')).toBe(10_000);
+    expect(estimateOdometerAt([...points, { date: '2026-02-01', odometer: 10_500 }], '2026-02-01')).toBe(10_500);
+  });
+});
+
+describe('readingOn', () => {
+  const reading = (id: string, vehicleId: string, date: string, odometer: number) => ({ id, vehicleId, date, odometer });
+  const snapshot = {
+    ...({ vehicles: [], tasks: [], services: [], fillups: [], documents: [] } as unknown as Snapshot),
+    readings: [reading('a', 'v1', '2026-02-01', 10_400), reading('b', 'v1', '2026-02-01', 10_450), reading('c', 'v2', '2026-02-01', 99)],
+  } as Snapshot;
+  it('gives the highest value logged that day for that vehicle', () => {
+    expect(readingOn(snapshot, 'v1', '2026-02-01')).toBe(10_450);
+  });
+  it('is null when nothing was logged that day', () => {
+    expect(readingOn(snapshot, 'v1', '2026-02-02')).toBeNull();
+    expect(readingOn(snapshot, 'v3', '2026-02-01')).toBeNull();
   });
 });
 
