@@ -5,7 +5,7 @@
 | Doc | Read when |
 |---|---|
 | [CONTEXT.md](CONTEXT.md) | Writing code, API names or screen text (glossary) |
-| [docs/data-model.md](docs/data-model.md) (28 KB) | Changing the schema or stored data: read the section you touch with Grep, not the whole file; keep it up to date with every schema change |
+| [docs/data-model.md](docs/data-model.md) (22 KB, table of contents at the top) | Changing the schema or stored data: read the section you touch with Grep, not the whole file; keep it up to date with every schema change |
 | [docs/adr/](docs/adr/) | Changing offline sync, hosting, parts, the Notion copy or the Android app |
 | [docs/plan-templates.md](docs/plan-templates.md) | Changing the built-in maintenance templates (`src/shared/catalogue.ts` is the source of truth) |
 | [docs/notion-copy.md](docs/notion-copy.md) | Working on `npm run notion-sync` |

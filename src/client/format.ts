@@ -57,6 +57,16 @@ export function formatQuantity(quantity: number, unit: PartUnit, m: Messages = m
   return `${quantity} ${word}`;
 }
 
+/** A figure with a fixed number of decimals, in the language's own style ("1.7" or "1,7"). */
+export function formatDecimal(value: number, digits = 1, m: Messages = messages()): string {
+  return new Intl.NumberFormat(m.locale, { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value);
+}
+
+/** The currency symbol formatMoney uses ("€"), for labels of money fields. */
+export function currencySymbol(m: Messages = messages()): string {
+  return new Intl.NumberFormat(m.locale, { style: 'currency', currency: 'EUR' }).formatToParts(0).find((p) => p.type === 'currency')?.value ?? '€';
+}
+
 export function formatMoney(amount: number, m: Messages = messages()): string {
   return new Intl.NumberFormat(m.locale, { style: 'currency', currency: 'EUR' }).format(amount);
 }

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from 'react';
+import type { OdometerCheck } from '../shared/consistency.ts';
 import type { DueInfo } from '../shared/due.ts';
+import type { Service } from '../shared/types.ts';
 import { confirmAction, dismissToast, useFeedback } from './feedback.ts';
-import { formatDate } from './format.ts';
+import { formatDate, formatKm } from './format.ts';
 import { LANGS, messages, setLang, useT } from './i18n.ts';
 import { Icon } from './icons.tsx';
 import { useRoute } from './router.ts';
@@ -190,7 +192,12 @@ function RejectedBanner() {
       <ul>
         {rejected.map(({ op, reason }) => (
           <li key={op.data.id}>
-            {op.kind === 'service' ? t.rejected.service(formatDate(op.data.date, t)) : t.rejected.reading(formatDate(op.data.date, t))}:{' '}
+            {op.kind === 'service'
+              ? t.rejected.service(formatDate(op.data.date, t))
+              : op.kind === 'fillup'
+                ? t.rejected.fillup(formatDate(op.data.date, t))
+                : t.rejected.reading(formatDate(op.data.date, t))}
+            :{' '}
             {reason}
           </li>
         ))}
@@ -284,6 +291,44 @@ export function FormError({ error }: { error: string | null }) {
     <p ref={ref} className="banner banner-error" role="alert">
       {error}
     </p>
+  );
+}
+
+/** Says a History entry can be changed: the whole row opens its edit form. */
+export function EditHint() {
+  const t = useT();
+  return (
+    <span className="edit-hint">
+      <Icon name="pencil" /> {t.vehicle.editShort}
+    </span>
+  );
+}
+
+/**
+ * Warns, without blocking, that an odometer value contradicts what was logged, or that a Service looks logged twice.
+ * Shown under the odometer field; nothing when all is consistent.
+ */
+export function ConsistencyWarnings({ check, duplicate, extra }: { check: OdometerCheck | null; duplicate?: Service | null; extra?: string | null }) {
+  const t = useT();
+  return (
+    <div aria-live="polite">
+      {check?.tooLowFor ? (
+        <p className="banner banner-warn">
+          {t.consistency.tooLow(formatKm(check.tooLowFor.odometer), formatDate(check.tooLowFor.date, t))}
+        </p>
+      ) : null}
+      {check?.tooHighFor ? (
+        <p className="banner banner-warn">
+          {t.consistency.tooHigh(formatKm(check.tooHighFor.odometer), formatDate(check.tooHighFor.date, t))}
+        </p>
+      ) : null}
+      {duplicate && duplicate.odometer !== null ? (
+        <p className="banner banner-warn">
+          {t.consistency.duplicate(formatDate(duplicate.date, t), formatKm(duplicate.odometer))}
+        </p>
+      ) : null}
+      {extra ? <p className="banner banner-warn">{extra}</p> : null}
+    </div>
   );
 }
 

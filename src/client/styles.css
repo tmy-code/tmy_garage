@@ -359,11 +359,17 @@ section {
 /* Dashboard: a card per Vehicle, its upcoming items under Overdue / Due soon / Later. */
 .vehicle-head {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 8px;
   color: inherit;
   text-decoration: none;
+}
+
+/* Average consumption goes on its own line, so a long vehicle name never crowds it. */
+.vehicle-consumption {
+  flex-basis: 100%;
 }
 
 /* The card is a column and its action row sits at the bottom, so the buttons line up across cards of different content. */
@@ -574,6 +580,12 @@ section {
 .chip-paused {
   color: var(--unknown);
   background: var(--unknown-bg);
+}
+
+.chip-neutral {
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
 }
 
 .chip-standard {
@@ -1406,18 +1418,26 @@ body > .banner {
 }
 
 /* The vehicle page on a phone: one section at a time, chosen from a tab list (outlined, not filled, like the other toggles). */
+/* Five tabs on a 360px phone: tighter gaps and type, and a scroll as the last resort so none is cut off. */
 .tabs {
   margin-bottom: 16px;
+  gap: 4px;
+  overflow-x: auto;
 }
 
 .tabs button {
-  padding: 0 4px;
-  font-size: 0.95rem;
+  flex: 1 0 auto;
+  padding: 4px 6px;
+  font-size: 0.85rem;
 }
 
-/* Four tabs are too narrow for the tick, which would wrap above the word: the chosen one is bold, underlined and outlined. */
+.tabs button:focus-visible {
+  outline-offset: -3px;
+}
+
+/* The tabs are too narrow for the tick, which would wrap above the word: the chosen one is bold, underlined and outlined. */
 .tabs button.on {
-  font-weight: 800;
+  font-weight: 600;
   text-decoration: underline;
   text-underline-offset: 4px;
 }

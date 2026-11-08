@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Snapshot } from '../shared/types.ts';
-import { applyOutbox, enqueueOp, opRequest, type OutboxOp } from './outbox.ts';
+import { applyOutbox, enqueueOp, opDeletePath, opRequest, type OutboxOp } from './outbox.ts';
 
 const base: Snapshot = {
   vehicles: [],
@@ -9,6 +9,7 @@ const base: Snapshot = {
   readings: [],
   specLines: [],
   vehicleParts: [],
+  fillups: [],
   purchases: [],
   documents: [],
   catalogue: [],
@@ -42,5 +43,28 @@ describe('outbox', () => {
     expect(opRequest({ kind: 'reading', data: { id: 'r9', vehicleId: 'v', date: '2026-01-01', odometer: 1 } }).path).toBe(
       '/api/odometer-readings/r9',
     );
+  });
+
+  it('queues Fill-ups: endpoint, upsert into the snapshot, one version per record', () => {
+    const fillup = (id: string, litres: number): OutboxOp => ({
+      kind: 'fillup',
+      data: { id, vehicleId: 'v', date: '2026-10-01', odometer: 500, litres, totalPaid: litres * 1.7, fullTank: true, notes: null },
+    });
+    expect(opRequest(fillup('f1', 40)).path).toBe('/api/fillups/f1');
+    expect(applyOutbox(base, [fillup('f1', 40)]).fillups.map((f) => f.litres)).toEqual([40]);
+    expect(applyOutbox(base, [fillup('f1', 40), fillup('f2', 30), fillup('f1', 41)]).fillups.map((f) => [f.id, f.litres])).toEqual([
+      ['f1', 41],
+      ['f2', 30],
+    ]);
+    expect(enqueueOp(enqueueOp([], fillup('f1', 40)), fillup('f1', 42))).toHaveLength(1);
+    expect(base.fillups).toEqual([]);
+  });
+
+  it('gives the delete path of every kind of change', () => {
+    expect(opDeletePath(service('s2', 1))).toBe('/api/services/s2');
+    expect(opDeletePath({ kind: 'reading', data: { id: 'r9', vehicleId: 'v', date: '2026-01-01', odometer: 1 } })).toBe('/api/odometer-readings/r9');
+    expect(
+      opDeletePath({ kind: 'fillup', data: { id: 'f9', vehicleId: 'v', date: '2026-01-01', odometer: null, litres: 1, totalPaid: 1, fullTank: false, notes: null } }),
+    ).toBe('/api/fillups/f9');
   });
 });

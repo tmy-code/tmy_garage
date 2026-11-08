@@ -4,13 +4,14 @@ import { estimateOdometerAt, pointsOf, vehicleDue, type DueInfo, type OdometerPo
 import { groupByCategory } from '../../shared/workshop.ts';
 import type { PerformedBy } from '../../shared/schemas.ts';
 import type { MaintenanceTask, PartUsed, Snapshot, Vehicle } from '../../shared/types.ts';
-import { Field, FormError, Layout, segmentedKeys, StatusChip, useWide } from '../components.tsx';
+import { EditHint, Field, FormError, Layout, segmentedKeys, StatusChip, useWide } from '../components.tsx';
 import { describeDueShort, describeInterval, formatDate, formatKm, formatMoney, parseNumber, taskName } from '../format.ts';
 import { useT } from '../i18n.ts';
 import { makeAsName, VehicleIcon } from '../brands.tsx';
 import { Icon } from '../icons.tsx';
 import { online, useStore } from '../store.ts';
 import { showToast } from '../feedback.ts';
+import { FuelSection } from './Fuel.tsx';
 import { describePart } from './Workshop.tsx';
 
 /** Phones show the latest few History entries; the rest are one tap away. */
@@ -19,16 +20,6 @@ const HISTORY_PREVIEW = 5;
 type HistoryEntry =
   | { kind: 'service'; id: string; date: string; odometer: number | null; text: string; notes: string | null; partsUsed: PartUsed[]; performedBy: PerformedBy; totalCost: number | null; repair: string | null }
   | { kind: 'reading'; id: string; date: string; odometer: number };
-
-/** Says a History entry can be changed: the whole row opens its edit form. */
-function EditHint() {
-  const t = useT();
-  return (
-    <span className="edit-hint">
-      <Icon name="pencil" /> {t.vehicle.editShort}
-    </span>
-  );
-}
 
 /** Maintenance Tasks, one per line: status, name, interval, when due and when last done. */
 function TaskList({ due, tasks, owned }: { due: DueInfo[]; tasks: Map<string, MaintenanceTask>; owned: boolean }) {
@@ -170,14 +161,14 @@ function SetupRow({ task, today, points, editing, onEdit }: { task: MaintenanceT
   );
 }
 
-type Tab = 'plan' | 'history' | 'specs' | 'parts';
-const TABS: Tab[] = ['plan', 'history', 'specs', 'parts'];
+type Tab = 'plan' | 'history' | 'specs' | 'parts' | 'fuel';
+const TABS: Tab[] = ['plan', 'history', 'specs', 'parts', 'fuel'];
 
 /** The tab last used on this vehicle, kept for the session so coming back from a task lands where you were. */
-function savedTab(vehicleId: string): Tab {
+function savedTab(vehicleId: string, tabs: Tab[]): Tab {
   try {
     const saved = sessionStorage.getItem(`vehicle-tab-${vehicleId}`);
-    return TABS.find((x) => x === saved) ?? 'plan';
+    return tabs.find((x) => x === saved) ?? 'plan';
   } catch {
     return 'plan';
   }
@@ -198,9 +189,12 @@ export function VehiclePage({ vehicle, snapshot, openSetup = false }: { vehicle:
   const vehicleParts = snapshot.vehicleParts.filter((p) => p.vehicleId === vehicle.id);
   const partCount = vehicleParts.length;
   const toBuyCount = vehicleParts.filter((p) => p.toBuy).length;
+  // An electric vehicle has no fuel log.
+  const hasFuel = vehicle.fuel !== 'electric';
+  const tabs = hasFuel ? TABS : TABS.filter((x) => x !== 'fuel');
   const [allHistory, setAllHistory] = useState(false);
   const wide = useWide();
-  const [tab, setTabState] = useState<Tab>(() => (openSetup ? 'plan' : savedTab(vehicle.id)));
+  const [tab, setTabState] = useState<Tab>(() => (openSetup ? 'plan' : savedTab(vehicle.id, tabs)));
   const setupBlock = useRef<HTMLDivElement>(null);
   function setTab(next: Tab) {
     setTabState(next);
@@ -308,7 +302,7 @@ export function VehiclePage({ vehicle, snapshot, openSetup = false }: { vehicle:
 
           {wide ? null : (
             <div className="segmented tabs" role="tablist" aria-label={t.vehicle.tabsLabel} onKeyDown={segmentedKeys}>
-              {TABS.map((name) => (
+              {tabs.map((name) => (
                 <button type="button" key={name} role="tab" id={`tab-${name}`} aria-selected={tab === name} className={tab === name ? 'on' : ''} onClick={() => setTab(name)}>
                   {t.vehicle.tabs[name]}
                 </button>
@@ -380,6 +374,12 @@ export function VehiclePage({ vehicle, snapshot, openSetup = false }: { vehicle:
               </li>
             </ul>
           </section>
+
+          {hasFuel ? (
+            <section {...panel('fuel')} aria-labelledby={wide ? undefined : 'tab-fuel'}>
+              <FuelSection vehicle={vehicle} snapshot={snapshot} pending={pending} />
+            </section>
+          ) : null}
 
           <section {...panel('history')} aria-labelledby={wide ? undefined : 'tab-history'}>
             <h2>{t.vehicle.history}</h2>

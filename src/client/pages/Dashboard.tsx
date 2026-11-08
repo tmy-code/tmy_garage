@@ -1,10 +1,11 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { daysBetween, todayIso } from '../../shared/dates.ts';
 import { usageOf, vehicleDue } from '../../shared/due.ts';
+import { averageConsumption, consumptionOf } from '../../shared/fuel.ts';
 import type { Snapshot, Vehicle } from '../../shared/types.ts';
 import { upcoming, type Upcoming } from '../../shared/upcoming.ts';
 import { FormError, Layout, NeedsConnection } from '../components.tsx';
-import { formatDate, formatDueIn, formatKm, parseNumber, taskName } from '../format.ts';
+import { formatDate, formatDueIn, formatDecimal, formatKm, parseNumber, taskName } from '../format.ts';
 import { useT, type Messages } from '../i18n.ts';
 import { VehicleIcon } from '../brands.tsx';
 import { Icon } from '../icons.tsx';
@@ -131,6 +132,11 @@ export function ManageGaragePage({ snapshot }: { snapshot: Snapshot }) {
 function VehicleCard({ vehicle, items, snapshot, today }: { vehicle: Vehicle; items: Upcoming[]; snapshot: Snapshot; today: string }) {
   const t = useT();
   const usage = useMemo(() => usageOf(snapshot, vehicle.id), [snapshot, vehicle.id]);
+  // The average over all full tanks of this Vehicle; nothing until there are two with a known odometer.
+  const average = useMemo(
+    () => averageConsumption(consumptionOf(snapshot.fillups.filter((f) => f.vehicleId === vehicle.id)).values()),
+    [snapshot.fillups, vehicle.id],
+  );
   const reading = items.find((i) => i.kind === 'reading');
   const due = items.filter((i) => i.kind !== 'reading');
   // Tasks never done have no due date, so "nothing due" would be a guess: say how many cannot be reminded yet.
@@ -146,6 +152,7 @@ function VehicleCard({ vehicle, items, snapshot, today }: { vehicle: Vehicle; it
           <VehicleIcon vehicle={vehicle} /> {vehicle.name}
         </h2>
         {usage.latest ? <span className="muted">{formatKm(usage.latest.odometer)}</span> : null}
+        {average !== null ? <span className="muted vehicle-consumption">{t.fuel.consumption(formatDecimal(average, 1, t))}</span> : null}
       </a>
       {vehicle.status === 'owned' ? (
         <QuickReading vehicle={vehicle} latest={usage.latest?.odometer ?? null} today={today} />

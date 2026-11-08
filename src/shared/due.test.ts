@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addMonths, daysBetween } from './dates.ts';
-import { computeDue, effectiveInterval, estimateOdometerAt, estimateUsage, vehicleDue, type Usage } from './due.ts';
+import { computeDue, effectiveInterval, estimateOdometerAt, estimateUsage, pointsOf, usageOf, vehicleDue, type Usage } from './due.ts';
 import type { MaintenanceTask, Service, Snapshot } from './types.ts';
 
 function task(overrides: Partial<MaintenanceTask> = {}): MaintenanceTask {
@@ -159,7 +159,7 @@ describe('computeDue', () => {
   it('leaves a Service logged without an odometer out of the distance, keeping its date', () => {
     const coolant = task({ id: 'coolant', intervalKm: null, intervalMonths: 36 });
     const services: Service[] = [service('2026-01-01', 10_000), { ...service('2026-07-14', 0, ['coolant']), odometer: null }];
-    const snapshot = { tasks: [coolant], services, readings: [], inspections: [], partSpecs: [] } as unknown as Snapshot;
+    const snapshot = { tasks: [coolant], services, readings: [], fillups: [], inspections: [], partSpecs: [] } as unknown as Snapshot;
     const { usage, due } = vehicleDue(snapshot, 'bike', '2026-08-01');
     expect(usage.latest).toEqual({ date: '2026-01-01', odometer: 10_000 });
     expect(due[0]).toMatchObject({ lastDone: { date: '2026-07-14', odometer: null }, timeDueDate: '2029-07-14', status: 'ok' });
@@ -226,6 +226,7 @@ describe('vehicleDue', () => {
       readings: [{ id: 'r1', vehicleId: 'bike', date: '2026-10-01', odometer: 21_500 }],
       specLines: [],
       vehicleParts: [],
+      fillups: [],
       purchases: [],
       documents: [],
       catalogue: [],
@@ -247,6 +248,7 @@ describe('vehicleDue', () => {
       readings: [],
       specLines: [],
       vehicleParts: [],
+      fillups: [],
       purchases: [],
       documents: [],
       catalogue: [],
@@ -277,5 +279,42 @@ describe('estimateOdometerAt', () => {
   });
   it('goes forward at the recent rate after the last value', () => {
     expect(estimateOdometerAt(points, '2026-04-01')).toBe(13_000);
+  });
+});
+
+describe('pointsOf and usageOf with fill-ups', () => {
+  const fillup = (id: string, vehicleId: string, date: string, odometer: number | null) => ({ id, vehicleId, date, odometer, litres: 40, totalPaid: 68, fullTank: true, notes: null });
+  const snapshot: Snapshot = {
+    vehicles: [],
+    tasks: [],
+    services: [service('2026-01-01', 10_000)],
+    readings: [{ id: 'r1', vehicleId: 'bike', date: '2026-02-01', odometer: 11_000 }],
+    specLines: [],
+    vehicleParts: [],
+    fillups: [fillup('f1', 'bike', '2026-03-01', 12_000), fillup('f2', 'bike', '2026-03-05', null), fillup('f3', 'other', '2026-03-09', 99_999)],
+    purchases: [],
+    documents: [],
+    catalogue: [],
+  };
+
+  it('includes the fill-ups of the vehicle with a distance, and skips the others', () => {
+    expect(pointsOf(snapshot, 'bike')).toEqual([
+      { date: '2026-02-01', odometer: 11_000 },
+      { date: '2026-01-01', odometer: 10_000 },
+      { date: '2026-03-01', odometer: 12_000 },
+    ]);
+  });
+
+  it('leaves out the record being edited, whichever kind it is', () => {
+    expect(pointsOf(snapshot, 'bike', 'f1')).toHaveLength(2);
+    expect(pointsOf(snapshot, 'bike', 'r1')).toHaveLength(2);
+    expect(pointsOf(snapshot, 'bike', 's-2026-01-01')).toHaveLength(2);
+  });
+
+  it('gives the latest value and a rate from fill-ups alone', () => {
+    const only: Snapshot = { ...snapshot, services: [], readings: [], fillups: [fillup('a', 'bike', '2026-01-01', 10_000), fillup('b', 'bike', '2026-01-31', 11_500)] };
+    const usage = usageOf(only, 'bike');
+    expect(usage.latest).toEqual({ date: '2026-01-31', odometer: 11_500 });
+    expect(usage.kmPerDay).toBeCloseTo(50, 10);
   });
 });

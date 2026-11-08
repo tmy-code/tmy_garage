@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { cleanSpecs, PART_CATEGORIES, specsProblem } from './catalogue.ts';
+import { FUEL_LIMITS, fillupProblem } from './fuel.ts';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected a date like 2026-10-24');
 const odometer = z.number().int().min(0).max(5_000_000);
@@ -295,6 +296,32 @@ export const odometerReadingInput = z.object({
   odometer,
 });
 
+export const fillupInput = z
+  .object({
+    id: clientId,
+    vehicleId: z.string().min(1),
+    date: isoDate,
+    odometer: odometer.nullish().transform((v) => v ?? null),
+    litres: z.number().positive(),
+    totalPaid: z.number().min(0),
+    fullTank: z.boolean().default(true),
+    notes: optionalText(1000),
+  })
+  .superRefine((f, ctx) => {
+    const problem = fillupProblem(f);
+    if (problem === 'litres') {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['litres'], message: `Litres must be between ${FUEL_LIMITS.litresMin} and ${FUEL_LIMITS.litresMax}` });
+    } else if (problem === 'totalPaid') {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['totalPaid'], message: `Total paid must be at most ${FUEL_LIMITS.totalMax}` });
+    } else if (problem === 'pricePerLitre') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['totalPaid'],
+        message: `The price per litre must be between ${FUEL_LIMITS.pricePerLitreMin} and ${FUEL_LIMITS.pricePerLitreMax}, check the litres and the amount`,
+      });
+    }
+  });
+
 /** Document details; the file itself is sent alongside as multipart form data. */
 export const documentInput = z.object({
   type: documentType,
@@ -324,3 +351,4 @@ export type SellInput = z.infer<typeof sellInput>;
 export type TaskInput = z.infer<typeof taskInput>;
 export type ServiceInput = z.infer<typeof serviceInput>;
 export type OdometerReadingInput = z.infer<typeof odometerReadingInput>;
+export type FillupInput = z.infer<typeof fillupInput>;

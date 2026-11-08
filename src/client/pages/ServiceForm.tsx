@@ -1,11 +1,12 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { todayIso } from '../../shared/dates.ts';
-import { effectiveInterval, vehicleDue } from '../../shared/due.ts';
+import { checkOdometer, findDuplicateService } from '../../shared/consistency.ts';
+import { effectiveInterval, pointsOf, vehicleDue } from '../../shared/due.ts';
 import { PART_CATEGORIES, type PartCategory } from '../../shared/catalogue.ts';
 import type { PartUnit, PerformedBy, ServiceKind } from '../../shared/schemas.ts';
 import type { OdometerReading, PartUsed, Service, Snapshot, Vehicle, VehiclePart } from '../../shared/types.ts';
 import { newId } from '../api.ts';
-import { confirmDelete, Field, FormError, Layout, segmentedKeys, StatusChip } from '../components.tsx';
+import { confirmDelete, ConsistencyWarnings, Field, FormError, Layout, segmentedKeys, StatusChip } from '../components.tsx';
 import { formatKm, formatMoney, formatQuantity, matchesQuery, parseNumber, taskName } from '../format.ts';
 import { showToast } from '../feedback.ts';
 import { useT, type Messages } from '../i18n.ts';
@@ -129,8 +130,16 @@ export function ServiceForm({
     const task = tasks.get(id);
     return task !== undefined && effectiveInterval(task).km !== null;
   });
-  const lowerThanLatest =
-    odometer !== null && !Number.isNaN(odometer) && usage.latest && date >= usage.latest.date && odometer < usage.latest.odometer;
+  const validOdometer = odometer !== null && Number.isInteger(odometer) && odometer >= 0 ? odometer : null;
+  // Warnings only: a value that looks off can still be saved.
+  const check = useMemo(
+    () => (validOdometer === null ? null : checkOdometer(pointsOf(snapshot, vehicle.id, existing?.id), { date, odometer: validOdometer })),
+    [snapshot, vehicle.id, existing?.id, date, validOdometer],
+  );
+  const duplicate = useMemo(
+    () => findDuplicateService(snapshot.services, { vehicleId: vehicle.id, date, odometer: validOdometer }, existing?.id),
+    [snapshot.services, vehicle.id, date, validOdometer, existing?.id],
+  );
   const back = `/vehicles/${vehicle.id}`;
   const pending = existing ? outbox.some((op) => op.data.id === existing.id) : false;
 
@@ -304,14 +313,12 @@ export function ServiceForm({
               label={t.service.odometer}
               error={odometerError}
               hint={
-                lowerThanLatest
-                  ? t.service.lowerThanLatest(formatKm(usage.latest!.odometer))
-                  : [
-                      usage.latest ? t.service.lastReading(formatKm(usage.latest.odometer)) : null,
-                      needsOdometer || selected.size === 0 ? null : t.service.odometerOptional,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ') || undefined
+                [
+                  usage.latest ? t.service.lastReading(formatKm(usage.latest.odometer)) : null,
+                  needsOdometer || selected.size === 0 ? null : t.service.odometerOptional,
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || undefined
               }
             >
               <input
@@ -327,6 +334,7 @@ export function ServiceForm({
                 aria-invalid={odometerError ? true : undefined}
               />
             </Field>
+            <ConsistencyWarnings check={check} duplicate={duplicate} />
 
             <div className="row">
               <Field label={t.service.performedBy}>
@@ -501,9 +509,13 @@ export function ReadingForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
   const odometer = parseNumber(odometerText);
   const back = `/vehicles/${vehicle.id}`;
   const pending = existing ? outbox.some((op) => op.data.id === existing.id) : false;
-  // Compared with the latest other reading, so correcting the latest one doesn't warn against itself.
+  // The hint names the latest other reading, so correcting the latest one doesn't point at itself.
   const latest = existing ? latestOther(snapshot, vehicle.id, existing.id) : usage.latest;
-  const lowerThanLatest = odometer !== null && !Number.isNaN(odometer) && latest && date >= latest.date && odometer < latest.odometer;
+  const validOdometer = odometer !== null && Number.isInteger(odometer) && odometer >= 0 ? odometer : null;
+  const check = useMemo(
+    () => (validOdometer === null ? null : checkOdometer(pointsOf(snapshot, vehicle.id, existing?.id), { date, odometer: validOdometer })),
+    [snapshot, vehicle.id, existing?.id, date, validOdometer],
+  );
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -537,13 +549,7 @@ export function ReadingForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
         <Field
           label={t.service.odometer}
           error={odometerError}
-          hint={
-            lowerThanLatest
-              ? t.service.lowerThanLatest(formatKm(latest!.odometer))
-              : latest
-                ? t.service.lastReading(formatKm(latest.odometer))
-                : undefined
-          }
+          hint={latest ? t.service.lastReading(formatKm(latest.odometer)) : undefined}
         >
           <input
             inputMode="numeric"
@@ -558,6 +564,7 @@ export function ReadingForm({ vehicle, snapshot, existing }: { vehicle: Vehicle;
             aria-invalid={odometerError ? true : undefined}
           />
         </Field>
+        <ConsistencyWarnings check={check} />
         <FormError error={error} />
         <button type="submit" className="button button-primary button-block">
           {existing ? t.service.saveChanges : t.service.saveReading}

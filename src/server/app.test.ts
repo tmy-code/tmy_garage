@@ -297,6 +297,81 @@ describe('services and readings (replayed by the offline send queue)', () => {
   });
 });
 
+describe('fuel log (replayed by the offline send queue)', () => {
+  const fillupBody = (vehicleId: string, overrides: object = {}) => ({
+    id: 'fill-00001',
+    vehicleId,
+    date: '2026-10-20',
+    odometer: 18_500,
+    litres: 42.1,
+    totalPaid: 71.2,
+    fullTank: true,
+    notes: null,
+    ...overrides,
+  });
+
+  it('creates a Fill-up, and replaying the same id updates the one row', async () => {
+    const bike = await createVehicle();
+    const body = fillupBody(bike.id);
+    expect((await call('PUT', '/api/fillups/fill-00001', body)).status).toBe(200);
+    expect((await snapshot()).fillups).toEqual([body]);
+    await call('PUT', '/api/fillups/fill-00001', body);
+    expect((await snapshot()).fillups).toHaveLength(1);
+    const changed = fillupBody(bike.id, { litres: 40, totalPaid: 68, fullTank: false, odometer: null, notes: 'Motorway' });
+    expect((await call('PUT', '/api/fillups/fill-00001', changed)).status).toBe(200);
+    expect((await snapshot()).fillups).toEqual([changed]);
+  });
+
+  it('refuses figures that look like typos', async () => {
+    const bike = await createVehicle();
+    for (const overrides of [{ litres: 0 }, { litres: 500, totalPaid: 800 }, { litres: 40, totalPaid: 2000 }, { date: '20/10/2026' }]) {
+      expect((await call('PUT', '/api/fillups/fill-00001', fillupBody(bike.id, overrides))).status).toBe(422);
+    }
+    expect((await snapshot()).fillups).toEqual([]);
+  });
+
+  it('says what is wrong with the price per litre', async () => {
+    const bike = await createVehicle();
+    const res = await call('PUT', '/api/fillups/fill-00001', fillupBody(bike.id, { litres: 40, totalPaid: 2000 }));
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as { error: string }).error).toContain('price per litre');
+  });
+
+  it('refuses an id that does not match the address', async () => {
+    const bike = await createVehicle();
+    expect((await call('PUT', '/api/fillups/fill-00002', fillupBody(bike.id))).status).toBe(400);
+  });
+
+  it('returns 404 for an unknown vehicle', async () => {
+    expect((await call('PUT', '/api/fillups/fill-00001', fillupBody('nope'))).status).toBe(404);
+  });
+
+  it('refuses an id that belongs to another Vehicle', async () => {
+    const first = await createVehicle('First');
+    const second = await createVehicle('Second');
+    await call('PUT', '/api/fillups/fill-00001', fillupBody(first.id));
+    expect((await call('PUT', '/api/fillups/fill-00001', fillupBody(second.id))).status).toBe(409);
+  });
+
+  it('deletes a Fill-up, then says it is gone', async () => {
+    const bike = await createVehicle();
+    await call('PUT', '/api/fillups/fill-00001', fillupBody(bike.id));
+    expect((await call('DELETE', '/api/fillups/fill-00001')).status).toBe(204);
+    expect((await snapshot()).fillups).toEqual([]);
+    expect((await call('DELETE', '/api/fillups/fill-00001')).status).toBe(404);
+  });
+
+  it('never shows or deletes another Garage Fill-ups', async () => {
+    db.prepare(`INSERT INTO garages (id, name) VALUES ('friend', 'Friend')`).run();
+    const friendApp = createApp(db, 'friend');
+    const bike = await createVehicle('Mine');
+    await call('PUT', '/api/fillups/fill-00001', fillupBody(bike.id));
+    expect(((await (await friendApp.request('/api/snapshot')).json()) as Snapshot).fillups).toEqual([]);
+    expect((await friendApp.request('/api/fillups/fill-00001', { method: 'DELETE' })).status).toBe(404);
+    expect((await snapshot()).fillups).toHaveLength(1);
+  });
+});
+
 describe('spec lines and the plan templates', () => {
   it('keeps a Vehicle’s spec lines by group, one label once, and lists them in the snapshot', async () => {
     const bike = await createVehicle();
@@ -1056,6 +1131,27 @@ describe('migrations', () => {
       { id: 'h', category: null },
     ]);
     migrated.close();
+  });
+});
+
+describe('fuel log migration', () => {
+  it('adds the fill-ups table and leaves the data already there alone', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'garage-fuel-'));
+    try {
+      const path = join(dir, 'garage.sqlite');
+      // 38 migrations came before the fuel log.
+      const old = openDatabase(path, undefined, 38);
+      old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v1', 'default', 'motorcycle', 'Old bike')`);
+      old.close();
+      const migrated = openDatabase(path);
+      expect(migrated.prepare('SELECT id FROM vehicles').all()).toEqual([{ id: 'v1' }]);
+      expect(migrated.prepare('SELECT count(*) AS n FROM fuel_fillups').get()).toEqual({ n: 0 });
+      migrated.exec(`INSERT INTO fuel_fillups (id, vehicle_id, date, litres, total_paid) VALUES ('f1', 'v1', '2026-10-01', 40, 68)`);
+      expect(migrated.prepare('SELECT odometer, full_tank, notes FROM fuel_fillups').get()).toEqual({ odometer: null, full_tank: 1, notes: null });
+      migrated.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

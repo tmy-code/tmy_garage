@@ -17,6 +17,7 @@ import {
   documentInput,
   documentOwner,
   odometerReadingInput,
+  fillupInput,
   ownPartInput,
   sellInput,
   garagePageInput,
@@ -26,6 +27,7 @@ import {
   specLineInput,
 } from '../shared/schemas.ts';
 import type {
+  Fillup,
   GarageDocument,
   MaintenanceTask,
   OdometerReading,
@@ -103,7 +105,18 @@ const toTask = (r: Row): MaintenanceTask => ({
 
 const toReading = (r: Row): OdometerReading => ({ id: r.id, vehicleId: r.vehicle_id, date: r.date, odometer: r.odometer });
 
-const toSpecLine = (r: Row): SpecLine => ({
+const toFillup = (r: Row): Fillup => ({
+  id: r.id,
+  vehicleId: r.vehicle_id,
+  date: r.date,
+  odometer: r.odometer,
+  litres: r.litres,
+  totalPaid: r.total_paid,
+  fullTank: r.full_tank === 1,
+  notes: r.notes,
+});
+
+const toSpecLine =(r: Row): SpecLine => ({
   id: r.id,
   vehicleId: r.vehicle_id,
   label: r.label,
@@ -263,6 +276,7 @@ function garageReader(db: DatabaseSync, garageId: string) {
       tasks: taskList,
       services,
       readings,
+      fillups: ownedRows('fuel_fillups').map(toFillup),
       specLines: ownedRows('spec_lines').map(toSpecLine),
       vehicleParts: ownedRows('vehicle_parts').map(toVehiclePart),
       purchases: ownedRows('purchases').map(toPurchase),
@@ -284,7 +298,7 @@ export const ANDROID_APP_ORIGIN = 'https://localhost';
 
 /**
  * The HTTP API. Every query is scoped to one Garage; until users exist, that is the default Garage.
- * Services and Odometer Readings are written with PUT and a client-generated id, so the phone's
+ * Services, Odometer Readings and Fill-ups are written with PUT and a client-generated id, so the phone's
  * offline send queue can safely replay them.
  */
 export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID, { uploadsDir }: AppOptions = {}): Hono {
@@ -1090,6 +1104,32 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       .get(id, garageId);
     if (!row) throw new HttpError(404, 'Odometer Reading not found');
     db.prepare('DELETE FROM odometer_readings WHERE id = ?').run(id);
+    return c.body(null, 204);
+  });
+
+  // --- Fuel log (offline-capable) ---
+
+  app.put('/api/fillups/:id', async (c) => {
+    const f = await parse(c, fillupInput);
+    if (f.id !== c.req.param('id')) throw new HttpError(400, 'Id mismatch');
+    vehicleOrThrow(f.vehicleId);
+    const existing = db.prepare('SELECT vehicle_id FROM fuel_fillups WHERE id = ?').get(f.id) as Row | undefined;
+    if (existing && existing.vehicle_id !== f.vehicleId) throw new HttpError(409, 'Fill-up belongs to another Vehicle');
+    db.prepare(
+      `INSERT INTO fuel_fillups (id, vehicle_id, date, odometer, litres, total_paid, full_tank, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (id) DO UPDATE SET date = excluded.date, odometer = excluded.odometer, litres = excluded.litres,
+         total_paid = excluded.total_paid, full_tank = excluded.full_tank, notes = excluded.notes`,
+    ).run(f.id, f.vehicleId, f.date, f.odometer, f.litres, f.totalPaid, f.fullTank ? 1 : 0, f.notes);
+    return c.json(f);
+  });
+
+  app.delete('/api/fillups/:id', (c) => {
+    const id = c.req.param('id');
+    const row = db
+      .prepare('SELECT f.id FROM fuel_fillups f JOIN vehicles v ON v.id = f.vehicle_id WHERE f.id = ? AND v.garage_id = ?')
+      .get(id, garageId);
+    if (!row) throw new HttpError(404, 'Fill-up not found');
+    db.prepare('DELETE FROM fuel_fillups WHERE id = ?').run(id);
     return c.body(null, 204);
   });
 

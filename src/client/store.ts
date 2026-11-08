@@ -4,7 +4,7 @@ import type { Snapshot } from '../shared/types.ts';
 import { normalizeSnapshot } from '../shared/workshop.ts';
 import { ApiError, NetworkError, request, VersionError } from './api.ts';
 import { isAndroidApp } from './native.ts';
-import { applyOutbox, enqueueOp, opRequest, type OutboxOp } from './outbox.ts';
+import { applyOutbox, enqueueOp, opDeletePath, opRequest, type OutboxOp } from './outbox.ts';
 import { serverAddress, setServerAddress } from './server.ts';
 
 export interface StoreState {
@@ -135,7 +135,7 @@ export function sync(): Promise<void> {
   return flush();
 }
 
-/** Saves a Service or Odometer Reading: shown at once, sent to the server now or when back in range. */
+/** Saves a Service, Odometer Reading or Fill-up: shown at once, sent to the server now or when back in range. */
 export async function enqueue(op: OutboxOp): Promise<void> {
   update({ outbox: enqueueOp(state.outbox, op) });
   await persist('outbox', state.outbox);
@@ -143,7 +143,7 @@ export async function enqueue(op: OutboxOp): Promise<void> {
 }
 
 /**
- * Takes back a Service or Odometer Reading just created: dropped from the queue if not sent yet,
+ * Takes back a Service, Odometer Reading or Fill-up just created: dropped from the queue if not sent yet,
  * otherwise deleted on the server (which needs a connection).
  */
 export async function undoCreate(op: OutboxOp): Promise<void> {
@@ -155,7 +155,7 @@ export async function undoCreate(op: OutboxOp): Promise<void> {
   }
   // Being sent right now: let it arrive, then delete it, so the two requests can't cross.
   if (inFlight) await flushing;
-  await online('DELETE', op.kind === 'service' ? `/api/services/${op.data.id}` : `/api/odometer-readings/${op.data.id}`);
+  await online('DELETE', opDeletePath(op));
 }
 
 /** Runs a change that needs a connection (vehicle and task setup), then refreshes the offline copy. */

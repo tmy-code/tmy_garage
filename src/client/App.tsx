@@ -7,6 +7,7 @@ import { SettingsPage } from './pages/Settings.tsx';
 import { catalogueOf } from '../shared/catalogue.ts';
 import { ReadingForm, ServiceForm } from './pages/ServiceForm.tsx';
 import { CopyTasks, SellForm, TaskForm, VehicleForm } from './pages/SetupForms.tsx';
+import { FillupForm } from './pages/Fuel.tsx';
 import { VehiclePage } from './pages/Vehicle.tsx';
 import { PartsPage, VehiclePartForm } from './pages/Parts.tsx';
 import { SpecsPage, TaskPage, WorkshopPage } from './pages/Workshop.tsx';
@@ -106,6 +107,8 @@ export function App() {
         return <ServiceForm key={subId} vehicle={vehicle} snapshot={snapshot} preselect={subId} />;
       case 'reading':
         return <ReadingForm vehicle={vehicle} snapshot={snapshot} />;
+      case 'fillup':
+        return <FillupForm vehicle={vehicle} snapshot={snapshot} />;
       case 'copy-tasks':
         return <CopyTasks vehicle={vehicle} snapshot={snapshot} />;
       case 'specs':
@@ -127,6 +130,12 @@ export function App() {
     const reading = snapshot.readings.find((r) => r.id === id);
     const owner = reading && snapshot.vehicles.find((v) => v.id === reading.vehicleId);
     if (reading && owner) return <ReadingForm key={reading.id} vehicle={owner} snapshot={snapshot} existing={reading} />;
+    return <NotFound what="page" />;
+  }
+  if (section === 'fillups' && sub === 'edit') {
+    const fillup = snapshot.fillups.find((f) => f.id === id);
+    const owner = fillup && snapshot.vehicles.find((v) => v.id === fillup.vehicleId);
+    if (fillup && owner) return <FillupForm key={fillup.id} vehicle={owner} snapshot={snapshot} existing={fillup} />;
     return <NotFound what="page" />;
   }
   if (section === 'services' && sub === 'edit') {
