@@ -95,6 +95,12 @@ export function estimateOdometerAt(points: OdometerPoint[], date: IsoDate): numb
   return Math.round(last.odometer + rate * daysBetween(last.date, date));
 }
 
+/** The odometer logged on exactly that day (the Mileage Log), the highest if there are several; null when none. */
+export function readingOn(snapshot: Snapshot, vehicleId: string, date: IsoDate): number | null {
+  const values = snapshot.readings.filter((r) => r.vehicleId === vehicleId && r.date === date).map((r) => r.odometer);
+  return values.length === 0 ? null : Math.max(...values);
+}
+
 /** Every odometer value logged for a Vehicle; `exceptId` leaves out the record being edited. */
 export function pointsOf(snapshot: Snapshot, vehicleId: string, exceptId?: string): OdometerPoint[] {
   const mine = <T extends { id: string; vehicleId: string }>(items: T[]) => items.filter((i) => i.vehicleId === vehicleId && i.id !== exceptId);

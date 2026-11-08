@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { todayIso } from '../../shared/dates.ts';
 import { checkOdometer, findDuplicateService } from '../../shared/consistency.ts';
-import { effectiveInterval, pointsOf, vehicleDue } from '../../shared/due.ts';
+import { effectiveInterval, pointsOf, readingOn, vehicleDue } from '../../shared/due.ts';
 import { PART_CATEGORIES, type PartCategory } from '../../shared/catalogue.ts';
 import type { PartUnit, PerformedBy, ServiceKind } from '../../shared/schemas.ts';
 import type { OdometerReading, PartUsed, Service, Snapshot, Vehicle, VehiclePart } from '../../shared/types.ts';
@@ -100,7 +100,10 @@ export function ServiceForm({
   const tasks = new Map(snapshot.tasks.map((task) => [task.id, task]));
 
   const [date, setDate] = useState(existing?.date ?? today);
-  const [odometerText, setOdometerText] = useState(existing ? String(existing.odometer ?? '') : '');
+  // A new Service starts from the odometer logged that day, when there is one; the owner can still change it.
+  const initialLogged = existing ? null : readingOn(snapshot, vehicle.id, date);
+  const [odometerText, setOdometerText] = useState(existing ? String(existing.odometer ?? '') : initialLogged === null ? '' : String(initialLogged));
+  const [fromLog, setFromLog] = useState<string | null>(initialLogged === null ? null : String(initialLogged));
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(existing?.taskIds ?? due.filter((d) => d.taskId === preselect).map((d) => d.taskId)),
   );
@@ -307,13 +310,29 @@ export function ServiceForm({
             </fieldset>
 
             <Field label={t.service.date}>
-              <input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} required />
+              <input
+                type="date"
+                value={date}
+                max={today}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setDate(next);
+                  // Follow the date while the km is empty or still the value taken from the log; never overwrite typing.
+                  if (!existing && (odometerText === '' || odometerText === fromLog)) {
+                    const logged = next === '' ? null : readingOn(snapshot, vehicle.id, next);
+                    setOdometerText(logged === null ? '' : String(logged));
+                    setFromLog(logged === null ? null : String(logged));
+                  }
+                }}
+                required
+              />
             </Field>
             <Field
               label={t.service.odometer}
               error={odometerError}
               hint={
                 [
+                  fromLog !== null && odometerText === fromLog ? t.service.odometerFromLog : null,
                   usage.latest ? t.service.lastReading(formatKm(usage.latest.odometer)) : null,
                   needsOdometer || selected.size === 0 ? null : t.service.odometerOptional,
                 ]
