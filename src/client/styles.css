@@ -132,12 +132,12 @@ section {
   display: flex;
   align-items: center;
   gap: 8px;
-  /* Both sides share the room equally so "Garage" stays centred; a wide side pushes it over rather than overlapping. */
-  flex: 1 1 0;
-  min-width: max-content;
+  /* The name sits at the left, as in the other apps; the end side takes the spare room and keeps the badge right. */
+  flex: none;
 }
 
 .topbar-end {
+  flex: 1;
   justify-content: flex-end;
 }
 
@@ -1210,6 +1210,12 @@ body > .banner {
   /* The menu takes the middle of the top bar; its first entry replaces the "Garage" home link. */
   .home-link {
     display: none;
+  }
+
+  /* Equal sides keep the menu centred. */
+  .topbar-side {
+    flex: 1 1 0;
+    min-width: max-content;
   }
 
   .tabbar {
