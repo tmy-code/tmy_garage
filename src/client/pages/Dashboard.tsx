@@ -268,6 +268,9 @@ function QuickReading({ vehicle, latest, today }: { vehicle: Vehicle; latest: nu
         <a className="button button-primary" href={`#/vehicles/${vehicle.id}/service`}>
           {t.vehicle.logService}
         </a>
+        <a className="button" href={`#/vehicles/${vehicle.id}/fillup`}>
+          {t.fuel.add}
+        </a>
         <button type="button" className="button" onClick={() => setOpen(true)}>
           {t.vehicle.odometerReading}
         </button>
