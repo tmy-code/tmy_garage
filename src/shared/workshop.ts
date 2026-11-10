@@ -25,6 +25,16 @@ export function groupByCategory(due: DueInfo[], tasks: Map<string, MaintenanceTa
   };
 }
 
+/** A name or tag compared loosely: case, accents and spacing aside. Used to match Notion values with the app's. */
+export function refKey(s: string | null | undefined): string {
+  return (s ?? '')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
 /**
  * Fills in what an older offline copy lacks. A phone may hold a snapshot (or queued Services) saved
  * before workshop data existed; screens can then rely on every field being there.
@@ -39,7 +49,17 @@ export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
       category: t.category ?? null,
       switchedOff: t.switchedOff ?? false,
       action: t.action ?? 'replace',
+      refTaskId: t.refTaskId ?? null,
+      notionPlanId: t.notionPlanId ?? null,
     })),
+    refTasks: (snapshot.refTasks ?? []).map((r) => ({ ...r, applicableIf: r.applicableIf ?? [], consumableTypeIds: r.consumableTypeIds ?? [], componentTypeIds: r.componentTypeIds ?? [], toolIds: r.toolIds ?? [], instructions: r.instructions ?? null })),
+    componentTypes: snapshot.componentTypes ?? [],
+    consumableTypes: snapshot.consumableTypes ?? [],
+    products: snapshot.products ?? [],
+    tools: snapshot.tools ?? [],
+    vehicleConsumables: (snapshot.vehicleConsumables ?? []).map((c) => ({ ...c, compatibleProductIds: c.compatibleProductIds ?? [], specification: c.specification ?? null })),
+    vehicleSpecs: snapshot.vehicleSpecs ?? [],
+    notion: snapshot.notion ?? null,
     services: snapshot.services.map(normalizeService),
     catalogue: (snapshot.catalogue ?? []).map((e) => ({ ...e, overrides: e.overrides ?? null, own: e.own ? { ...e.own, action: e.own.action ?? 'replace' } : null })),
     specLines: (snapshot.specLines ?? []).map((l) => ({ ...l, oem: l.oem ?? null, category: l.category ?? null })),
@@ -65,6 +85,8 @@ export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
       hasAc: v.hasAc ?? false,
       hasAirSuspension: v.hasAirSuspension ?? false,
       onGaragePage: v.onGaragePage ?? v.status === 'owned',
+      equipment: v.equipment ?? [],
+      notionPageId: v.notionPageId ?? null,
     })),
     fillups: (snapshot.fillups ?? []).map((f) => ({ ...f, odometer: f.odometer ?? null, notes: f.notes ?? null, fullTank: f.fullTank ?? true })),
     documents: snapshot.documents ?? [],
@@ -72,5 +94,5 @@ export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
 }
 
 export function normalizeService(service: Service): Service {
-  return { ...service, partsUsed: (service.partsUsed ?? []).map((p) => ({ description: p.description, partNumber: p.partNumber ?? null, quantity: p.quantity, unit: p.unit, price: p.price ?? null, partId: p.partId ?? null, ...(p.remember ? { remember: true } : {}) })), kind: service.kind ?? 'maintenance', title: service.title ?? null, category: service.category ?? null, performedBy: service.performedBy ?? 'diy', totalCost: service.totalCost ?? null };
+  return { ...service, partsUsed: (service.partsUsed ?? []).map((p) => ({ description: p.description, partNumber: p.partNumber ?? null, quantity: p.quantity, unit: p.unit, price: p.price ?? null, partId: p.partId ?? null, ...(p.consumableTypeId ? { consumableTypeId: p.consumableTypeId } : {}), ...(p.productId ? { productId: p.productId } : {}), ...(p.remember ? { remember: true } : {}) })), kind: service.kind ?? 'maintenance', title: service.title ?? null, category: service.category ?? null, performedBy: service.performedBy ?? 'diy', totalCost: service.totalCost ?? null };
 }

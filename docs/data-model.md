@@ -14,6 +14,7 @@ Read the section you need: use the table of contents below, not the whole file.
 | [3. Service History Log](#3-service-history-log) | `services`, `service_tasks`, `service_items`, `vehicle_parts`, `purchases`, `documents` |
 | [4. Mileage Log and fuel](#4-mileage-log-and-fuel) | `odometer_readings`, `fuel_fillups` |
 | [5. Worked out, not stored](#5-worked-out-not-stored) | Odometer, consumption, Due Date, Status |
+| [Notion referentials](#notion-referentials) | `ref_tasks`, types, `products`, `tools`, `vehicle_consumables`, `vehicle_specs`, `notion_state` |
 | [Todoist](#todoist) · [Deleting](#deleting-things) · [Offline copy](#the-offline-copy) · [Changing the model](#changing-the-data-model) | |
 
 ## Overview
@@ -90,6 +91,8 @@ Never deleted: sold, hidden from the garage page, or both.
 | `status` | Required. `owned` (default) or `sold`. Sold keeps its history and has nothing due. |
 | `sold_date`, `sold_odometer`, `sold_price` | Set when sold. |
 | `on_garage_page` | Required. Has a card on the garage page, whatever its status. Selling hides it; the owner can change that. |
+| `equipment` | Required, a JSON list of text (default `[]`). The equipment tags the owner picks in the Notion Véhicules database ("Transmission chaîne", "ABS"…). Written by the Notion pull only; it decides which catalogue tasks apply. |
+| `notion_page_id` | The Vehicle's page in the Notion Véhicules database, for the link on its page. Written by the pull. |
 
 Build columns decide which Plan Templates a new Vehicle gets:
 
@@ -142,11 +145,16 @@ Factory reference values for the workshop ("Engine oil: 10W-40, 3.2 L", "Drain p
 | `notes` | Instructions, torque values, part codes, links. |
 | `switched_off` | Required, yes/no. Paused: no Due Date. |
 | `template_code` | The Plan Template it came from, empty for the owner's own. Shown as a "Standard" badge. Unique per Vehicle. |
+| `ref_task_id` | → `ref_tasks`. Set when the Task follows the Notion catalogue: its `name`, `name_fr`, `action`, intervals and `notes` are then Notion's (read-only in the app, 409 `notion_owned`); `switched_off`, the baseline and `category` stay the app's. Unique per Vehicle. |
+| `notion_plan_id` | The Notion Plan page behind a linked Task, empty until one exists. Unique. |
+| `plan_auto` | Yes/no. 1 when the sync derived the Task (no Plan page yet), 0 for a Task made from a Plan page. |
+| `notion_removed` | Reserved (0). A Task is never hidden or deleted by the sync. |
 
 ### Plan Templates
 
 Built in [`catalogue.ts`](../src/shared/catalogue.ts) (listed in [plan-templates.md](plan-templates.md)): name in both languages, Action, Category, Interval, and the Build details it applies to; plus the owner's changes in `catalogue_parts`.
 
+- Once the Notion catalogue has rows (`ref_tasks`), **the Templates stop seeding** new Vehicles, "Add missing tasks from templates" does nothing, and "Add the usual specs" does nothing: Notion decides.
 - A **new Vehicle** gets the Templates that fit its Build, at the Template's Interval (shorter oil distance with a turbo).
 - A Template can **include** another (`includes`): logging fork seals also logs fork oil; the oil can be done alone. The server adds the included Task when the Service is saved.
 - After creation the Tasks are the Vehicle's own; changing a Template or the Build never changes them.
@@ -304,6 +312,25 @@ Always calculated, so they can't drift from the history. Code in [`src/shared`](
 | Due Date | From the last Service (or baseline): time Interval added to its date, distance Interval added to its odometer and projected to a date with the daily distance. The earlier of the two. A date from a distance is a projection, marked "≈". |
 | Status | `overdue` when either Interval is used up; `dueSoon` at 10% or less of either left; `ok` otherwise; `unknown` if never done; `paused` if switched off. A Fill-up never changes a Status. |
 
+## Notion referentials
+
+Owned by Notion ([ADR 0007](adr/0007-two-way-notion-sync.md)): the server pulls them from the owner's hand-made databases and the app only reads them (the phone gets them in the snapshot, read-only). Every table has `garage_id` (→ `garages`), `notion_id` (the Notion page; unique per garage, or per Vehicle for the two per-vehicle tables) and `notion_removed` (1 once the page left Notion: the row is hidden from the snapshot, never deleted, and shown again if the page returns). Relations between them hold the app's ids as a JSON list or a plain id, loose, without cascading keys.
+
+| Table | Holds |
+| --- | --- |
+| `ref_tasks` | The task catalogue: `name`, `action` (`inspect`/`replace`), `applicable_if` (equipment tags, all required; empty = every Vehicle), `default_km`, `default_months`, `consumable_type_ids`, `component_type_ids`, `tool_ids`, `instructions` (plain text). |
+| `ref_component_types` | `name`, `category`, `notes`. |
+| `consumable_types` | `name`, `category`, `family` (`fluid`/`part`), `notes`. |
+| `products` | `type_id`, `name`, `brand`, `reference`, `supplier`, `price` (a default, not a purchase), `notes`. |
+| `tools` | `name`, `kind`, `size`, `owned`, `price`, `notes`. |
+| `vehicle_consumables` | Per Vehicle (`vehicle_id`): `name`, `type_id`, `specification`, `oem_ref`, `capacity`, `quantity`, `compatible_product_ids`, `chosen_product_id`, `status` (`confirmed`/`to_confirm`). |
+| `vehicle_specs` | Per Vehicle: `label`, `component_type_id`, `category`, `value` (number or text), `unit`, `source`, `status`. Separate from `spec_lines`, which stay the app's own. A Notion page pointing at several Vehicles gives one row each. |
+| `notion_state` | One row per garage: `last_sync_at`, `last_error`, `warnings` (JSON list), `paused_tasks`. Shown in Settings. |
+
+`service_items` also has `consumable_type_id` and `product_id` (loose, set when a Service sends them), and `vehicle_parts` has `product_id` (loose).
+
+**What the pull does** (one transaction; any error changes nothing): copies the tables above by `notion_id`; sets each Vehicle's `equipment`; then for each owned Vehicle, creates a Task for every applicable catalogue task that has no Task yet (`plan_auto = 1`), honours explicit Plan pages (`plan_auto = 0`, the Plan's interval overrides the default), and adopts an unlinked Task with the same normalised name instead of duplicating it (Notion's interval replaces the app's only where Notion has a value). A Plan page that vanishes, or a Task that stops applying, unlinks the Task and pauses it: never deleted, history kept. A table is cleaned only from a complete read, and not when Notion returned no rows or when more than the larger of 3 and half of the linked rows would go.
+
 ## Todoist
 
 ### `todoist_tasks`
@@ -324,7 +351,8 @@ Foreign keys block deletion while rows still need it, except below; the server a
 | Deleting | What happens |
 | --- | --- |
 | Vehicle | Not possible: sell or hide it. |
-| Maintenance Task | Refused if a Service used it; otherwise goes. |
+| Maintenance Task | Refused if a Service used it; otherwise goes. Refused too (409 `notion_owned`) when it follows the Notion catalogue: it is paused or unlinked by the sync instead. |
+| Notion referential row | Never deleted by the app: hidden (`notion_removed`) when its page leaves Notion. |
 | Service | Its Task links, components and Documents go too. |
 | Spec Line | Goes; items for it keep everything, lose the link. |
 | Vehicle Part | Goes with its Purchases and receipts; past components keep their copy, lose the link. |
@@ -337,7 +365,7 @@ Foreign keys block deletion while rows still need it, except below; the server a
 
 The phone keeps one `Snapshot` ([`types.ts`](../src/shared/types.ts)) to work with no signal ([ADR 0001](adr/0001-offline-service-logging-via-send-queue.md)).
 
-- It holds Vehicles, Tasks, Services, readings, Fill-ups, Spec Lines, parts lists, Purchases and Template changes; Document details but not files.
+- It holds Vehicles (with their equipment), Tasks, Services, readings, Fill-ups, Spec Lines, parts lists, Purchases and Template changes; Document details but not files. It also holds the Notion referentials (catalogue, types, products, tools, per-Vehicle consumables and specs) and the last sync status, **read-only**: they need no send queue.
 - It is shaped for screens, not tables (a Service carries `taskIds` and `partsUsed`).
 - Services, Odometer Readings and Fill-ups can be logged offline: queued on the phone, sent on reconnect. Everything else needs a connection.
 - `normalizeSnapshot` in [`workshop.ts`](../src/shared/workshop.ts) fills what an older saved snapshot lacks (e.g. no Fill-ups) and drops removed fields.

@@ -309,6 +309,7 @@ section {
    for "+ Add" style buttons; .section-head is for a row's name with a control at the end of that row. */
 .heading-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   margin-bottom: 8px;
@@ -840,6 +841,52 @@ textarea {
 
 .nowrap {
   white-space: nowrap;
+}
+
+/* Read-only tags and badges from Notion: a vehicle's equipment, "Notion" and "To confirm" beside a spec. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+}
+
+/* On their own line under the spec's label. */
+.spec-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+/* A chip that follows a name or a figure on the same line. */
+.history-row :is(strong, span) > .chip {
+  margin-left: 8px;
+}
+
+.equipment-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+}
+
+/* A field the owner keeps in Notion: shown as text, not as an input. */
+.locked dl {
+  margin: 0;
+}
+
+.locked dd {
+  margin: 0 0 6px;
+}
+
+.locked {
+  display: grid;
+  gap: 2px;
+  padding: 10px 14px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
 }
 
 /* A search box above a list. */

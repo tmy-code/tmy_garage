@@ -36,6 +36,7 @@ function vehicle(id: string, overrides: Partial<Vehicle> = {}): Vehicle {
     soldDate: null,
     soldOdometer: null,
     soldPrice: 4000,
+    equipment: [],
     ...overrides,
   };
 }
@@ -94,6 +95,7 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     ],
     documents: [],
     catalogue: [],
+    refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], vehicleSpecs: [], notion: null,
     ...overrides,
   };
 }
@@ -109,10 +111,10 @@ describe('buildCopy', () => {
     expect(JSON.stringify(vehicles)).not.toContain('4000');
   });
 
-  it('copies Fluids and Parts specs of owned Vehicles, not torque or a sold Vehicle', () => {
-    const { specs } = buildCopy(snapshot(), TODAY, fr);
-    expect(specs.map((s) => s.appId)).toEqual(['s1']);
-    expect(specs[0]).toMatchObject({ group: 'Fluides', category: 'Moteur' });
+  it('no longer copies spec lines: the Caractéristiques database is frozen', () => {
+    const copy = buildCopy(snapshot(), TODAY, fr);
+    expect('specs' in copy).toBe(false);
+    expect(JSON.stringify(copy)).not.toContain('Ligne s1');
   });
 
   it('copies every item of owned Vehicles with its last price per unit and Due Date', () => {
@@ -120,7 +122,6 @@ describe('buildCopy', () => {
     expect(items.map((i) => i.appId)).toEqual(['p1', 'p2']);
     const [oil, other] = items;
     expect(oil).toMatchObject({
-      specAppId: 's1',
       unit: 'litre',
       state: 'À acheter',
       lastUnitPrice: 10.33,
@@ -128,8 +129,8 @@ describe('buildCopy', () => {
       dueDate: '2027-01-15',
       dueStatus: 'Dans les temps',
     });
-    // Its Spec Line is torque, which is not copied, so there is nothing to link to.
-    expect(other).toMatchObject({ specAppId: null, lastUnitPrice: null, task: null, dueDate: null });
+    expect(other).toMatchObject({ lastUnitPrice: null, task: null, dueDate: null });
+    expect('specAppId' in oil!).toBe(false);
   });
 
   it('never copies notes, shops or delivery fees', () => {

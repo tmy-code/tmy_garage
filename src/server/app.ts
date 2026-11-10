@@ -27,13 +27,21 @@ import {
   specLineInput,
 } from '../shared/schemas.ts';
 import type {
+  ComponentType,
+  ConsumableType,
   Fillup,
   GarageDocument,
   MaintenanceTask,
   OdometerReading,
+  NotionStatus,
   PartUsed,
+  Product,
   Purchase,
+  RefTask,
+  Tool,
+  VehicleConsumable,
   VehiclePart,
+  VehicleSpec,
   Service,
   Snapshot,
   Vehicle,
@@ -45,16 +53,22 @@ import { starterSpecs } from '../shared/spec-templates.ts';
 import { buildOfRow, catalogueEntries } from './catalogue-rows.ts';
 import type { VehicleInput, VehicleKind } from '../shared/schemas.ts';
 import { DEFAULT_GARAGE_ID } from './db.ts';
+import type { NotionSyncService } from './notion-sync.ts';
 
-type ErrorStatus = 400 | 404 | 409 | 413 | 415 | 422 | 503;
+type ErrorStatus = 400 | 404 | 409 | 413 | 415 | 422 | 502 | 503;
 
 class HttpError extends Error {
   readonly status: ErrorStatus;
-  constructor(status: ErrorStatus, message: string) {
+  /** A machine-readable reason the screens can act on, such as 'notion_owned'. */
+  readonly code?: string;
+  constructor(status: ErrorStatus, message: string, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
+
+const notionOwned = () => new HttpError(409, 'This Task follows the Notion catalogue: change it in Notion', 'notion_owned');
 
 async function parse<T>(c: Context, schema: ZodType<T>): Promise<T> {
   const body = await c.req.json().catch(() => {
@@ -85,7 +99,20 @@ const toVehicle = (r: Row): Vehicle => ({
   soldDate: r.sold_date,
   soldOdometer: r.sold_odometer,
   soldPrice: r.sold_price,
+  equipment: parseJsonList(r.equipment),
+  notionPageId: r.notion_page_id,
 });
+
+/** A JSON list of text kept in one column. */
+function parseJsonList(value: unknown): string[] {
+  if (typeof value !== 'string') return [];
+  try {
+    const list: unknown = JSON.parse(value);
+    return Array.isArray(list) ? list.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
 
 const toTask = (r: Row): MaintenanceTask => ({
   id: r.id,
@@ -101,6 +128,84 @@ const toTask = (r: Row): MaintenanceTask => ({
   category: r.category,
   switchedOff: r.switched_off === 1,
   templateCode: r.template_code,
+  refTaskId: r.ref_task_id,
+  notionPlanId: r.notion_plan_id,
+});
+
+const toRefTask = (r: Row): RefTask => ({
+  id: r.id,
+  name: r.name,
+  action: r.action,
+  applicableIf: parseJsonList(r.applicable_if),
+  defaultKm: r.default_km,
+  defaultMonths: r.default_months,
+  consumableTypeIds: parseJsonList(r.consumable_type_ids),
+  componentTypeIds: parseJsonList(r.component_type_ids),
+  toolIds: parseJsonList(r.tool_ids),
+  instructions: r.instructions,
+  notionId: r.notion_id,
+});
+
+const toComponentType = (r: Row): ComponentType => ({ id: r.id, name: r.name, category: r.category, notes: r.notes, notionId: r.notion_id });
+
+const toConsumableType = (r: Row): ConsumableType => ({ id: r.id, name: r.name, category: r.category, family: r.family, notes: r.notes, notionId: r.notion_id });
+
+const toProduct = (r: Row): Product => ({
+  id: r.id,
+  typeId: r.type_id,
+  name: r.name,
+  brand: r.brand,
+  reference: r.reference,
+  supplier: r.supplier,
+  price: r.price,
+  notes: r.notes,
+  notionId: r.notion_id,
+});
+
+const toTool = (r: Row): Tool => ({
+  id: r.id,
+  name: r.name,
+  kind: r.kind,
+  size: r.size,
+  owned: r.owned === 1,
+  price: r.price,
+  notes: r.notes,
+  notionId: r.notion_id,
+});
+
+const toVehicleConsumable = (r: Row): VehicleConsumable => ({
+  id: r.id,
+  vehicleId: r.vehicle_id,
+  name: r.name,
+  typeId: r.type_id,
+  specification: r.specification,
+  oemRef: r.oem_ref,
+  capacity: r.capacity,
+  quantity: r.quantity,
+  compatibleProductIds: parseJsonList(r.compatible_product_ids),
+  chosenProductId: r.chosen_product_id,
+  status: r.status,
+  notionId: r.notion_id,
+});
+
+const toVehicleSpec = (r: Row): VehicleSpec => ({
+  id: r.id,
+  vehicleId: r.vehicle_id,
+  label: r.label,
+  componentTypeId: r.component_type_id,
+  category: r.category,
+  value: r.value,
+  unit: r.unit,
+  source: r.source,
+  status: r.status,
+  notionId: r.notion_id,
+});
+
+const toNotionStatus = (r: Row): NotionStatus => ({
+  lastSyncAt: r.last_sync_at,
+  lastError: r.last_error,
+  warnings: parseJsonList(r.warnings),
+  pausedTasks: r.paused_tasks,
 });
 
 const toReading = (r: Row): OdometerReading => ({ id: r.id, vehicleId: r.vehicle_id, date: r.date, odometer: r.odometer });
@@ -148,6 +253,8 @@ export const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
 export interface AppOptions {
   /** Where Document files are kept; uploads are refused when not set. */
   uploadsDir?: string;
+  /** The Notion sync; "Sync now" answers 503 when not set up on this server. */
+  notionSync?: NotionSyncService;
 }
 
 const toPartUsed = (r: Row): PartUsed => ({
@@ -157,6 +264,8 @@ const toPartUsed = (r: Row): PartUsed => ({
   unit: r.unit,
   price: r.price,
   partId: r.part_id,
+  ...(r.consumable_type_id ? { consumableTypeId: r.consumable_type_id } : {}),
+  ...(r.product_id ? { productId: r.product_id } : {}),
 });
 
 const toVehiclePart = (r: Row): VehiclePart => ({
@@ -215,6 +324,7 @@ function garageReader(db: DatabaseSync, garageId: string) {
   }
 
   function snapshot(): Snapshot {
+    const notionState = db.prepare('SELECT * FROM notion_state WHERE garage_id = ?').get(garageId) as Row | undefined;
     const vehicles = (db.prepare('SELECT * FROM vehicles WHERE garage_id = ? ORDER BY created_at').all(garageId) as Row[]).map(toVehicle);
     const tasks = db
       .prepare(
@@ -282,7 +392,21 @@ function garageReader(db: DatabaseSync, garageId: string) {
       purchases: ownedRows('purchases').map(toPurchase),
       documents: (db.prepare("SELECT * FROM documents WHERE garage_id = ? AND owner_kind IN ('vehicle', 'service', 'purchase') ORDER BY created_at").all(garageId) as Row[]).map(toDocument),
       catalogue: catalogueEntries(db, garageId),
+      // Notion's referentials, with the rows that vanished from Notion hidden.
+      refTasks: byGarage('ref_tasks').map(toRefTask),
+      componentTypes: byGarage('ref_component_types').map(toComponentType),
+      consumableTypes: byGarage('consumable_types').map(toConsumableType),
+      products: byGarage('products').map(toProduct),
+      tools: byGarage('tools').map(toTool),
+      vehicleConsumables: ownedRows('vehicle_consumables', 'x.notion_removed = 0').map(toVehicleConsumable),
+      vehicleSpecs: ownedRows('vehicle_specs', 'x.notion_removed = 0').map(toVehicleSpec),
+      notion: notionState ? toNotionStatus(notionState) : null,
     };
+  }
+
+  /** The visible rows of a Notion referential table, in the order they were first pulled. */
+  function byGarage(table: string): Row[] {
+    return db.prepare(`SELECT * FROM ${table} WHERE garage_id = ? AND notion_removed = 0 ORDER BY created_at, rowid`).all(garageId) as Row[];
   }
 
   return { ownedRows, snapshot };
@@ -301,7 +425,7 @@ export const ANDROID_APP_ORIGIN = 'https://localhost';
  * Services, Odometer Readings and Fill-ups are written with PUT and a client-generated id, so the phone's
  * offline send queue can safely replay them.
  */
-export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID, { uploadsDir }: AppOptions = {}): Hono {
+export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID, { uploadsDir, notionSync }: AppOptions = {}): Hono {
   const app = new Hono();
   const { ownedRows, snapshot } = garageReader(db, garageId);
   if (uploadsDir) mkdirSync(uploadsDir, { recursive: true });
@@ -400,7 +524,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
   }
 
   app.onError((error, c) => {
-    if (error instanceof HttpError) return c.json({ error: error.message }, error.status);
+    if (error instanceof HttpError) return c.json({ error: error.message, ...(error.code ? { code: error.code } : {}) }, error.status);
     console.error(error);
     return c.json({ error: 'Internal error' }, 500);
   });
@@ -416,7 +540,29 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
 
   app.get('/api/health', (c) => c.json({ ok: true }));
 
-  app.get('/api/snapshot', (c) => c.json(snapshot()));
+  /** Whether the Notion catalogue has rows: then it, not the built-in templates, decides a Vehicle's plan. */
+  function notionCatalogueActive(): boolean {
+    return (db.prepare('SELECT count(*) AS n FROM ref_tasks WHERE garage_id = ? AND notion_removed = 0').get(garageId) as { n: number }).n > 0;
+  }
+
+  app.get('/api/snapshot', (c) => {
+    const s = snapshot();
+    // With the sync set up but never run, the Settings card still shows (with nothing to report yet).
+    return c.json(s.notion === null && notionSync ? { ...s, notion: { lastSyncAt: null, lastError: null, warnings: [], pausedTasks: 0 } } : s);
+  });
+
+  // --- Notion sync (reference data from Notion; the token never leaves the server) ---
+
+  app.post('/api/notion/sync', async (c) => {
+    if (!notionSync) throw new HttpError(503, 'The Notion sync is not set up on this server');
+    if (notionSync.running()) throw new HttpError(409, 'A Notion sync is already running');
+    const dryRun = c.req.query('dryRun') === '1';
+    try {
+      return c.json(await notionSync.run({ dryRun }));
+    } catch (error) {
+      throw new HttpError(502, error instanceof Error ? error.message : 'The Notion sync failed');
+    }
+  });
 
   // --- Vehicles ---
 
@@ -458,7 +604,8 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(id, garageId, ...vehicleValues(v));
       // A new Vehicle starts with the plan templates that fit its Build; after that the plan is its own.
-      seedTasks(id, v);
+      // Once the Notion catalogue has rows it decides the plan instead (the sync derives the tasks).
+      if (!notionCatalogueActive()) seedTasks(id, v);
     });
     return c.json(toVehicle(vehicleOrThrow(id)), 201);
   });
@@ -532,6 +679,9 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
   app.post('/api/vehicles/:id/add-from-templates', (c) => {
     const vehicleId = c.req.param('id');
     const build = buildOfRow(vehicleOrThrow(vehicleId));
+    if (notionCatalogueActive()) {
+      return c.json({ added: 0, skipped: 'notion_catalogue', message: "The Notion catalogue decides this Vehicle's tasks: they are added when it syncs" });
+    }
     return c.json({ added: transaction(() => seedTasks(vehicleId, build)) }, 201);
   });
 
@@ -564,8 +714,12 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
 
   app.put('/api/tasks/:id', async (c) => {
     const id = c.req.param('id');
-    taskOrThrow(id);
+    const row = taskOrThrow(id);
     const t = await parse(c, taskInput);
+    // A Task that follows the Notion catalogue keeps Notion's name, action, intervals and notes; the rest stays editable.
+    if (row.ref_task_id && (t.name !== row.name || t.nameFr !== row.name_fr || t.action !== row.action || t.intervalKm !== row.interval_km || t.intervalMonths !== row.interval_months || t.notes !== row.notes)) {
+      throw notionOwned();
+    }
     db.prepare(
       `UPDATE maintenance_tasks SET name = ?, name_fr = ?, action = ?, interval_km = ?, interval_months = ?, baseline_date = ?,
          baseline_odometer = ?, category = ?, notes = ?, switched_off = ?
@@ -581,6 +735,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
   app.post('/api/tasks/:id/merge', async (c) => {
     const id = c.req.param('id');
     const duplicate = taskOrThrow(id);
+    if (duplicate.ref_task_id) throw notionOwned();
     const { intoTaskId } = await parse(c, mergeTaskInput);
     if (intoTaskId === id) throw new HttpError(422, 'Cannot merge a Task into itself');
     const kept = taskOrThrow(intoTaskId);
@@ -610,7 +765,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
 
   app.delete('/api/tasks/:id', (c) => {
     const id = c.req.param('id');
-    taskOrThrow(id);
+    if (taskOrThrow(id).ref_task_id) throw notionOwned();
     const used = db.prepare('SELECT COUNT(*) AS n FROM service_tasks WHERE task_id = ?').get(id) as { n: number };
     if (used.n > 0) throw new HttpError(409, 'This Maintenance Task appears in logged Services and cannot be deleted');
     db.prepare('DELETE FROM maintenance_tasks WHERE id = ?').run(id);
@@ -749,6 +904,8 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     const vehicleId = c.req.param('id');
     const build = buildOfRow(vehicleOrThrow(vehicleId));
     const { lang } = await parse(c, addStandardSpecsInput);
+    // The Notion specs and catalogue replace the usual lines once they exist.
+    if (notionCatalogueActive()) return c.json({ added: 0, skipped: 'notion_catalogue', message: 'The specs come from Notion now' });
     const added = transaction(() => {
       const lines = db.prepare('SELECT id, label, template_code FROM spec_lines WHERE vehicle_id = ?').all(vehicleId) as Row[];
       const tagged = new Set(lines.map((l) => l.template_code).filter((code) => code !== null));
@@ -1045,7 +1202,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       const link = db.prepare('INSERT INTO service_tasks (service_id, task_id) VALUES (?, ?)');
       for (const taskId of taskIds) link.run(s.id, taskId);
       db.prepare('DELETE FROM service_items WHERE service_id = ?').run(s.id);
-      const part = db.prepare('INSERT INTO service_items (service_id, sort, description, part_number, quantity, unit, price, part_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+      const part = db.prepare('INSERT INTO service_items (service_id, sort, description, part_number, quantity, unit, price, part_id, consumable_type_id, product_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
       // A part to keep goes on the Vehicle's list (once, whatever the replays), tied to the Service's Task when it has just one.
       const keep = db.prepare('INSERT OR IGNORE INTO vehicle_parts (id, vehicle_id, name, part_number, unit, quantity, price, task_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
       const listed = db.prepare('SELECT id FROM vehicle_parts WHERE id = ? AND vehicle_id = ?');
@@ -1060,7 +1217,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
         // A link to a part that is gone, or on another Vehicle, is dropped: the Service keeps its copy.
         return { ...p, remember: false, partId: partId !== null && listed.get(partId, s.vehicleId) ? partId : null };
       });
-      linked.forEach((p, i) => part.run(s.id, i, p.description, p.partNumber, p.quantity, p.unit, p.price, p.partId));
+      linked.forEach((p, i) => part.run(s.id, i, p.description, p.partNumber, p.quantity, p.unit, p.price, p.partId, p.consumableTypeId, p.productId));
       // Using a part that was still to buy means it was bought: no Purchase is invented, so it shows "no purchase recorded".
       const bought = db.prepare('UPDATE vehicle_parts SET to_buy = 0 WHERE id = ? AND vehicle_id = ?');
       for (const p of linked) if (p.partId !== null) bought.run(p.partId, s.vehicleId);

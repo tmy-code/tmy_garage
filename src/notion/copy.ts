@@ -1,4 +1,4 @@
-// What the Notion copy holds (ADR 0005): owned Vehicles, all their items, and their Fluids and Parts specs.
+// What the Notion copy pushes (ADR 0005, amended by 0007): owned Vehicles and all their items. The spec lines are no longer copied.
 // Pure: turns a snapshot into rows keyed by the app's ids, with no knowledge of the Notion API.
 import { vehicleDue, type DueInfo } from '../shared/due.ts';
 import type { IsoDate } from '../shared/dates.ts';
@@ -20,20 +20,9 @@ export interface VehicleRow {
   copiedOn: IsoDate;
 }
 
-export interface SpecRow {
-  appId: string;
-  vehicleAppId: string;
-  label: string;
-  value: string;
-  oem: string | null;
-  group: string;
-  category: string;
-}
-
 export interface ItemRow {
   appId: string;
   vehicleAppId: string;
-  specAppId: string | null;
   name: string;
   partNumber: string | null;
   unit: string;
@@ -47,12 +36,8 @@ export interface ItemRow {
 
 export interface NotionCopy {
   vehicles: VehicleRow[];
-  specs: SpecRow[];
   items: ItemRow[];
 }
-
-/** Only these Spec Line groups help with buying; torque and other figures stay out. */
-const COPIED_SPEC_GROUPS = new Set(['fluids', 'parts']);
 
 /** The Build in one line, in the app's own words: "Essence · Manuelle · Chaîne · Turbo". */
 export function buildSummary(v: Vehicle, t: Messages): string {
@@ -92,21 +77,6 @@ export function buildCopy(snapshot: Snapshot, today: IsoDate, t: Messages): Noti
     };
   });
 
-  const specs = snapshot.specLines
-    .filter((l) => ownedIds.has(l.vehicleId) && COPIED_SPEC_GROUPS.has(l.group))
-    .map(
-      (l): SpecRow => ({
-        appId: l.id,
-        vehicleAppId: l.vehicleId,
-        label: l.label,
-        value: l.value,
-        oem: l.oem,
-        group: t.workshop.specGroups[l.group],
-        category: t.workshop.partCategories[l.category ?? 'other'],
-      }),
-    );
-  const copiedSpecIds = new Set(specs.map((s) => s.appId));
-
   const tasks = new Map(snapshot.tasks.map((task) => [task.id, task]));
   const items = snapshot.vehicleParts
     .filter((p) => ownedIds.has(p.vehicleId))
@@ -120,7 +90,6 @@ export function buildCopy(snapshot: Snapshot, today: IsoDate, t: Messages): Noti
       return {
         appId: p.id,
         vehicleAppId: p.vehicleId,
-        specAppId: p.specLineId && copiedSpecIds.has(p.specLineId) ? p.specLineId : null,
         name: p.name,
         partNumber: p.partNumber,
         unit: t.parts.unitSingular[p.unit],
@@ -133,7 +102,7 @@ export function buildCopy(snapshot: Snapshot, today: IsoDate, t: Messages): Noti
       };
     });
 
-  return { vehicles, specs, items };
+  return { vehicles, items };
 }
 
 export const STATE_TO_BUY = 'À acheter';

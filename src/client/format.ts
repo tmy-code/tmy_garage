@@ -12,6 +12,18 @@ export function formatDate(iso: string, m: Messages = messages()): string {
   );
 }
 
+/** A date with its time ("10 Nov 2026, 09:00"), in the language's own style. */
+export function formatDateTime(iso: string, m: Messages = messages()): string {
+  return new Intl.DateTimeFormat(m.locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
+}
+
+/** A figure written in a text field ("12.5") shown in the language's style ("12,5"); anything else is left as it is. */
+export function localizeNumber(text: string | number, m: Messages = messages()): string {
+  const s = String(text).trim();
+  if (!/^-?\d+(\.\d+)?$/.test(s)) return s;
+  return new Intl.NumberFormat(m.locale, { maximumFractionDigits: 3 }).format(Number(s));
+}
+
 export function formatKm(km: number): string {
   return `${numberFormat.format(km)} km`;
 }

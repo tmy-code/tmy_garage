@@ -5,6 +5,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { todayIso } from '../shared/dates.ts';
 import { createApp, readSnapshot } from './app.ts';
 import { DEFAULT_GARAGE_ID, openDatabase } from './db.ts';
+import { createNotionSync } from './notion-sync.ts';
 import { syncTodoist, todoistClient } from './todoist.ts';
 
 // All configuration comes from the environment (set on the NAS), never from the code.
@@ -17,10 +18,15 @@ const todoistToken = process.env.TODOIST_API_TOKEN;
 const todoistProject = process.env.TODOIST_PROJECT_ID;
 /** How often the logbook is compared with Todoist. Todoist is only called when something changed. */
 const TODOIST_SYNC_MS = 10 * 60_000;
+/** Notion integration token and the page holding the owner's databases; without both the Notion sync is off (ADR 0007). */
+const notionToken = process.env.NOTION_TOKEN?.trim();
+const notionParentPageId = process.env.NOTION_PARENT_PAGE_ID?.trim();
 
 mkdirSync(dataDir, { recursive: true });
 const db = openDatabase(join(dataDir, 'garage.sqlite'), join(dataDir, 'backups'));
-const app = createApp(db, undefined, { uploadsDir: join(dataDir, 'uploads') });
+const notionSync =
+  notionToken && notionParentPageId ? createNotionSync({ db, garageId: DEFAULT_GARAGE_ID, token: notionToken, parentPageId: notionParentPageId }) : undefined;
+const app = createApp(db, undefined, { uploadsDir: join(dataDir, 'uploads'), notionSync });
 
 if (existsSync(clientDir)) {
   const indexHtml = readFileSync(join(clientDir, 'index.html'), 'utf8');
@@ -32,6 +38,8 @@ if (existsSync(clientDir)) {
 serve({ fetch: app.fetch, port }, () => {
   console.log(`tmy_garage listening on port ${port}, data in ${dataDir}`);
 });
+
+notionSync?.start();
 
 let todoistTimer: NodeJS.Timeout | undefined;
 if (todoistToken) {
@@ -49,6 +57,7 @@ if (todoistToken) {
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
     clearInterval(todoistTimer);
+    notionSync?.stop();
     db.close();
     process.exit(0);
   });

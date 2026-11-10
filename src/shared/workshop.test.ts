@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MaintenanceTask, Snapshot } from './types.ts';
 import type { DueInfo } from './due.ts';
-import { groupByCategory, normalizeSnapshot } from './workshop.ts';
+import { groupByCategory, normalizeSnapshot, refKey } from './workshop.ts';
 
 function task(overrides: Partial<MaintenanceTask>): MaintenanceTask {
   return {
@@ -52,6 +52,7 @@ const base: Snapshot = {
       soldDate: null,
       soldOdometer: null,
       soldPrice: null,
+      equipment: [],
     },
   ],
   tasks: [],
@@ -63,6 +64,7 @@ const base: Snapshot = {
   purchases: [],
   documents: [],
   catalogue: [],
+  refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], vehicleSpecs: [], notion: null,
 };
 
 describe('groupByCategory', () => {
@@ -104,5 +106,26 @@ describe('normalizeSnapshot', () => {
     expect(s.services[0]).toMatchObject({ kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null });
     expect(s.services[0]!.partsUsed).toEqual([{ description: 'Oil', partNumber: null, quantity: 1, unit: 'litre', price: 5, partId: null }]);
     expect(s.specLines).toEqual([]);
+  });
+
+  it('fills in the Notion referentials, equipment and status that an offline copy saved before the Notion sync lacks', () => {
+    const old = { vehicles: [{ id: 'v', status: 'owned' }], tasks: [{ id: 't' }], services: [], readings: [] } as unknown as Snapshot;
+    const s = normalizeSnapshot(old);
+    expect(s.vehicles[0]!.equipment).toEqual([]);
+    expect(s.tasks[0]).toMatchObject({ refTaskId: null, notionPlanId: null });
+    for (const key of ['refTasks', 'componentTypes', 'consumableTypes', 'products', 'tools', 'vehicleConsumables', 'vehicleSpecs'] as const) expect(s[key]).toEqual([]);
+    expect(s.notion).toBeNull();
+  });
+
+  it('keeps the consumable type and product of a part used when they are there', () => {
+    const queued = { vehicles: [], tasks: [], services: [{ id: 's', partsUsed: [{ description: 'Oil', quantity: 1, unit: 'litre', consumableTypeId: 'c1', productId: 'p1' }] }], readings: [] } as unknown as Snapshot;
+    expect(normalizeSnapshot(queued).services[0]!.partsUsed[0]).toMatchObject({ consumableTypeId: 'c1', productId: 'p1' });
+  });
+});
+
+describe('refKey', () => {
+  it('ignores case, accents and spacing', () => {
+    expect(refKey('  À  Confirmer ')).toBe('a confirmer');
+    expect(refKey(null)).toBe('');
   });
 });

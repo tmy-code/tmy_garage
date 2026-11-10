@@ -708,6 +708,147 @@ const MIGRATIONS: (string | ((db: DatabaseSync) => void))[] = [
   );
   CREATE INDEX fuel_fillups_vehicle ON fuel_fillups (vehicle_id, date);
 `,
+  `
+  -- The Notion sync (ADR 0007). Notion owns the referentials below; the app only reads them (rows gone from Notion are
+  -- hidden with notion_removed, never deleted). Relations between them hold the app's ids, loose: no cascading keys.
+  -- (The vehicle_specs table of the earlier model went with the rework onto the five parts, so the name is free.)
+  ALTER TABLE vehicles ADD COLUMN equipment TEXT NOT NULL DEFAULT '[]';
+  -- The Vehicle's page in Notion (its Véhicules database), so the app can link to it.
+  ALTER TABLE vehicles ADD COLUMN notion_page_id TEXT;
+
+  ALTER TABLE maintenance_tasks ADD COLUMN ref_task_id TEXT;
+  ALTER TABLE maintenance_tasks ADD COLUMN notion_plan_id TEXT;
+  ALTER TABLE maintenance_tasks ADD COLUMN plan_auto INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE maintenance_tasks ADD COLUMN notion_removed INTEGER NOT NULL DEFAULT 0;
+  CREATE UNIQUE INDEX maintenance_tasks_ref ON maintenance_tasks (vehicle_id, ref_task_id) WHERE ref_task_id IS NOT NULL;
+  CREATE UNIQUE INDEX maintenance_tasks_plan ON maintenance_tasks (notion_plan_id) WHERE notion_plan_id IS NOT NULL;
+
+  CREATE TABLE ref_tasks (
+    id TEXT PRIMARY KEY,
+    garage_id TEXT NOT NULL REFERENCES garages(id),
+    notion_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    action TEXT NOT NULL CHECK (action IN ('inspect', 'replace')),
+    applicable_if TEXT NOT NULL DEFAULT '[]',
+    default_km INTEGER,
+    default_months INTEGER,
+    consumable_type_ids TEXT NOT NULL DEFAULT '[]',
+    component_type_ids TEXT NOT NULL DEFAULT '[]',
+    tool_ids TEXT NOT NULL DEFAULT '[]',
+    instructions TEXT,
+    notion_removed INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (garage_id, notion_id)
+  );
+
+  CREATE TABLE ref_component_types (
+    id TEXT PRIMARY KEY,
+    garage_id TEXT NOT NULL REFERENCES garages(id),
+    notion_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    category TEXT,
+    notes TEXT,
+    notion_removed INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (garage_id, notion_id)
+  );
+
+  CREATE TABLE consumable_types (
+    id TEXT PRIMARY KEY,
+    garage_id TEXT NOT NULL REFERENCES garages(id),
+    notion_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    category TEXT,
+    family TEXT CHECK (family IN ('fluid', 'part')),
+    notes TEXT,
+    notion_removed INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (garage_id, notion_id)
+  );
+
+  CREATE TABLE products (
+    id TEXT PRIMARY KEY,
+    garage_id TEXT NOT NULL REFERENCES garages(id),
+    notion_id TEXT NOT NULL,
+    type_id TEXT,
+    name TEXT NOT NULL,
+    brand TEXT,
+    reference TEXT,
+    supplier TEXT,
+    price REAL,
+    notes TEXT,
+    notion_removed INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (garage_id, notion_id)
+  );
+
+  CREATE TABLE tools (
+    id TEXT PRIMARY KEY,
+    garage_id TEXT NOT NULL REFERENCES garages(id),
+    notion_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    kind TEXT,
+    size TEXT,
+    owned INTEGER NOT NULL DEFAULT 0,
+    price REAL,
+    notes TEXT,
+    notion_removed INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (garage_id, notion_id)
+  );
+
+  CREATE TABLE vehicle_consumables (
+    id TEXT PRIMARY KEY,
+    garage_id TEXT NOT NULL REFERENCES garages(id),
+    vehicle_id TEXT NOT NULL REFERENCES vehicles(id),
+    notion_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    type_id TEXT,
+    specification TEXT,
+    oem_ref TEXT,
+    capacity TEXT,
+    quantity REAL,
+    compatible_product_ids TEXT NOT NULL DEFAULT '[]',
+    chosen_product_id TEXT,
+    status TEXT CHECK (status IN ('confirmed', 'to_confirm')),
+    notion_removed INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (vehicle_id, notion_id)
+  );
+  CREATE INDEX vehicle_consumables_vehicle ON vehicle_consumables (vehicle_id);
+
+  CREATE TABLE vehicle_specs (
+    id TEXT PRIMARY KEY,
+    garage_id TEXT NOT NULL REFERENCES garages(id),
+    vehicle_id TEXT NOT NULL REFERENCES vehicles(id),
+    notion_id TEXT NOT NULL,
+    label TEXT NOT NULL,
+    component_type_id TEXT,
+    category TEXT,
+    value TEXT NOT NULL,
+    unit TEXT,
+    source TEXT,
+    status TEXT CHECK (status IN ('confirmed', 'to_confirm')),
+    notion_removed INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (vehicle_id, notion_id)
+  );
+  CREATE INDEX vehicle_specs_vehicle ON vehicle_specs (vehicle_id);
+
+  -- What a Service used, by Consumable Type and Product (loose links; logged by a later change).
+  ALTER TABLE service_items ADD COLUMN consumable_type_id TEXT;
+  ALTER TABLE service_items ADD COLUMN product_id TEXT;
+  ALTER TABLE vehicle_parts ADD COLUMN product_id TEXT;
+
+  -- How the last Notion sync went, for the Settings card.
+  CREATE TABLE notion_state (
+    garage_id TEXT PRIMARY KEY REFERENCES garages(id),
+    last_sync_at TEXT,
+    last_error TEXT,
+    warnings TEXT NOT NULL DEFAULT '[]',
+    paused_tasks INTEGER NOT NULL DEFAULT 0
+  );
+`,
 ];
 
 /** Replaces what the owner changed on a template that was split by the same change on each of the new ones. */

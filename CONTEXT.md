@@ -120,6 +120,30 @@ Worked out from the plan, the history and the mileage, never stored: Overdue whe
 The task the app creates in the owner's Todoist when a Maintenance Task becomes Due soon or Overdue, dated with its Due Date. The app moves the date when the estimate changes and completes it once the job is logged.
 _Avoid_: Reminder, alert
 
+## Notion reference data
+
+The owner keeps the referentials in Notion; the app copies them and keeps them read-only ([ADR 0007](docs/adr/0007-two-way-notion-sync.md)). French is the words used in Notion.
+
+**Catalogue Task** (_Tâche d'entretien_):
+A task of the Notion catalogue: what to do, whether it is an inspection or a replacement, the Equipment a Vehicle needs for it to apply, its default Intervals, and what it needs (Consumable Types, Component Types, Tools, instructions). A Maintenance Task that follows one is owned by Notion for its name, Action, Intervals and notes.
+_Avoid_: Template (that is the built-in Plan Template)
+
+**Component Type** (_Type de composant_):
+A kind of component a task works on (a drain plug, a caliper bolt), to which a Vehicle's torque specs are attached.
+
+**Consumable Type** (_Type de consommable_):
+A kind of fluid or part that gets used up (engine oil, oil filter, brake pads). Each has a Family (fluid or part). What a Vehicle takes of one is its Vehicle Consumable.
+
+**Product** (_Produit_):
+A brand-name item of a Consumable Type, with a reference, supplier and a default price (not a Purchase).
+_Avoid_: Part (that is a Vehicle Part, the app's own list)
+
+**Tool** (_Outil_):
+Something used for a job, with a size or capacity and whether the owner has it.
+
+**Equipment** (_Équipements_):
+The tags the owner puts on a Vehicle in Notion (e.g. "Transmission chaîne", "ABS"). A Catalogue Task applies to a Vehicle when every tag of its "Applicable si" is among the Vehicle's Equipment; a task with no tag applies to every Vehicle.
+
 ## Other
 
 **Document**:

@@ -37,6 +37,7 @@ function vehicle(overrides: Partial<Vehicle> = {}): Vehicle {
     soldDate: null,
     soldOdometer: null,
     soldPrice: null,
+    equipment: [],
     ...overrides,
   };
 }
