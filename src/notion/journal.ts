@@ -12,6 +12,11 @@ export const SESSION_MAINTENANCE = 'Entretien';
 export const SESSION_REPAIR = 'Réparation';
 export const ACTION_INSPECT = 'Contrôle';
 export const ACTION_REPLACE = 'Remplacement';
+export const ACTION_CLEAN = 'Nettoyage';
+export const ACTION_ADJUST = 'Réglage';
+
+/** The Notion word for each of the app's Actions, as the catalogue's Action column says it. */
+export const ACTION_WORDS = { inspect: ACTION_INSPECT, replace: ACTION_REPLACE, clean: ACTION_CLEAN, adjust: ACTION_ADJUST } as const;
 
 /** The key a Plan relation uses: a Task's plan page is registered under it once the page exists. */
 export const planKey = (taskId: string) => `plan:${taskId}`;
@@ -94,7 +99,7 @@ export function buildJournal(snapshot: Snapshot, t: Messages): NotionJournal {
         title: t.lang === 'fr' && task.nameFr ? task.nameFr : task.name,
         refTaskKey: task.refTaskId ?? null,
         planKey: task.notionPlanId ? planKey(task.id) : null,
-        action: task.action === 'inspect' ? ACTION_INSPECT : task.action === 'replace' ? ACTION_REPLACE : null,
+        action: ACTION_WORDS[task.action] ?? null,
       };
       return [{ row, consumableTypeIds: refTasks.get(task.refTaskId ?? '')?.consumableTypeIds ?? [] }];
     });

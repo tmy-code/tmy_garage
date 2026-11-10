@@ -1371,4 +1371,27 @@ describe('Notion sync migration', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('lets the catalogue say Nettoyage and Réglage, keeping the catalogue rows already there', () => {
+    const latest = (openDatabase(':memory:').prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
+    const dir = mkdtempSync(join(tmpdir(), 'garage-actions-'));
+    try {
+      const path = join(dir, 'garage.sqlite');
+      const old = openDatabase(path, undefined, latest - 1);
+      old.exec(`INSERT INTO ref_tasks (id, garage_id, notion_id, name, action, applicable_if, default_km, category) VALUES ('r1', 'default', 'n1', 'Vidange', 'replace', '["Moto"]', 6000, 'engine')`);
+      expect(() => old.exec(`INSERT INTO ref_tasks (id, garage_id, notion_id, name, action) VALUES ('r2', 'default', 'n2', 'Tension', 'adjust')`)).toThrow();
+      old.close();
+
+      const migrated = openDatabase(path);
+      expect(migrated.prepare('SELECT id, notion_id, name, action, applicable_if, default_km, category FROM ref_tasks').all()).toEqual([
+        { id: 'r1', notion_id: 'n1', name: 'Vidange', action: 'replace', applicable_if: '["Moto"]', default_km: 6000, category: 'engine' },
+      ]);
+      migrated.exec(`INSERT INTO ref_tasks (id, garage_id, notion_id, name, action) VALUES ('r2', 'default', 'n2', 'Tension', 'adjust'), ('r3', 'default', 'n3', 'Graissage', 'clean')`);
+      expect(() => migrated.exec(`INSERT INTO ref_tasks (id, garage_id, notion_id, name, action) VALUES ('r4', 'default', 'n4', 'X', 'polish')`)).toThrow();
+      expect(() => migrated.exec(`INSERT INTO ref_tasks (id, garage_id, notion_id, name, action) VALUES ('r5', 'default', 'n1', 'Doublon', 'replace')`)).toThrow();
+      migrated.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

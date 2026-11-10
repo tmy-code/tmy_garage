@@ -853,6 +853,34 @@ const MIGRATIONS: (string | ((db: DatabaseSync) => void))[] = [
   -- The category a catalogue task gives the vehicles' Tasks made from it; null leaves each Task's own.
   ALTER TABLE ref_tasks ADD COLUMN category TEXT CHECK (category IN ('engine', 'transmission', 'brakes', 'chassis', 'electrical', 'cooling_climate', 'other'));
 `,
+  `
+  -- The Notion catalogue can now say Nettoyage (clean) and Réglage (adjust), like the app's own Tasks. SQLite cannot
+  -- change a CHECK, so the table is copied into a new one; nothing references it.
+  CREATE TABLE ref_tasks_new (
+    id TEXT PRIMARY KEY,
+    garage_id TEXT NOT NULL REFERENCES garages(id),
+    notion_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    action TEXT NOT NULL CHECK (action IN ('inspect', 'replace', 'clean', 'adjust')),
+    applicable_if TEXT NOT NULL DEFAULT '[]',
+    default_km INTEGER,
+    default_months INTEGER,
+    consumable_type_ids TEXT NOT NULL DEFAULT '[]',
+    component_type_ids TEXT NOT NULL DEFAULT '[]',
+    tool_ids TEXT NOT NULL DEFAULT '[]',
+    instructions TEXT,
+    notion_removed INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    category TEXT CHECK (category IN ('engine', 'transmission', 'brakes', 'chassis', 'electrical', 'cooling_climate', 'other')),
+    UNIQUE (garage_id, notion_id)
+  );
+  INSERT INTO ref_tasks_new (id, garage_id, notion_id, name, action, applicable_if, default_km, default_months, consumable_type_ids,
+    component_type_ids, tool_ids, instructions, notion_removed, created_at, category)
+  SELECT id, garage_id, notion_id, name, action, applicable_if, default_km, default_months, consumable_type_ids,
+    component_type_ids, tool_ids, instructions, notion_removed, created_at, category FROM ref_tasks;
+  DROP TABLE ref_tasks;
+  ALTER TABLE ref_tasks_new RENAME TO ref_tasks;
+`,
 ];
 
 /** Replaces what the owner changed on a template that was split by the same change on each of the new ones. */

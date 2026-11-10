@@ -318,7 +318,7 @@ Owned by Notion ([ADR 0007](adr/0007-two-way-notion-sync.md)): the server pulls 
 
 | Table | Holds |
 | --- | --- |
-| `ref_tasks` | The task catalogue: `name`, `action` (`inspect`/`replace`), `applicable_if` (equipment tags, all required; empty = every Vehicle), `default_km`, `default_months`, `consumable_type_ids`, `component_type_ids`, `tool_ids`, `instructions` (plain text), `category` (from Notion's "Catégorie": the app's French labels, plus Freins, Roues, Électrique; null when empty or unknown). |
+| `ref_tasks` | The task catalogue: `name`, `action` (`inspect`/`replace`/`clean`/`adjust`: Contrôle, Remplacement, Nettoyage, Réglage), `applicable_if` (equipment tags, all required; empty = every Vehicle), `default_km`, `default_months`, `consumable_type_ids`, `component_type_ids`, `tool_ids`, `instructions` (plain text), `category` (from Notion's "Catégorie": the app's French labels, plus Freins, Roues, Électrique; null when empty or unknown). |
 | `ref_component_types` | `name`, `category`, `notes`. |
 | `consumable_types` | `name`, `category`, `family` (`fluid`/`part`), `notes`. |
 | `products` | `type_id`, `name`, `brand`, `reference`, `supplier`, `price` (a default, not a purchase), `notes`. |

@@ -66,7 +66,7 @@ export type Family = 'fluid' | 'part';
 export interface RefTask {
   id: string;
   name: string;
-  action: 'inspect' | 'replace';
+  action: TaskAction;
   /** Equipment tags a vehicle must all have; empty applies to every vehicle. */
   applicableIf: string[];
   defaultKm: number | null;

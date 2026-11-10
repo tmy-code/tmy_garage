@@ -64,7 +64,7 @@ One row per maintenance task, shared by every vehicle it applies to.
 | Column | Type | Written by | Notes |
 | --- | --- | --- | --- |
 | Tâche | title | Owner | Required. The task name in the app. |
-| Action | select | Owner | Required. Contrôle or Remplacement. |
+| Action | select | Owner | Required. Contrôle, Remplacement, Nettoyage or Réglage (the app's inspect, replace, clean, adjust). |
 | Applicable si | multi-select | Owner | Required. Equipment tags, all of which the vehicle needs. Empty means every vehicle. |
 | Intervalle par défaut (km) | number | Owner | Required column, may be empty. |
 | Intervalle par défaut (mois) | number | Owner | Required column, may be empty. A task with neither interval is not added. |
@@ -242,7 +242,7 @@ One per task done in a session.
 | Séance | relation → Séances | App | Back-link: Interventions. |
 | Tâche | relation → Tâches d'entretien | App | Back-link: Interventions. Empty for a task made in the app. |
 | Plan | relation → Plans d'entretien | App | Back-link: Interventions. |
-| Action | select | App | Contrôle or Remplacement. |
+| Action | select | App | Contrôle, Remplacement, Nettoyage or Réglage. |
 | Consommables utilisés | relation ← Consommables utilisés | Notion | Back-link of Intervention. |
 
 ### Consommables utilisés

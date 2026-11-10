@@ -2,6 +2,7 @@
 // and specs) into typed rows. Pure: it takes the pages Notion returned and knows nothing of the API or the database.
 // Relations keep Notion page ids; the apply step turns them into the app's ids.
 import type { PartCategory } from '../shared/catalogue.ts';
+import type { TaskAction } from '../shared/schemas.ts';
 import { refKey } from '../shared/workshop.ts';
 import { APP_ID, EQUIPMENT, REFERENCE_DBS, REMOVED, relationPageIds, type ReferenceDb, type ReferenceKey } from './databases.ts';
 
@@ -16,7 +17,7 @@ export interface RefTaskRow {
   notionId: string;
   name: string;
   /** Null when Notion's value is not one the app knows. */
-  action: 'inspect' | 'replace' | null;
+  action: TaskAction | null;
   applicableIf: string[];
   defaultKm: number | null;
   defaultMonths: number | null;
@@ -161,7 +162,7 @@ export function titleKey(title: string): string {
   return refKey(title.replace(/[’‘]/g, "'"));
 }
 
-const ACTIONS: Record<string, 'inspect' | 'replace'> = { controle: 'inspect', remplacement: 'replace' };
+const ACTIONS: Record<string, TaskAction> = { controle: 'inspect', remplacement: 'replace', nettoyage: 'clean', reglage: 'adjust' };
 const FAMILIES: Record<string, 'fluid' | 'part'> = { fluide: 'fluid', piece: 'part' };
 /** The app's French category labels, plus the spellings used elsewhere in the owner's catalogue. */
 export const CATEGORIES: Record<string, PartCategory> = {

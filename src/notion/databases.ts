@@ -3,6 +3,8 @@
 // Columns marked `owner` are the owner's (Deals, filing reference, equipment): created if missing, never written.
 import { STATE_BOUGHT, STATE_TO_BUY, type ItemRow, type VehicleRow } from './copy.ts';
 import {
+  ACTION_ADJUST,
+  ACTION_CLEAN,
   ACTION_INSPECT,
   ACTION_REPLACE,
   SESSION_MAINTENANCE,
@@ -254,6 +256,8 @@ export const INTERVENTIONS: Database<InterventionRow> = {
       options: [
         { name: ACTION_INSPECT, color: 'blue' },
         { name: ACTION_REPLACE, color: 'purple' },
+        { name: ACTION_CLEAN, color: 'green' },
+        { name: ACTION_ADJUST, color: 'yellow' },
       ],
     },
     ...common,
