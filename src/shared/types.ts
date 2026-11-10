@@ -21,6 +21,10 @@ export interface Vehicle extends VehicleSpecs {
   soldDate: IsoDate | null;
   soldOdometer: number | null;
   soldPrice: number | null;
+  /** The equipment tags the owner keeps in Notion (e.g. "Transmission chaîne"); they decide which catalogue tasks apply. Read-only here. */
+  equipment: string[];
+  /** The Vehicle's page in the Notion Véhicules database, once the sync has seen it. */
+  notionPageId?: string | null;
 }
 
 export interface MaintenanceTask {
@@ -44,6 +48,119 @@ export interface MaintenanceTask {
   switchedOff: boolean;
   /** Set when the Task comes from a standard Plan Template; null for a Task the owner added. */
   templateCode?: string | null;
+  /** The Catalogue Task (from Notion) this Task follows; its name, action, intervals and notes are then Notion's. */
+  refTaskId?: string | null;
+  /** The Notion Plan page behind it, once one exists. */
+  notionPlanId?: string | null;
+}
+
+/** Whether Notion owns this Task's name, action, intervals and notes (it is linked to a Catalogue Task). */
+export function isNotionOwned(task: Pick<MaintenanceTask, 'refTaskId'>): boolean {
+  return !!task.refTaskId;
+}
+
+/** A fluid or a part: what a Consumable Type is. */
+export type Family = 'fluid' | 'part';
+
+/** A task of the Notion catalogue: what to do, when it applies, and what it needs. Read-only. */
+export interface RefTask {
+  id: string;
+  name: string;
+  action: 'inspect' | 'replace';
+  /** Equipment tags a vehicle must all have; empty applies to every vehicle. */
+  applicableIf: string[];
+  defaultKm: number | null;
+  defaultMonths: number | null;
+  consumableTypeIds: string[];
+  componentTypeIds: string[];
+  toolIds: string[];
+  /** Plain text. */
+  instructions: string | null;
+  notionId: string;
+}
+
+export interface ComponentType {
+  id: string;
+  name: string;
+  category: string | null;
+  notes: string | null;
+  notionId: string;
+}
+
+export interface ConsumableType {
+  id: string;
+  name: string;
+  category: string | null;
+  family: Family | null;
+  notes: string | null;
+  notionId: string;
+}
+
+export interface Product {
+  id: string;
+  typeId: string | null;
+  name: string;
+  brand: string | null;
+  reference: string | null;
+  supplier: string | null;
+  /** A default price, not a purchase. */
+  price: number | null;
+  notes: string | null;
+  notionId: string;
+}
+
+export interface Tool {
+  id: string;
+  name: string;
+  kind: string | null;
+  size: string | null;
+  owned: boolean;
+  price: number | null;
+  notes: string | null;
+  notionId: string;
+}
+
+/** What one Vehicle takes of a Consumable Type: specification, OEM reference, capacity, quantity, products. */
+export interface VehicleConsumable {
+  id: string;
+  vehicleId: string;
+  name: string;
+  typeId: string | null;
+  /** Extension point: a link to a spec, unused for now. */
+  specId?: string | null;
+  /** The specification as written in Notion (grade, norm, size). */
+  specification: string | null;
+  oemRef: string | null;
+  capacity: string | null;
+  quantity: number | null;
+  compatibleProductIds: string[];
+  chosenProductId: string | null;
+  status: 'confirmed' | 'to_confirm' | null;
+  notionId: string;
+}
+
+/** One spec of a Vehicle from Notion (a torque, a size, a capacity). Read-only. */
+export interface VehicleSpec {
+  id: string;
+  vehicleId: string;
+  label: string;
+  componentTypeId: string | null;
+  category: string | null;
+  /** A number or text, as written in Notion. */
+  value: string;
+  unit: string | null;
+  source: string | null;
+  status: 'confirmed' | 'to_confirm' | null;
+  notionId: string;
+}
+
+/** How the last Notion sync went, for the Settings card. */
+export interface NotionStatus {
+  lastSyncAt: string | null;
+  lastError: string | null;
+  warnings: string[];
+  /** Tasks paused by the last sync because their Plan page vanished or they stopped applying. */
+  pausedTasks: number;
 }
 
 /** One line of a Vehicle's factory specs: a fluid capacity or grade, a part size or reference, a torque value. */
@@ -70,6 +187,9 @@ export interface PartUsed {
   price?: number | null;
   /** The Vehicle Part it was picked from; a copy of its details is kept here, so the history never changes. */
   partId?: string | null;
+  /** The Consumable Type and Product it was, from the Notion referentials (types only for now). */
+  consumableTypeId?: string | null;
+  productId?: string | null;
   /** Only when sending a Service: also keep it in the Vehicle's parts list (under `partId`). */
   remember?: boolean;
 }
@@ -193,4 +313,14 @@ export interface Snapshot {
   documents: GarageDocument[];
   /** The owner's changes to the parts catalogue; see catalogueOf. */
   catalogue: CatalogueEntry[];
+  /** The Notion referentials, read-only on the phone. */
+  refTasks: RefTask[];
+  componentTypes: ComponentType[];
+  consumableTypes: ConsumableType[];
+  products: Product[];
+  tools: Tool[];
+  vehicleConsumables: VehicleConsumable[];
+  vehicleSpecs: VehicleSpec[];
+  /** Null when the Notion sync is not set up on the server. */
+  notion: NotionStatus | null;
 }

@@ -223,6 +223,9 @@ export const partUsedInput = z.object({
   unit: partUnit,
   price: unitPrice,
   partId: z.string().min(8).max(64).nullish().transform((v) => v ?? null),
+  /** The Consumable Type and Product (from the Notion referentials) it was; loose links, kept as sent. */
+  consumableTypeId: z.string().min(1).max(64).nullish().transform((v) => v ?? null),
+  productId: z.string().min(1).max(64).nullish().transform((v) => v ?? null),
   remember: z.boolean().default(false),
 });
 

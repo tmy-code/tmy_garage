@@ -230,6 +230,7 @@ describe('vehicleDue', () => {
       purchases: [],
       documents: [],
       catalogue: [],
+      refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], vehicleSpecs: [], notion: null,
     };
     const { usage, due } = vehicleDue(snapshot, 'bike', '2026-10-01');
     expect(usage.latest?.odometer).toBe(21_500);
@@ -252,6 +253,7 @@ describe('vehicleDue', () => {
       purchases: [],
       documents: [],
       catalogue: [],
+      refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], vehicleSpecs: [], notion: null,
     };
     const { due } = vehicleDue(snapshot, 'bike', '2026-10-01');
     expect(due.map((d) => [d.taskId, d.status])).toEqual([
@@ -314,6 +316,7 @@ describe('pointsOf and usageOf with fill-ups', () => {
     purchases: [],
     documents: [],
     catalogue: [],
+    refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], vehicleSpecs: [], notion: null,
   };
 
   it('includes the fill-ups of the vehicle with a distance, and skips the others', () => {

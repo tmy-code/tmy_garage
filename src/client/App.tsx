@@ -10,7 +10,7 @@ import { CopyTasks, SellForm, TaskForm, VehicleForm } from './pages/SetupForms.t
 import { FillupForm } from './pages/Fuel.tsx';
 import { VehiclePage } from './pages/Vehicle.tsx';
 import { PartsPage, VehiclePartForm } from './pages/Parts.tsx';
-import { SpecsPage, TaskPage, WorkshopPage } from './pages/Workshop.tsx';
+import { SpecsPage, TaskPage, ToolsPage, WorkshopPage } from './pages/Workshop.tsx';
 import { scrollForNewRoute, useRoute } from './router.ts';
 import { ServerAddress } from './pages/Server.tsx';
 import { needsServerAddress, sync, useStore } from './store.ts';
@@ -72,6 +72,7 @@ export function App() {
 
   if (section === undefined) return <Dashboard snapshot={snapshot} />;
   if (section === 'workshop') return <WorkshopPage snapshot={snapshot} />;
+  if (section === 'tools') return <ToolsPage snapshot={snapshot} />;
   if (section === 'parts') {
     if (id === undefined) return <PartsPage snapshot={snapshot} />;
     if (id === 'vehicle' && sub) return <PartsPage key={sub} snapshot={snapshot} vehicleId={sub} />;

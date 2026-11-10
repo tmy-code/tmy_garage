@@ -13,6 +13,7 @@ const base: Snapshot = {
   purchases: [],
   documents: [],
   catalogue: [],
+  refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], vehicleSpecs: [], notion: null,
 };
 
 const service = (id: string, odometer: number): OutboxOp => ({

@@ -39,6 +39,20 @@ repository.** Once the container restarts, the app compares the logbook with Tod
 when something changed. Every task already due soon or overdue then gets a Todoist task at once. A task you delete in Todoist
 is not created again.
 
+## Notion sync (optional)
+
+The server can keep the owner's reference data (task catalogue, specs, tools, products) in step with Notion, and copy
+vehicles and items there for deal hunting (see [notion-copy.md](notion-copy.md) and [ADR 0007](adr/0007-two-way-notion-sync.md)).
+Two more environment variables on the server:
+
+| Variable | Meaning |
+| --- | --- |
+| `NOTION_TOKEN` | The token of your Notion integration. Without it, or without the page below, the sync is off. |
+| `NOTION_PARENT_PAGE_ID` | The page that holds your databases (the 32 characters at the end of its link). The integration must be added to it. |
+
+Supply them like the Todoist ones, from a file that exists only on the server. The sync runs about a minute after the server
+starts, then every 30 minutes, and from *Settings* → *Notion* → *Sync now*. The token is never sent to a phone.
+
 ## Updating
 
 When a new version has been pushed, in *Container Manager* → *Project* → `tmy_garage` → *Action* → **Stop**, then

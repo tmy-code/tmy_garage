@@ -1,11 +1,12 @@
 import { Fragment, useMemo, useState, useSyncExternalStore, type FormEvent, type ReactNode } from 'react';
 import { PART_CATEGORIES, type PartCategory } from '../../shared/catalogue.ts';
 import { todayIso } from '../../shared/dates.ts';
+import { requiredConsumables, torqueSpecs } from '../../shared/applicability.ts';
 import { vehicleDue } from '../../shared/due.ts';
 import type { PartUnit, SpecGroup } from '../../shared/schemas.ts';
-import type { MaintenanceTask, PartUsed, Snapshot, SpecLine, Vehicle, VehiclePart } from '../../shared/types.ts';
+import type { MaintenanceTask, PartUsed, Snapshot, SpecLine, Vehicle, VehiclePart, VehicleSpec } from '../../shared/types.ts';
 import { confirmDelete, Field, FormError, Layout, NeedsConnection, segmentedKeys, StatusChip } from '../components.tsx';
-import { describeDue, describeInterval, formatDate, formatKm, formatMoney, parseNumber, taskName } from '../format.ts';
+import { describeDue, describeInterval, formatDate, formatKm, formatMoney, localizeNumber, matchesQuery, parseNumber, taskName } from '../format.ts';
 import { VehicleIcon } from '../brands.tsx';
 import { Icon } from '../icons.tsx';
 import { showToast } from '../feedback.ts';
@@ -203,16 +204,48 @@ function SpecText({ spec }: { spec: SpecLine }) {
   );
 }
 
+/** A spec from Notion: read-only, with where it comes from and whether it is confirmed. */
+function NotionSpecRow({ spec }: { spec: VehicleSpec }) {
+  const t = useT();
+  return (
+    <li>
+      <div className="spec-row">
+        <span>
+          <strong>{spec.label}</strong>
+          <span className="spec-badges">
+            <span className="chip chip-neutral">{t.notion.badge}</span>
+            {spec.status ? <span className={`chip ${spec.status === 'confirmed' ? 'chip-ok' : 'chip-dueSoon'}`}>{spec.status === 'confirmed' ? t.notion.confirmed : t.notion.toConfirm}</span> : null}
+          </span>
+        </span>
+        <span>
+          {spec.value ? [localizeNumber(spec.value, t), spec.unit].filter(Boolean).join(' ') : <span className="muted">{t.workshop.specToFill}</span>}
+          {spec.source ? <small className="muted spec-oem">{spec.source}</small> : null}
+        </span>
+      </div>
+    </li>
+  );
+}
+
+/** The specs Notion keeps for a Vehicle, by category (what has none is last), in the order Notion gave them. */
+function notionSpecGroups(snapshot: Snapshot, vehicleId: string): [string | null, VehicleSpec[]][] {
+  const specs = snapshot.vehicleSpecs.filter((s) => s.vehicleId === vehicleId);
+  const categories = [...new Set(specs.map((s) => s.category))].sort((a, b) => (a === null ? 1 : b === null ? -1 : a.localeCompare(b)));
+  return categories.map((c) => [c, specs.filter((s) => s.category === c)]);
+}
+
 export function SpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: Snapshot }) {
   const t = useT();
   const editor = useEditor();
   const wide = useWide();
   const categories = specCategoriesOf(snapshot, vehicle.id);
+  const notionGroups = notionSpecGroups(snapshot, vehicle.id);
+  // Once the Notion catalogue exists the usual specs are not added any more.
+  const catalogueActive = snapshot.refTasks.length > 0;
   const editing = snapshot.specLines.find((l) => l.id === editor.editing);
   async function addStandard() {
     try {
-      const { added } = await online<{ added: number }>('POST', `/api/vehicles/${vehicle.id}/add-standard-specs`, { lang: getLang() });
-      showToast(t.workshop.standardSpecsAdded(added));
+      const { added, skipped } = await online<{ added: number; skipped?: string }>('POST', `/api/vehicles/${vehicle.id}/add-standard-specs`, { lang: getLang() });
+      showToast(skipped ? t.notion.standardSkipped : t.workshop.standardSpecsAdded(added));
     } catch (e) {
       showToast((e as Error).message);
     }
@@ -223,11 +256,30 @@ export function SpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: S
       <p className="muted">{t.workshop.specsIntro}</p>
       <div className={wide ? 'split' : undefined}>
         <div className="split-main">
-          <button type="button" className="button button-block" onClick={addStandard}>
-            {t.workshop.addStandardSpecs}
-          </button>
+          {catalogueActive ? null : (
+            <button type="button" className="button button-block" onClick={addStandard}>
+              {t.workshop.addStandardSpecs}
+            </button>
+          )}
+          {notionGroups.length > 0 ? (
+            <section>
+              <h2>{t.notion.specsFromNotion}</h2>
+              <p className="muted">{t.notion.readOnlyHint}</p>
+              {notionGroups.map(([category, specs]) => (
+                <Fragment key={category ?? 'none'}>
+                  {category ? <h3 className="due-group">{category}</h3> : null}
+                  <ul className="list list-plain">
+                    {specs.map((spec) => (
+                      <NotionSpecRow key={spec.id} spec={spec} />
+                    ))}
+                  </ul>
+                </Fragment>
+              ))}
+            </section>
+          ) : null}
           {!wide && editor.editing === 'new' ? <SpecEditor vehicle={vehicle} editor={editor} /> : null}
-          {categories.length === 0 && editor.editing !== 'new' ? <p className="empty">{t.workshop.noSpecs}</p> : null}
+          {categories.length === 0 && notionGroups.length === 0 && editor.editing !== 'new' ? <p className="empty">{t.workshop.noSpecs}</p> : null}
+          {categories.length > 0 && notionGroups.length > 0 ? <h2>{t.notion.specsOwn}</h2> : null}
           {categories.map(([category, groups]) => (
             <section key={category}>
               <h2>{t.workshop.partCategories[category]}</h2>
@@ -265,6 +317,100 @@ export function SpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: S
 }
 
 // --- A Task's card ---
+
+/** What a Task that follows the Notion catalogue needs: instructions, consumables, components with torque, tools. Read-only, works offline. */
+function TaskNeeds({ task, vehicle, snapshot }: { task: MaintenanceTask; vehicle: Vehicle; snapshot: Snapshot }) {
+  const t = useT();
+  const ref = snapshot.refTasks.find((r) => r.id === task.refTaskId);
+  if (!ref) return null;
+  const tools = ref.toolIds.flatMap((id) => snapshot.tools.filter((x) => x.id === id));
+  const components = ref.componentTypeIds.flatMap((id) => snapshot.componentTypes.filter((c) => c.id === id));
+  const torque = torqueSpecs(snapshot, vehicle.id, task.id);
+  const needs = requiredConsumables(snapshot, vehicle.id, task.id);
+  return (
+    <>
+      <p className="muted">{t.notion.followsNotion}</p>
+      {ref.instructions ? (
+        <section>
+          <h2>{t.notion.instructions}</h2>
+          <p className="card notes">
+            <Linked text={ref.instructions} />
+          </p>
+        </section>
+      ) : null}
+      {needs.length > 0 ? (
+        <section>
+          <h2>{t.notion.consumables}</h2>
+          <ul className="list">
+            {needs.map((need) => (
+              <li key={need.type.id}>
+                <div className="history-row">
+                  <strong>{need.type.name}</strong>
+                  {need.rows.length === 0 ? <span className="muted">{t.notion.nothingListed}</span> : null}
+                  {need.rows.map((row) => (
+                    <span key={row.id}>
+                      {[row.specification, row.capacity ? localizeNumber(row.capacity, t) : null, row.quantity !== null ? `×${localizeNumber(row.quantity, t)}` : null, row.oemRef ? t.workshop.specOemShown(row.oemRef) : null].filter(Boolean).join(' · ') || row.name}
+                      {row.status ? <span className={`chip ${row.status === 'confirmed' ? 'chip-ok' : 'chip-dueSoon'}`}>{row.status === 'confirmed' ? t.notion.confirmed : t.notion.toConfirm}</span> : null}
+                    </span>
+                  ))}
+                  {need.products.length > 0 ? (
+                    <span className="muted">
+                      {t.notion.productsLine(
+                        need.products
+                          .map((p) => `${p.name || [p.brand, p.reference].filter(Boolean).join(' ')}${need.rows.some((r) => r.chosenProductId === p.id) ? ` (${t.notion.chosenProduct})` : ''}`)
+                          .join(', '),
+                      )}
+                    </span>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {components.length > 0 ? (
+        <section>
+          <h2>{t.notion.components}</h2>
+          <ul className="list">
+            {components.map((c) => (
+              <li key={c.id}>
+                <div className="history-row">
+                  <strong>{c.name}</strong>
+                  {torque
+                    .filter((x) => x.component.id === c.id)
+                    .map(({ spec }) => (
+                      <span key={spec.id}>
+                        {t.notion.torqueLine([localizeNumber(spec.value, t), spec.unit].filter(Boolean).join(' '))}
+                        {spec.status === 'to_confirm' ? <span className="chip chip-dueSoon">{t.notion.toConfirm}</span> : null}
+                      </span>
+                    ))}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {tools.length > 0 ? (
+        <section>
+          <h2>{t.notion.toolsNeeded}</h2>
+          <ul className="list">
+            {tools.map((tool) => (
+              <li key={tool.id}>
+                <div className="history-row">
+                  <strong>
+                    {tool.name}
+                    <span className={`chip ${tool.owned ? 'chip-ok' : 'chip-unknown'}`}>{tool.owned ? t.notion.owned : t.notion.notOwned}</span>
+                  </strong>
+                  {tool.size ? <span className="muted">{tool.size}</span> : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+    </>
+  );
+}
 
 export function TaskPage({ task, vehicle, snapshot }: { task: MaintenanceTask; vehicle: Vehicle; snapshot: Snapshot }) {
   const t = useT();
@@ -312,9 +458,11 @@ export function TaskPage({ task, vehicle, snapshot }: { task: MaintenanceTask; v
             <Linked text={task.notes} />
           </p>
         </section>
-      ) : (
+      ) : task.refTaskId ? null : (
         <p className="empty">{t.workshop.emptyCard}</p>
       )}
+
+      <TaskNeeds task={task} vehicle={vehicle} snapshot={snapshot} />
 
       <section>
         <h2>{t.vehicle.history}</h2>
@@ -350,6 +498,42 @@ export function TaskPage({ task, vehicle, snapshot }: { task: MaintenanceTask; v
         </ul>
       </section>
 
+    </Layout>
+  );
+}
+
+// --- The tools listed in Notion, for the whole garage ---
+
+/** Longer than this, the list gets a search box. */
+const TOOLS_SEARCH_FROM = 8;
+
+export function ToolsPage({ snapshot }: { snapshot: Snapshot }) {
+  const t = useT();
+  const [query, setQuery] = useState('');
+  const tools = snapshot.tools.filter((tool) => matchesQuery([tool.name, tool.kind, tool.size, tool.notes], query)).sort((a, b) => a.name.localeCompare(b.name));
+  return (
+    <Layout title={t.notion.toolsTitle} back="/settings">
+      <p className="muted">{t.notion.toolsIntro}</p>
+      {snapshot.tools.length > TOOLS_SEARCH_FROM ? (
+        <input type="search" className="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t.notion.toolsSearch} aria-label={t.notion.toolsSearch} autoComplete="off" />
+      ) : null}
+      {snapshot.tools.length > 0 ? <p className="muted">{t.notion.toolCount(tools.length)}</p> : null}
+      {snapshot.tools.length === 0 ? <p className="empty">{t.notion.toolsEmpty}</p> : tools.length === 0 ? <p className="empty">{t.notion.toolsNoMatch}</p> : null}
+      <ul className="list list-grid list-even">
+        {tools.map((tool) => (
+          <li key={tool.id}>
+            <div className="history-row">
+              <strong>
+                {tool.name}
+                <span className={`chip ${tool.owned ? 'chip-ok' : 'chip-unknown'}`}>{tool.owned ? t.notion.owned : t.notion.notOwned}</span>
+              </strong>
+              {tool.kind || tool.size ? <span className="muted">{[tool.kind, tool.size].filter(Boolean).join(' · ')}</span> : null}
+              {tool.price !== null ? <span className="muted nowrap">{formatMoney(tool.price, t)}</span> : null}
+              {tool.notes ? <span className="muted">{tool.notes}</span> : null}
+            </div>
+          </li>
+        ))}
+      </ul>
     </Layout>
   );
 }

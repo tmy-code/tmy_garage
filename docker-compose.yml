@@ -13,3 +13,5 @@ services:
       - /volume1/docker/tmy_garage:/data
     # Todoist sync (optional). Keep the token out of this repository: put it in a file that exists only on the server.
     # env_file: /path/on/your/server/todoist.env   # lines: TODOIST_API_TOKEN=... and, optionally, TODOIST_PROJECT_ID=...
+    # Notion sync (optional), same idea: a file that exists only on the server, with both lines
+    # NOTION_TOKEN=... and NOTION_PARENT_PAGE_ID=... (the page that holds your Notion databases). Without both, the sync is off.

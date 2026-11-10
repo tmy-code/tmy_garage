@@ -34,6 +34,7 @@ function vehicle(id: string, overrides: Partial<Vehicle> = {}): Vehicle {
     soldDate: null,
     soldOdometer: null,
     soldPrice: null,
+    equipment: [],
     ...overrides,
   };
 }
@@ -72,6 +73,7 @@ function snapshot(vehicles: Vehicle[], tasks: MaintenanceTask[], readings: Odome
     purchases: [],
     documents: [],
     catalogue: [],
+    refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], vehicleSpecs: [], notion: null,
   };
 }
 

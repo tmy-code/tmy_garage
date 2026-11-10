@@ -15,10 +15,10 @@ import {
 } from '../../shared/catalogue.ts';
 import { todayIso } from '../../shared/dates.ts';
 import type { Cooling, Distribution, Drivetrain, FinalDrive, FuelType, TaskAction, Transmission } from '../../shared/schemas.ts';
-import type { MaintenanceTask, Snapshot, Vehicle } from '../../shared/types.ts';
+import { isNotionOwned, type MaintenanceTask, type Snapshot, type Vehicle } from '../../shared/types.ts';
 import { confirmDelete, Field, FormError, IntervalFields, Layout, NeedsConnection, segmentedKeys } from '../components.tsx';
 import { showToast } from '../feedback.ts';
-import { parseNumber, taskName } from '../format.ts';
+import { describeInterval, parseNumber, taskName } from '../format.ts';
 import { messages, useT, type Messages } from '../i18n.ts';
 import { KNOWN_MAKES } from '../brands.tsx';
 import { Icon } from '../icons.tsx';
@@ -337,6 +337,8 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
   const [switchedOff, setSwitchedOff] = useState(existing?.switchedOff ?? false);
   const { error, disabled, run } = useSubmit();
   const back = `/vehicles/${vehicle.id}`;
+  // A Task that follows the Notion catalogue: its name, action, intervals and notes are Notion's and are sent back unchanged.
+  const locked = existing !== undefined && isNotionOwned(existing);
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -386,21 +388,44 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
       <NeedsConnection />
       <form onSubmit={submit} className="form">
         {existing?.templateCode ? <p className="muted">{t.setup.standardTaskHint}</p> : null}
-        <Field label={t.setup.task} hint={t.setup.taskHint}>
-          <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} lang="en" />
-        </Field>
-        <Field label={t.setup.taskFr} hint={t.setup.taskFrHint}>
-          <input value={nameFr} onChange={(e) => setNameFr(e.target.value)} maxLength={120} lang="fr" />
-        </Field>
-        <Field label={t.setup.action}>
-          <select value={action} onChange={(e) => setAction(e.target.value as TaskAction)}>
-            {(['replace', 'inspect', 'clean', 'adjust'] as const).map((a) => (
-              <option key={a} value={a}>
-                {t.setup.actions[a]}
-              </option>
-            ))}
-          </select>
-        </Field>
+        {locked ? (
+          <section className="locked" aria-labelledby="locked-title">
+            <strong id="locked-title">{t.notion.lockedTitle}</strong>
+            <span className="muted">{t.notion.lockedHint}</span>
+            <dl>
+              <dt className="field-label">{t.setup.task}</dt>
+              <dd>{taskName(existing!, t)}</dd>
+              <dt className="field-label">{t.setup.action}</dt>
+              <dd>{t.setup.actions[existing!.action]}</dd>
+              <dt className="field-label">{t.setup.interval}</dt>
+              <dd>{describeInterval(existing!, t)}</dd>
+              {existing!.notes ? (
+                <>
+                  <dt className="field-label">{t.workshop.notesTitle}</dt>
+                  <dd>{existing!.notes}</dd>
+                </>
+              ) : null}
+            </dl>
+          </section>
+        ) : (
+          <>
+            <Field label={t.setup.task} hint={t.setup.taskHint}>
+              <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} lang="en" />
+            </Field>
+            <Field label={t.setup.taskFr} hint={t.setup.taskFrHint}>
+              <input value={nameFr} onChange={(e) => setNameFr(e.target.value)} maxLength={120} lang="fr" />
+            </Field>
+            <Field label={t.setup.action}>
+              <select value={action} onChange={(e) => setAction(e.target.value as TaskAction)}>
+                {(['replace', 'inspect', 'clean', 'adjust'] as const).map((a) => (
+                  <option key={a} value={a}>
+                    {t.setup.actions[a]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </>
+        )}
         <Field label={t.setup.taskCategory} hint={t.setup.taskCategoryHint}>
           <select value={category ?? 'other'} onChange={(e) => setCategory(e.target.value === 'other' ? null : (e.target.value as PartCategory))}>
             {PART_CATEGORIES.map((c) => (
@@ -410,15 +435,19 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
             ))}
           </select>
         </Field>
-        <p className="field-label">{t.setup.interval}</p>
-        <IntervalFields
-          km={intervalKm}
-          months={intervalMonths}
-          onKm={setIntervalKm}
-          onMonths={setIntervalMonths}
-          kmPlaceholder="6000"
-          monthsPlaceholder="12"
-        />
+        {locked ? null : (
+          <>
+            <p className="field-label">{t.setup.interval}</p>
+            <IntervalFields
+              km={intervalKm}
+              months={intervalMonths}
+              onKm={setIntervalKm}
+              onMonths={setIntervalMonths}
+              kmPlaceholder="6000"
+              monthsPlaceholder="12"
+            />
+          </>
+        )}
         <p className="field-label">{t.setup.baseline}</p>
         <div className="row">
           <Field label={t.setup.baselineDate}>
@@ -429,9 +458,11 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
           </Field>
         </div>
         <p className="muted">{t.setup.baselineHint}</p>
-        <Field label={t.workshop.notesTitle} hint={t.setup.notesHint}>
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={5} maxLength={20_000} />
-        </Field>
+        {locked ? null : (
+          <Field label={t.workshop.notesTitle} hint={t.setup.notesHint}>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={5} maxLength={20_000} />
+          </Field>
+        )}
         {existing ? (
           <label className={`check ${switchedOff ? 'check-on' : ''}`}>
             <input type="checkbox" checked={switchedOff} onChange={(e) => setSwitchedOff(e.target.checked)} />
@@ -443,12 +474,12 @@ export function TaskForm({ vehicle, snapshot, existing }: { vehicle: Vehicle; sn
         ) : null}
         <FormError error={error} />
         <Submit disabled={disabled}>{existing ? t.setup.save : t.setup.addTask}</Submit>
-        {existing ? (
+        {existing && !locked ? (
           <button type="button" className="button button-danger button-block" onClick={remove} disabled={disabled}>
             {t.setup.deleteTask}
           </button>
         ) : null}
-        {siblings.length > 0 ? (
+        {siblings.length > 0 && !locked ? (
           <Field label={t.setup.mergeTask} hint={t.setup.mergeTaskHint}>
             <select value={mergeInto} onChange={(e) => setMergeInto(e.target.value)}>
               <option value="">{t.setup.mergeInto}</option>

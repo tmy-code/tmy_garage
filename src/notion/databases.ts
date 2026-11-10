@@ -1,8 +1,9 @@
-// The three Notion databases of the copy, their columns, and how a row becomes Notion property values.
-// Columns marked `owner` are the owner's (Deals, filing reference): created if missing, never written.
-import { STATE_BOUGHT, STATE_TO_BUY, type ItemRow, type SpecRow, type VehicleRow } from './copy.ts';
+// The Notion databases the app manages (Véhicules and Articles: columns, and how a row becomes Notion property values),
+// and the read-only descriptors of the eight databases the owner makes by hand (ADR 0007).
+// Columns marked `owner` are the owner's (Deals, filing reference, equipment): created if missing, never written.
+import { STATE_BOUGHT, STATE_TO_BUY, type ItemRow, type VehicleRow } from './copy.ts';
 
-export type ColumnType = 'title' | 'rich_text' | 'number' | 'euro' | 'select' | 'date' | 'checkbox' | 'url' | 'relation';
+export type ColumnType = 'title' | 'rich_text' | 'number' | 'euro' | 'select' | 'multi_select' | 'date' | 'checkbox' | 'url' | 'relation';
 
 export interface Column {
   name: string;
@@ -14,10 +15,10 @@ export interface Column {
   owner?: boolean;
 }
 
-export type DatabaseKey = 'vehicles' | 'specs' | 'items';
+export type DatabaseKey = 'vehicles' | 'items';
 
-/** A value as compared and written: text, number, date, checkbox, or the app ids a relation points at. */
-export type Plain = string | number | boolean | null | { appIds: string[] };
+/** A value as compared and written: text, number, date, checkbox, tags, or the app ids a relation points at. */
+export type Plain = string | number | boolean | null | string[] | { appIds: string[] };
 
 export interface Database<Row> {
   key: DatabaseKey;
@@ -31,6 +32,9 @@ export interface Database<Row> {
 export const APP_ID = 'ID app';
 /** Ticked on a page whose record is gone from the copy (deleted, or its Vehicle sold); the page is kept. */
 export const REMOVED = 'Supprimé de l’app';
+
+/** The owner's multi-select of equipment tags on a Véhicules page. */
+export const EQUIPMENT = 'Équipements';
 
 const common: Column[] = [
   { name: APP_ID, type: 'rich_text' },
@@ -54,6 +58,8 @@ export const VEHICLES: Database<VehicleRow> = {
     { name: 'Copié le', type: 'date' },
     ...common,
     { name: 'JDex', type: 'rich_text', owner: true },
+    // The equipment tags the owner picks; they decide which catalogue tasks apply. Read by the pull, never written.
+    { name: EQUIPMENT, type: 'multi_select', owner: true },
   ],
   values: (r) => ({
     Nom: r.name,
@@ -66,29 +72,6 @@ export const VEHICLES: Database<VehicleRow> = {
     'Relevé le': r.odometerDate,
     'Km par jour': r.kmPerDay,
     'Copié le': r.copiedOn,
-  }),
-};
-
-export const SPECS: Database<SpecRow> = {
-  key: 'specs',
-  title: 'Caractéristiques',
-  icon: '📐',
-  columns: [
-    { name: 'Caractéristique', type: 'title' },
-    { name: 'Valeur', type: 'rich_text' },
-    { name: 'Réf. OEM', type: 'rich_text' },
-    { name: 'Groupe', type: 'select' },
-    { name: 'Catégorie', type: 'select' },
-    { name: 'Véhicule', type: 'relation', target: 'vehicles' },
-    ...common,
-  ],
-  values: (r) => ({
-    Caractéristique: r.label,
-    Valeur: r.value,
-    'Réf. OEM': r.oem,
-    Groupe: r.group,
-    Catégorie: r.category,
-    Véhicule: { appIds: [r.vehicleAppId] },
   }),
 };
 
@@ -114,7 +97,8 @@ export const ITEMS: Database<ItemRow> = {
     { name: 'Échéance', type: 'date' },
     { name: 'Statut', type: 'select' },
     { name: 'Véhicule', type: 'relation', target: 'vehicles' },
-    { name: 'Caractéristique', type: 'relation', target: 'specs' },
+    // The "Caractéristique" relation of the earlier copy is no longer written (that database is frozen, ADR 0007);
+    // an existing column is left alone.
     ...common,
     { name: 'Lien affaire', type: 'url', owner: true },
     { name: 'Prix affaire', type: 'euro', owner: true },
@@ -132,9 +116,89 @@ export const ITEMS: Database<ItemRow> = {
     Échéance: r.dueDate,
     Statut: r.dueStatus,
     Véhicule: { appIds: [r.vehicleAppId] },
-    Caractéristique: { appIds: r.specAppId ? [r.specAppId] : [] },
   }),
 };
+
+/** A column of a hand-made database: the Notion property types it may have. */
+export interface ReferenceColumn {
+  name: string;
+  types: string[];
+}
+
+export type ReferenceKey = 'tasks' | 'componentTypes' | 'consumableTypes' | 'products' | 'tools' | 'plans' | 'vehicleConsumables' | 'vehicleSpecs';
+
+/**
+ * A database the owner makes and keeps by hand, matched by its title under the parent page. The app only reads it:
+ * these descriptors are never passed to column creation, and its title column is never written. A missing required
+ * column makes the database "incomplete" (nothing is removed because of it); a missing optional column is tolerated.
+ */
+export interface ReferenceDb {
+  key: ReferenceKey;
+  title: string;
+  required: ReferenceColumn[];
+  optional: ReferenceColumn[];
+}
+
+const col = (name: string, ...types: string[]): ReferenceColumn => ({ name, types });
+
+export const REFERENCE_DBS: ReferenceDb[] = [
+  {
+    key: 'tasks',
+    title: "Tâches d'entretien",
+    required: [col('Tâche', 'title'), col('Action', 'select'), col('Applicable si', 'multi_select'), col('Intervalle par défaut (km)', 'number'), col('Intervalle par défaut (mois)', 'number')],
+    optional: [col('Types de consommables requis', 'relation'), col('Composants', 'relation'), col('Outils', 'relation'), col('Instructions', 'rich_text')],
+  },
+  {
+    key: 'componentTypes',
+    title: 'Types de composants',
+    required: [col('Nom', 'title')],
+    optional: [col('Catégorie', 'select'), col('Notes', 'rich_text')],
+  },
+  {
+    key: 'consumableTypes',
+    title: 'Types de consommables',
+    required: [col('Nom', 'title')],
+    optional: [col('Catégorie', 'select'), col('Famille', 'select'), col('Notes', 'rich_text')],
+  },
+  {
+    key: 'products',
+    title: 'Produits',
+    required: [col('Nom', 'title')],
+    optional: [col('Type de consommable', 'relation'), col('Marque', 'rich_text'), col('Référence', 'rich_text'), col('Fournisseur', 'rich_text'), col('Prix', 'number'), col('Notes', 'rich_text')],
+  },
+  {
+    key: 'tools',
+    title: 'Outils',
+    required: [col('Nom', 'title')],
+    optional: [col('Type', 'select'), col('Taille / capacité', 'rich_text'), col('Possédé', 'checkbox'), col('Prix', 'number'), col('Notes', 'rich_text')],
+  },
+  {
+    key: 'plans',
+    title: "Plans d'entretien",
+    required: [col('Plan', 'title'), col('Véhicule', 'relation'), col('Tâche', 'relation')],
+    optional: [col('Intervalle (km)', 'number'), col('Intervalle (mois)', 'number'), col('Dernier fait (km)', 'number'), col('Dernier fait (date)', 'date'), col('Notes', 'rich_text')],
+  },
+  {
+    key: 'vehicleConsumables',
+    title: 'Consommables par véhicule',
+    required: [col('Désignation', 'title'), col('Véhicule', 'relation'), col('Type', 'relation')],
+    optional: [
+      col('Spécification', 'rich_text'),
+      col('Réf. OEM', 'rich_text'),
+      col('Capacité', 'rich_text'),
+      col('Quantité', 'number', 'rich_text'),
+      col('Produits compatibles', 'relation'),
+      col('Produit retenu', 'relation'),
+      col('Statut', 'select'),
+    ],
+  },
+  {
+    key: 'vehicleSpecs',
+    title: 'Spécifications',
+    required: [col('Élément', 'title'), col('Véhicule', 'relation'), col('Valeur', 'number', 'rich_text')],
+    optional: [col('Composant', 'relation'), col('Catégorie', 'select'), col('Unité', 'select'), col('Source', 'rich_text'), col('Statut', 'select')],
+  },
+];
 
 /** The schema Notion needs to create a column. */
 export function columnSchema(column: Column, dataSourceIds: Partial<Record<DatabaseKey, string>>): Record<string, unknown> {
@@ -149,6 +213,8 @@ export function columnSchema(column: Column, dataSourceIds: Partial<Record<Datab
       return { number: { format: 'euro' } };
     case 'select':
       return { select: { options: column.options ?? [] } };
+    case 'multi_select':
+      return { multi_select: { options: column.options ?? [] } };
     case 'date':
       return { date: {} };
     case 'checkbox':
@@ -184,6 +250,8 @@ export function toNotion(type: ColumnType, value: Plain, pageIds: (appId: string
       return { number: typeof value === 'number' ? value : null };
     case 'select':
       return { select: value === null || value === '' ? null : { name: String(value) } };
+    case 'multi_select':
+      return { multi_select: Array.isArray(value) ? value.map((name) => ({ name })) : [] };
     case 'date':
       return { date: value === null ? null : { start: String(value) } };
     case 'checkbox':
@@ -191,7 +259,7 @@ export function toNotion(type: ColumnType, value: Plain, pageIds: (appId: string
     case 'url':
       return { url: value === null || value === '' ? null : String(value) };
     case 'relation': {
-      const ids = value !== null && typeof value === 'object' ? value.appIds : [];
+      const ids = value !== null && typeof value === 'object' && !Array.isArray(value) ? value.appIds : [];
       return {
         relation: ids.flatMap((id) => {
           const pageId = pageIds(id);
@@ -215,6 +283,8 @@ export function fromNotion(property: any, appIdOfPage: (pageId: string) => strin
       return property.number;
     case 'select':
       return property.select?.name ?? null;
+    case 'multi_select':
+      return (property.multi_select as { name: string }[]).map((o) => o.name);
     case 'date':
       return property.date?.start ?? null;
     case 'checkbox':
@@ -228,9 +298,16 @@ export function fromNotion(property: any, appIdOfPage: (pageId: string) => strin
   }
 }
 
+/** The Notion page ids of a relation property, as Notion gives them (not mapped to the app's ids). */
+export function relationPageIds(property: any): string[] {
+  if (!property || property.type !== 'relation') return [];
+  return (property.relation as { id: string }[]).map((r) => r.id);
+}
+
 /** Whether two plain values are the same once written to Notion. */
 export function samePlain(a: Plain, b: Plain): boolean {
   const norm = (v: Plain): string => {
+    if (Array.isArray(v)) return `tags:${[...v].sort().join('|')}`;
     if (v !== null && typeof v === 'object') return `rel:${[...v.appIds].sort().join(',')}`;
     if (v === '' || v === undefined) return 'null';
     if (typeof v === 'string') return `s:${v.slice(0, MAX_TEXT)}`;

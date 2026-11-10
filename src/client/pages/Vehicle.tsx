@@ -212,8 +212,8 @@ export function VehiclePage({ vehicle, snapshot, openSetup = false }: { vehicle:
   const panel = (name: Tab) => ({ role: wide ? undefined : 'tabpanel', hidden: !wide && tab !== name });
   async function addFromTemplates() {
     try {
-      const { added } = await online<{ added: number }>('POST', `/api/vehicles/${vehicle.id}/add-from-templates`);
-      showToast(t.vehicle.templatesAdded(added));
+      const { added, skipped } = await online<{ added: number; skipped?: string }>('POST', `/api/vehicles/${vehicle.id}/add-from-templates`);
+      showToast(skipped ? t.notion.catalogueDecides : t.vehicle.templatesAdded(added));
     } catch (e) {
       showToast((e as Error).message);
     }
@@ -274,6 +274,33 @@ export function VehiclePage({ vehicle, snapshot, openSetup = false }: { vehicle:
               </p>
             ) : null}
             {datesLine ? <p className="muted">{datesLine}</p> : null}
+            {snapshot.notion !== null || vehicle.equipment.length > 0 ? (
+              <div className="equipment">
+                <p className="field-label">{t.notion.equipment}</p>
+                {vehicle.equipment.length > 0 ? (
+                  <ul className="chips">
+                    {vehicle.equipment.map((tag) => (
+                      <li key={tag} className="chip chip-neutral">
+                        {tag}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="muted">{t.notion.noEquipment}</p>
+                )}
+                {vehicle.notionPageId ? (
+                  <p>
+                    <a className="equipment-link nowrap" href={`https://www.notion.so/${vehicle.notionPageId.replace(/-/g, '')}`} target="_blank" rel="noreferrer">
+                      {t.notion.openInNotion}
+                    </a>
+                    <br />
+                    <span className="muted nowrap">{t.notion.equipmentHint}</span>
+                  </p>
+                ) : (
+                  <p className="muted">{t.notion.equipmentHint}</p>
+                )}
+              </div>
+            ) : null}
             {vehicle.status === 'sold' ? <p className="banner banner-warn">{t.vehicle.sold(saleDetails)}</p> : null}
             <p className="odometer">
               {usage.latest === null ? (
@@ -442,7 +469,7 @@ export function VehiclePage({ vehicle, snapshot, openSetup = false }: { vehicle:
           </section>
 
           <section className="actions actions-footer" {...panel('plan')}>
-            {owned ? (
+            {owned && snapshot.refTasks.length === 0 ? (
               <button type="button" className="button" onClick={() => void addFromTemplates()}>
                 {t.vehicle.addFromTemplates}
               </button>
