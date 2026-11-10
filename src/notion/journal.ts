@@ -4,7 +4,6 @@
 // Privacy: no free-text notes, receipts or other Documents, VIN, shop, repair title or Service total, and no odometer-only
 // reading, Purchase or Fill-up. A line's own quantity and unit price are included.
 import type { Messages } from '../shared/messages.ts';
-import { taskName } from '../client/format.ts';
 import type { IsoDate } from '../shared/dates.ts';
 import { vehicleDue } from '../shared/due.ts';
 import type { Snapshot } from '../shared/types.ts';
@@ -91,7 +90,8 @@ export function buildJournal(snapshot: Snapshot, t: Messages): NotionJournal {
       const row: InterventionRow = {
         appId: `${service.id}:${taskId}`,
         sessionAppId: service.id,
-        title: taskName(task, t),
+        // The task's name in the sync's language (not imported from the client: the server image has no React).
+        title: t.lang === 'fr' && task.nameFr ? task.nameFr : task.name,
         refTaskKey: task.refTaskId ?? null,
         planKey: task.notionPlanId ? planKey(task.id) : null,
         action: task.action === 'inspect' ? ACTION_INSPECT : task.action === 'replace' ? ACTION_REPLACE : null,
