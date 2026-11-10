@@ -171,6 +171,14 @@ describe('computeDue', () => {
     expect(computeDue(t, [service('2026-05-01', 18_000)], noUsage, '2026-05-01').lastDone?.source).toBe('service');
   });
 
+  it('counts a never-done task from the first registration date at 0 km', () => {
+    const t = task({ baselineDate: '2019-05-01', baselineOdometer: 0, intervalKm: 8_000, intervalMonths: 12 });
+    const usage = estimateUsage([{ date: '2026-10-31', odometer: 48_981 }]);
+    const due = computeDue(t, [], usage, '2026-11-10');
+    expect(due.lastDone).toEqual({ date: '2019-05-01', odometer: 0, source: 'baseline' });
+    expect(due.status).toBe('overdue');
+  });
+
   it('handles distance-only and time-only intervals', () => {
     const services = [service('2026-01-01', 10_000)];
     const usage = estimateUsage([{ date: '2026-01-01', odometer: 10_000 }]);
