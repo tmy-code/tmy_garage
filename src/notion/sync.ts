@@ -6,7 +6,7 @@
 //   --snapshot <f>  read a saved snapshot instead of the server
 //   --pull-dry-run  fetch and parse the owner's reference databases and print them with the vocabularies found; no database
 import { readFile } from 'node:fs/promises';
-import { messagesFor } from '../client/i18n.ts';
+import { messagesFor } from '../shared/messages.ts';
 import { todayIso } from '../shared/dates.ts';
 import type { Snapshot } from '../shared/types.ts';
 import { normalizeSnapshot } from '../shared/workshop.ts';

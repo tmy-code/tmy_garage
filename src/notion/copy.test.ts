@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { messagesFor } from '../client/i18n.ts';
+import { messagesFor } from '../shared/messages.ts';
 import type { MaintenanceTask, Snapshot, SpecLine, Vehicle, VehiclePart } from '../shared/types.ts';
 import { buildCopy, buildSummary } from './copy.ts';
 

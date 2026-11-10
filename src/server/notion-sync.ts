@@ -1,7 +1,7 @@
 // The Notion sync running on the server (ADR 0007): pull the owner's referentials, apply them, then push the copy.
 // The Notion token lives here only: it is never sent to a phone, logged or returned by an endpoint.
 import type { DatabaseSync } from 'node:sqlite';
-import { messagesFor } from '../client/i18n.ts';
+import { messagesFor } from '../shared/messages.ts';
 import { todayIso } from '../shared/dates.ts';
 import { NotionApi } from '../notion/api.ts';
 import { fetchReference, pushAll, type Counts, type NotionClient } from '../notion/engine.ts';
