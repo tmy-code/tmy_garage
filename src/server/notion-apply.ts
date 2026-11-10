@@ -18,7 +18,7 @@ export interface DbCounts {
   removed: number;
 }
 
-export const COUNT_KEYS = ['tasks', 'componentTypes', 'consumableTypes', 'products', 'tools', 'vehicleConsumables', 'vehicleSpecs', 'maintenanceTasks'] as const;
+export const COUNT_KEYS = ['tasks', 'componentTypes', 'consumableTypes', 'products', 'tools', 'vehicleConsumables', 'vehicleSpecs', 'purchases', 'maintenanceTasks'] as const;
 export type CountKey = (typeof COUNT_KEYS)[number];
 
 export interface ApplyReport {
@@ -130,7 +130,7 @@ export function applyPull(db: DatabaseSync, garageId: string, pull: ReferencePul
 
   db.exec('BEGIN');
   try {
-    for (const key of ['tasks', 'componentTypes', 'consumableTypes', 'products', 'tools', 'vehicleConsumables', 'vehicleSpecs', 'plans'] as const) {
+    for (const key of ['tasks', 'componentTypes', 'consumableTypes', 'products', 'tools', 'vehicleConsumables', 'vehicleSpecs', 'purchases', 'plans'] as const) {
       for (const w of pull[key].warnings) warn(w);
     }
     for (const w of pull.vehicleWarnings) warn(w);
@@ -246,6 +246,24 @@ export function applyPull(db: DatabaseSync, garageId: string, pull: ReferencePul
       pull.vehicleSpecs.complete,
       counts.vehicleSpecs,
       true,
+    );
+    // The owner's Achats, read-only: matched to a vehicle's consumable line by the line's Notion page id when read.
+    syncRows(
+      'ref_purchases',
+      'Achats',
+      pull.purchases.rows.map((r) => ({
+        notionId: r.notionId,
+        values: {
+          date: r.date,
+          article_notion_id: r.articleNotionId,
+          product_id: r.productNotionId ? (productIds.get(r.productNotionId) ?? null) : null,
+          quantity: r.quantity,
+          price: r.price,
+          shop: r.shop,
+        },
+      })),
+      pull.purchases.complete,
+      counts.purchases,
     );
 
     // --- Equipment, and the link to each Vehicle's Notion page ---

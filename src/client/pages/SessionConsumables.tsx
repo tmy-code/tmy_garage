@@ -1,6 +1,7 @@
+import type { ConsumableBuyState } from '../../shared/purchases.ts';
 import { markAdded, type MergedNeed, type ProductGroup } from '../../shared/session-consumables.ts';
 import type { Product, Snapshot } from '../../shared/types.ts';
-import { Field } from '../components.tsx';
+import { BuyChips, Field } from '../components.tsx';
 import { formatMoney, localizeNumber, taskName } from '../format.ts';
 import { useT } from '../i18n.ts';
 
@@ -18,12 +19,15 @@ export function SessionConsumables({
   needs,
   snapshot,
   lines,
+  buy,
   onAdd,
 }: {
   needs: MergedNeed[];
   snapshot: Snapshot;
   /** The products of the form's lines for a type (null for a line typed by hand). */
   lines: (typeId: string) => (string | null)[];
+  /** Whether each required type was bought since its Task was last done, by consumable type id (from Notion's Achats). */
+  buy: Map<string, ConsumableBuyState>;
   /** A product was picked (its id), or the owner will type the item (OTHER_PRODUCT). */
   onAdd: (need: MergedNeed, productId: string) => void;
 }) {
@@ -47,6 +51,7 @@ export function SessionConsumables({
                 {t.notion.consumablesTitle} · {need.type.name}
               </h2>
             </summary>
+            <BuyChips states={buy.has(need.type.id) ? [buy.get(need.type.id)!] : []} shop />
             <p className="muted">{t.notion.servesTasks(need.taskIds.map((id) => (tasks.get(id) ? taskName(tasks.get(id)!, t) : '')).filter(Boolean).join(', '))}</p>
             {need.torque.length > 0 ? (
               <ul className="list list-plain">

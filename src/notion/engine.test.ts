@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { messagesFor } from '../shared/messages.ts';
 import type { Snapshot, Vehicle } from '../shared/types.ts';
 import { normalizeSnapshot } from '../shared/workshop.ts';
-import { INTERVENTIONS, ITEMS, REFERENCE_DBS, SESSIONS, USED, VEHICLES, notionType } from './databases.ts';
+import { INTERVENTIONS, REFERENCE_DBS, SESSIONS, USED, VEHICLES, notionType } from './databases.ts';
 import { ensureDatabases, fetchReference, pushAll, type NotionClient } from './engine.ts';
 
 // A fake Notion workspace: databases with their columns and pages, and a record of every write. No network, no real ids.
@@ -104,7 +104,7 @@ const snapshot = (): Snapshot =>
     tasks: [],
     services: [],
     readings: [],
-    vehicleParts: [{ id: 'p1', vehicleId: 'bike', name: 'Huile test', partNumber: 'REF-1', unit: 'litre', quantity: 3, price: null, taskId: null, specLineId: 's1', toBuy: true, notes: 'Boutique' }],
+    vehicleParts: [{ id: 'p1', vehicleId: 'bike', name: 'Huile test', partNumber: 'REF-1', unit: 'litre', quantity: 3, price: null, taskId: null, specLineId: 's1', notes: 'Boutique' }],
     specLines: [{ id: 's1', vehicleId: 'bike', label: 'Huile', value: '10W-40', oem: null, group: 'fluids', category: 'engine', sort: 0 }],
   } as unknown as Snapshot);
 
@@ -149,55 +149,41 @@ describe('the push never marks pages removed on a doubtful snapshot', () => {
     id: `page-${appId}`,
     properties: { 'ID app': rich(appId), 'Supprimé de l’app': { type: 'checkbox', checkbox: removed } },
   });
-  const workspace = (vehiclePages: any[], itemPages: any[]) => {
+  const workspace = (vehiclePages: any[]) => {
     const vehicles: FakeDb = { id: 'db-vehicles', title: 'Véhicules', properties: columnsOf(VEHICLES), pages: vehiclePages };
-    const items: FakeDb = { id: 'db-items', title: 'Articles', properties: columnsOf(ITEMS), pages: itemPages };
-    return fakeWorkspace([vehicles, items]);
+    return fakeWorkspace([vehicles]);
   };
   const ticks = (writes: Write[]) => writes.filter((w) => w.method === 'PATCH' && JSON.stringify(w.body).includes('Supprimé de l’app'));
   const run = (client: NotionClient, s: Snapshot) => pushAll(client, 'parent', s, '2026-11-01', messagesFor('fr'), () => undefined);
   const empty = (): Snapshot => normalizeSnapshot({ vehicles: [], tasks: [], services: [], readings: [] } as unknown as Snapshot);
-  /** The snapshot has one vehicle (bike) and no item. */
+  /** The snapshot has one vehicle (bike). */
   const oneVehicle = (): Snapshot => normalizeSnapshot({ vehicles: [vehicle()], tasks: [], services: [], readings: [] } as unknown as Snapshot);
 
   it('ticks nothing, and warns, when the snapshot is empty but Notion has linked pages', async () => {
-    const { client, writes } = workspace([page('bike'), page('car')], [page('p1'), page('p2')]);
+    const { client, writes } = workspace([page('bike'), page('car')]);
     const result = await run(client, empty());
     expect(ticks(writes)).toEqual([]);
-    expect(result.databases.map(([, c]) => c.removed)).toEqual([0, 0, 0, 0, 0]);
-    expect(result.databases.slice(0, 2).every(([, c]) => c.warning?.includes('no page was marked'))).toBe(true);
-  });
-
-  it('ticks no article when the snapshot has no vehicles, even with other rows', async () => {
-    const { client, writes } = workspace([], [page('p1')]);
-    const [, items] = (await run(client, empty())).databases[1]!;
-    expect(ticks(writes)).toEqual([]);
-    expect(items.warning).toContain('no vehicles');
+    expect(result.databases.map(([, c]) => c.removed)).toEqual([0, 0, 0, 0]);
+    expect(result.databases[0]![1].warning).toContain('no page was marked');
   });
 
   it('ticks nothing, and warns, when most linked pages would be ticked at once', async () => {
-    const articles = ['a', 'b', 'c', 'd', 'e'].map((id) => page(id));
-    const { client, writes } = workspace([page('bike')], articles);
-    const s = oneVehicle();
-    s.vehicleParts = [{ id: 'a', vehicleId: 'bike', name: 'a', partNumber: null, unit: 'piece', quantity: 1, price: null, taskId: null, specLineId: null, toBuy: true, notes: null }];
-    const result = await run(client, s);
+    const { client, writes } = workspace(['bike', 'a', 'b', 'c', 'd'].map((id) => page(id)));
+    const result = await run(client, oneVehicle());
     expect(ticks(writes)).toEqual([]);
-    expect(result.databases[1]![1]).toMatchObject({ removed: 0, warning: expect.stringContaining('4 of 5 linked pages') });
-    expect(result.databases[0]![1].warning).toBeUndefined();
+    expect(result.databases[0]![1]).toMatchObject({ removed: 0, warning: expect.stringContaining('4 of 5 linked pages') });
   });
 
   it('still ticks a single legitimate removal', async () => {
-    const { client, writes } = workspace([page('bike'), page('gone-vehicle')], [page('a'), page('b'), page('c'), page('d'), page('e')]);
-    const s = oneVehicle();
-    s.vehicleParts = ['a', 'b', 'c', 'd'].map((id) => ({ id, vehicleId: 'bike', name: id, partNumber: null, unit: 'piece', quantity: 1, price: null, taskId: null, specLineId: null, toBuy: true, notes: null }));
-    const result = await run(client, s);
-    expect(ticks(writes).map((w) => w.path)).toEqual(['/pages/page-gone-vehicle', '/pages/page-e']);
-    expect(result.databases.slice(0, 2).map(([, c]) => c.removed)).toEqual([1, 1]);
+    const { client, writes } = workspace([page('bike'), page('gone-vehicle')]);
+    const result = await run(client, oneVehicle());
+    expect(ticks(writes).map((w) => w.path)).toEqual(['/pages/page-gone-vehicle']);
+    expect(result.databases[0]![1].removed).toBe(1);
     expect(result.databases.every(([, c]) => c.warning === undefined)).toBe(true);
   });
 
   it('still unticks a page whose record is back', async () => {
-    const { client, writes } = workspace([page('bike', true)], []);
+    const { client, writes } = workspace([page('bike', true)]);
     await run(client, oneVehicle());
     const patch = writes.find((w) => w.path === '/pages/page-bike')!;
     expect(patch.body.properties['Supprimé de l’app']).toEqual({ checkbox: false });
@@ -212,10 +198,16 @@ describe('pushAll and ensureDatabases', () => {
     pages: [{ id: 'page-bike', properties: { 'ID app': rich('bike'), Nom: { type: 'title', title: [{ plain_text: 'Ancien nom' }] }, Équipements: { type: 'multi_select', multi_select: [{ name: 'ABS' }] } } }],
   });
   const journalDbs = (): FakeDb[] => [SESSIONS, INTERVENTIONS, USED].map((db) => ({ id: `db-${db.key}`, title: db.title, properties: columnsOf(db), pages: [] }));
-  const itemsDb = (): FakeDb => ({ id: 'db-items', title: 'Articles', properties: { ...columnsOf(ITEMS), Caractéristique: 'relation' }, pages: [] });
+  /** The owner's old Articles database, which the app used to copy into and now leaves completely alone. */
+  const articlesDb = (): FakeDb => ({
+    id: 'db-articles',
+    title: 'Articles',
+    properties: { Article: 'title', 'ID app': 'rich_text', 'Supprimé de l’app': 'checkbox' },
+    pages: [{ id: 'page-art', properties: { 'ID app': rich('p-old'), 'Supprimé de l’app': { type: 'checkbox', checkbox: false } } }],
+  });
 
   it('never writes Équipements, nor anything to the hand-made databases', async () => {
-    const { client, writes } = fakeWorkspace([vehiclesDb(), itemsDb(), ...journalDbs(), ...handMade]);
+    const { client, writes } = fakeWorkspace([vehiclesDb(), ...journalDbs(), ...handMade]);
     await pushAll(client, 'parent', snapshot(), '2026-11-01', messagesFor('fr'), () => undefined);
     expect(writes.length).toBeGreaterThan(0);
     expect(JSON.stringify(writes)).not.toContain('Équipements');
@@ -223,24 +215,36 @@ describe('pushAll and ensureDatabases', () => {
       expect(writes.filter((w) => w.path.includes(d.id) || w.path.includes(`ds-${d.id}`))).toEqual([]);
       expect(JSON.stringify(writes.filter((w) => w.method === 'POST' && w.path === '/databases'))).not.toContain(d.title);
     }
-    // Only the app's pages are written: one update of the vehicle, one new item.
-    expect(writes.map((w) => `${w.method} ${w.path}`)).toEqual(['PATCH /pages/page-bike', expect.stringMatching(/^POST \/pages$/)]);
+    // Only the app's pages are written: one update of the vehicle.
+    expect(writes.map((w) => `${w.method} ${w.path}`)).toEqual(['PATCH /pages/page-bike']);
   });
 
-  it('writes the app columns of Articles without the Caractéristique relation', async () => {
-    const { client, writes } = fakeWorkspace([vehiclesDb(), itemsDb()]);
-    await pushAll(client, 'parent', snapshot(), '2026-11-01', messagesFor('fr'), () => undefined);
-    const created = writes.find((w) => w.method === 'POST' && w.path === '/pages')!;
-    expect(Object.keys(created.body.properties)).toContain('Article');
-    expect(Object.keys(created.body.properties)).not.toContain('Caractéristique');
-    expect(JSON.stringify(writes)).not.toContain('Caractéristiques');
+  it('never touches Articles: no read, no write, no tick, no result line, no warning', async () => {
+    const { client, writes } = fakeWorkspace([vehiclesDb(), articlesDb(), ...journalDbs(), ...handMade]);
+    const calls: string[] = [];
+    const spy = {
+      call: async (...args: Parameters<NotionClient['call']>) => (calls.push(`${args[0]} ${args[1]}`), client.call(...args)),
+      all: async (...args: Parameters<NotionClient['all']>) => (calls.push(`${args[0]} ${args[1]}`), client.all(...args)),
+    } as NotionClient;
+    const result = await pushAll(spy, 'parent', snapshot(), '2026-11-01', messagesFor('fr'), () => undefined);
+    expect(calls.filter((c) => c.includes('db-articles'))).toEqual([]);
+    expect(writes.filter((w) => w.path.includes('page-art') || w.path.includes('db-articles'))).toEqual([]);
+    expect(JSON.stringify(writes)).not.toContain('"Supprimé de l’app":{"checkbox":true}');
+    expect(result.databases.map(([title]) => title)).not.toContain('Articles');
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('does not create an Articles database when it is absent', async () => {
+    const { client, writes } = fakeWorkspace(handMade);
+    await ensureDatabases(client, 'parent', () => undefined);
+    expect(writes.filter((w) => w.method === 'POST' && w.path === '/databases').map((w) => w.body.title[0].text.content)).not.toContain('Articles');
   });
 
   it('creates only the app’s own databases when they are missing, never a hand-made database', async () => {
     const { client, writes } = fakeWorkspace(handMade);
     await ensureDatabases(client, 'parent', () => undefined);
     const created = writes.filter((w) => w.method === 'POST' && w.path === '/databases').map((w) => w.body.title[0].text.content);
-    expect(created).toEqual(['Véhicules', 'Articles', 'Séances', 'Interventions', 'Consommables utilisés']);
+    expect(created).toEqual(['Véhicules', 'Séances', 'Interventions', 'Consommables utilisés']);
     const equipment = writes[0]!.body.initial_data_source.properties['Équipements'];
     expect(equipment).toEqual({ multi_select: { options: [] } });
     expect(writes.some((w) => w.path.includes('db-tasks') || w.path.includes('ds-db-tasks'))).toBe(false);
@@ -249,7 +253,7 @@ describe('pushAll and ensureDatabases', () => {
   it('adds a missing column to an app database without touching an existing one', async () => {
     const vehicles = vehiclesDb();
     delete vehicles.properties['JDex'];
-    const { client, writes } = fakeWorkspace([vehicles, itemsDb()]);
+    const { client, writes } = fakeWorkspace([vehicles]);
     await ensureDatabases(client, 'parent', () => undefined);
     const patches = writes.filter((w) => w.method === 'PATCH');
     expect(patches).toHaveLength(1);
@@ -293,7 +297,6 @@ describe('plans, "Dernier fait" and the journal', () => {
     } as unknown as Snapshot);
 
   const vehiclesDb = (): FakeDb => ({ id: 'db-vehicles', title: 'Véhicules', properties: columnsOf(VEHICLES), pages: [{ id: 'page-bike', properties: { 'ID app': rich('bike') } }] });
-  const itemsDb = (): FakeDb => ({ id: 'db-items', title: 'Articles', properties: columnsOf(ITEMS), pages: [] });
   const journalDbs = (pages: Partial<Record<string, any[]>> = {}): FakeDb[] =>
     [SESSIONS, INTERVENTIONS, USED].map((db) => ({ id: `db-${db.key}`, title: db.title, properties: columnsOf(db), pages: pages[db.key] ?? [] }));
   const plansDb = (pages: any[] = [], properties: Record<string, string> = {}): FakeDb => {
@@ -310,7 +313,7 @@ describe('plans, "Dernier fait" and the journal', () => {
     },
   });
   const world = (plans: FakeDb | null, journal: FakeDb[] = journalDbs()) =>
-    fakeWorkspace([vehiclesDb(), itemsDb(), ...journal, ...(plans ? [plans] : []), ...handMade.filter((d) => d.id !== 'db-plans')]);
+    fakeWorkspace([vehiclesDb(), ...journal, ...(plans ? [plans] : []), ...handMade.filter((d) => d.id !== 'db-plans')]);
   const run = (client: NotionClient, s: Snapshot, options = {}) => pushAll(client, 'parent', s, '2026-11-01', messagesFor('fr'), () => undefined, options);
 
   /** Every recorded write that reaches one of the owner's hand-made databases. */
@@ -504,7 +507,7 @@ describe('plans, "Dernier fait" and the journal', () => {
     });
 
     it('creates the relation columns that point at the owner’s databases only when those exist', async () => {
-      const { client, writes } = fakeWorkspace([vehiclesDb(), itemsDb()]);
+      const { client, writes } = fakeWorkspace([vehiclesDb()]);
       await ensureDatabases(client, 'parent', () => undefined);
       const interventions = writes.find((w) => w.method === 'POST' && w.path === '/databases' && w.body.title[0].text.content === 'Interventions')!;
       expect(Object.keys(interventions.body.initial_data_source.properties)).toEqual(['Intervention', 'Séance', 'Action', 'ID app', 'Supprimé de l’app']);

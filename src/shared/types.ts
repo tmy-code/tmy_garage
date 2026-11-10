@@ -210,31 +210,21 @@ export interface VehiclePart {
   taskId: string | null;
   /** The Spec Line it is for, shown next to it; nothing is copied from it. */
   specLineId: string | null;
-  /** To buy (wanted or planned, or to be bought again) rather than Bought. */
-  toBuy: boolean;
   /** Shop, link, comparison. */
   notes: string | null;
 }
 
-/** One occasion on which the owner bought a Vehicle Part; together they are the part's purchase log. */
-export interface Purchase {
+/** One line of the owner's Notion "Achats" database: what was bought, for which article (a vehicle's consumable line). Read only. */
+export interface NotionPurchase {
   id: string;
-  partId: string;
-  vehicleId: string;
+  notionId: string;
   date: IsoDate;
-  /** In the part's unit. */
-  quantity: number;
-  /** For the goods only, as on the receipt; never includes delivery fees. */
-  totalPaid: number;
+  /** The Notion page id of the "Consommables par véhicule" line; matches VehicleConsumable.notionId. */
+  articleNotionId: string;
+  productId: string | null;
+  quantity: number | null;
+  price: number | null;
   shop: string | null;
-  /** Apart from totalPaid. */
-  deliveryFees: number | null;
-  notes: string | null;
-}
-
-/** What a unit cost in a Purchase: Total paid over the quantity. Worked out, never stored. */
-export function purchaseUnitPrice(p: Pick<Purchase, 'quantity' | 'totalPaid'>): number {
-  return p.totalPaid / p.quantity;
 }
 
 export interface Service {
@@ -307,8 +297,6 @@ export interface Snapshot {
   fillups: Fillup[];
   specLines: SpecLine[];
   vehicleParts: VehiclePart[];
-  /** The purchase log of every part. */
-  purchases: Purchase[];
   /** Document details only; the files are fetched on demand. */
   documents: GarageDocument[];
   /** The owner's changes to the parts catalogue; see catalogueOf. */
@@ -321,6 +309,8 @@ export interface Snapshot {
   tools: Tool[];
   vehicleConsumables: VehicleConsumable[];
   vehicleSpecs: VehicleSpec[];
+  /** Bought items read from Notion. */
+  notionPurchases: NotionPurchase[];
   /** Null when the Notion sync is not set up on the server. */
   notion: NotionStatus | null;
 }

@@ -1,6 +1,5 @@
 import { FileOpener } from '@capacitor-community/file-opener';
 import { App } from '@capacitor/app';
-import { Browser } from '@capacitor/browser';
 import { Capacitor } from '@capacitor/core';
 import { Directory, Filesystem } from '@capacitor/filesystem';
 import { StatusBar, Style } from '@capacitor/status-bar';
@@ -18,11 +17,6 @@ export function initAndroidApp(): void {
     if (location.hash === '' || location.hash === '#/' || location.hash === '#') void App.exitApp();
     else history.back();
   });
-}
-
-/** Opens a file the server sends (the purchases CSV) where the phone can save it; the app's own browser cannot. */
-export async function openInBrowser(url: string): Promise<void> {
-  await Browser.open({ url });
 }
 
 /**

@@ -218,3 +218,56 @@ describe('parseReference: columns and completeness', () => {
     expect(pull.tools).toEqual({ rows: [], complete: true, warnings: [] });
   });
 });
+
+describe('parseReference: Achats', () => {
+  const achat = (id: string, extra: Record<string, unknown> = {}) =>
+    page(id, {
+      Achat: title('Huile test'),
+      Date: date('2026-05-02'),
+      Article: rel('article-1'),
+      Produit: rel('prod-1'),
+      Quantité: num(3),
+      'Prix payé': num(31.5),
+      Boutique: rich('Boutique Exemple'),
+      ...extra,
+    });
+
+  it('reads the date, article, product, quantity, price and shop, and ignores invoice files and notes', () => {
+    const withExtras = achat('a1', { Facture: { type: 'files', files: [{ name: 'facture-test.pdf' }] }, Notes: rich('NOTE-SECRET') });
+    const pull = parseReference({ purchases: [withExtras] }, vehicleMap);
+    expect(pull.purchases.complete).toBe(true);
+    expect(pull.purchases.rows).toEqual([
+      { notionId: 'a1', name: 'Huile test', date: '2026-05-02', articleNotionId: 'article-1', productNotionId: 'prod-1', quantity: 3, price: 31.5, shop: 'Boutique Exemple' },
+    ]);
+    const text = JSON.stringify(pull.purchases);
+    expect(text).not.toContain('facture-test');
+    expect(text).not.toContain('NOTE-SECRET');
+  });
+
+  it('skips an Achat with no date, or no article, with a warning', () => {
+    const pull = parseReference({ purchases: [achat('a1', { Date: date(null) }), achat('a2', { Article: rel() }), achat('a3')] }, vehicleMap);
+    expect(pull.purchases.rows.map((r) => r.notionId)).toEqual(['a3']);
+    expect(pull.purchases.warnings.join('\n')).toContain('has no date, skipped');
+    expect(pull.purchases.warnings.join('\n')).toContain('has no article, skipped');
+  });
+
+  it('uses the first article when there are several, with a warning', () => {
+    const pull = parseReference({ purchases: [achat('a1', { Article: rel('article-1', 'article-2') })] }, vehicleMap);
+    expect(pull.purchases.rows[0]!.articleNotionId).toBe('article-1');
+    expect(pull.purchases.warnings.join('\n')).toContain('has several articles');
+  });
+
+  it('is incomplete, with a warning and no rows, when a required column is missing', () => {
+    const { Article: _gone, ...noArticle } = achat('a1').properties as Record<string, unknown>;
+    const pull = parseReference({ purchases: [page('a1', noArticle)] }, vehicleMap);
+    expect(pull.purchases.complete).toBe(false);
+    expect(pull.purchases.rows).toEqual([]);
+    expect(pull.purchases.warnings.join('\n')).toContain('the required column "Article" is missing');
+  });
+
+  it('is incomplete when the database is not found', () => {
+    const pull = parseReference({}, vehicleMap);
+    expect(pull.purchases.complete).toBe(false);
+    expect(pull.purchases.warnings.join('\n')).toContain('not found');
+  });
+});

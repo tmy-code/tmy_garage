@@ -22,7 +22,7 @@ _Avoid_: Part Spec, Vehicle Spec, Torque Spec
 
 ### In the French interface
 
-Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Fill-up → plein, Top-up → appoint, Full tank → plein complet, Consumption → consommation, Due Date → échéance, Interval → intervalle, Spec Line → caractéristique (fiche technique), Vehicle Part → article (une pièce ou un fluide), To buy / Bought → à acheter / achetée, Purchase → achat, Total paid → total payé, Build → motorisation, Plan Template → modèle de tâche, Document → document, Performed by → réalisé par, Total cost → coût total.
+Vehicle → véhicule, Maintenance Task → tâche d'entretien, Service → entretien, Odometer Reading → relevé kilométrique, Fill-up → plein, Top-up → appoint, Full tank → plein complet, Consumption → consommation, Due Date → échéance, Interval → intervalle, Spec Line → caractéristique (fiche technique), Vehicle Part → article (une pièce ou un fluide), Achat → achat, Build → motorisation, Plan Template → modèle de tâche, Document → document, Performed by → réalisé par, Total cost → coût total.
 
 ## Maintenance Plan
 
@@ -64,23 +64,20 @@ A line of a Service naming what went in, with brand and variant ("Motul 7100 10W
 _Avoid_: Part Used, Part Spec, Element
 
 **Vehicle Part**:
-A part or fluid bought, or to be bought, for one Vehicle ("Motul 7100 10W-40", "Mann HU 7008 z"), with its part number, unit, usual quantity and price per unit, and optionally the Task it is bought for and the Spec Line it is for. It is either To buy or Bought. The owner picks from the Vehicle's parts when logging a Service. Not the same as a Spec Line, which is the factory figure: the item only points at it, so the figure is shown next to what was bought.
+A part or fluid bought for one Vehicle ("Motul 7100 10W-40", "Mann HU 7008 z"), with its part number, unit, usual quantity and price per unit, and optionally the Task it is bought for and the Spec Line it is for. The owner picks from the Vehicle's parts when logging a Service. Not the same as a Spec Line, which is the factory figure: the item only points at it, so the figure is shown next to what was bought.
 On screen the app calls it an **item** (article in French), so the word covers fluids as well as parts; "Vehicle Part" stays the term in the code and in these docs.
 _Avoid_: Catalogue (that word is for the Plan Templates), stock, inventory, wishlist, shopping list
 
-**To buy / Bought**:
-The two states of a Vehicle Part. To buy covers anything the owner wants or plans to buy, including a part bought before that must be bought again; Bought means the owner has it. Recording a Purchase makes a part Bought; "buy again" makes it To buy. A part that existed before Purchases were introduced is Bought with an empty purchase log. Nothing finer: an idea still being compared goes in the part's Notes.
-
-**Purchase**:
-One occasion on which the owner bought a Vehicle Part: a date, a quantity (in the part's unit) and the Total paid for the goods as on the receipt, with further details (shop, delivery fees, receipt, notes) kept so the owner can analyse spending outside the app. The price per unit is worked out from Total paid and quantity, never typed. Delivery fees are a separate amount and never part of Total paid. A part can have many; together they are its purchase log. The app only records Purchases; it does not total or report them, and a Service's Total cost is unaffected.
-_Avoid_: Order, expense, price per unit (as a typed field)
+**Achat**:
+A line of the owner's Notion Achats database: a date, an article (a vehicle's consumable line), optionally a product, quantity, price and shop. The app only reads it. A required consumable is Bought when an Achat of its line is dated after the Task was last done, otherwise To buy.
+_Avoid_: Purchase (the removed app log), order, expense
 
 **Deal**:
-An offer the owner found online for a Vehicle Part while looking for a good price: a link, a price, a shop and the day it was checked. It is not a Purchase: buying it is still recorded as a Purchase.
+An offer the owner found online for a Vehicle Part while looking for a good price: a link, a price, a shop and the day it was checked. It is not an Achat: buying it is recorded in the owner's Notion Achats database.
 _Avoid_: Offer, quote, bargain
 
 **Parts section**:
-The garage-wide place in the app that lists the Vehicle Parts of every Vehicle together, filterable by Vehicle and by To buy / Bought. Each part still belongs to exactly one Vehicle.
+The garage-wide place in the app that lists the Vehicle Parts of every Vehicle together, filterable by Vehicle. Each part still belongs to exactly one Vehicle.
 
 **Receipt**:
 The photo or PDF of the invoice attached to a Service.
@@ -135,7 +132,7 @@ A kind of component a task works on (a drain plug, a caliper bolt), to which a V
 A kind of fluid or part that gets used up (engine oil, oil filter, brake pads). Each has a Family (fluid or part). What a Vehicle takes of one is its Vehicle Consumable.
 
 **Product** (_Produit_):
-A brand-name item of a Consumable Type, with a reference, supplier and a default price (not a Purchase).
+A brand-name item of a Consumable Type, with a reference, supplier and a default price (not an Achat).
 _Avoid_: Part (that is a Vehicle Part, the app's own list)
 
 **Tool** (_Outil_):

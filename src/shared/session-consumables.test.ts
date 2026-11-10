@@ -76,7 +76,6 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     fillups: [],
     specLines: [],
     vehicleParts: [],
-    purchases: [],
     documents: [],
     catalogue: [],
     refTasks: [ref('rt-oil', { consumableTypeIds: ['ct-oil', 'ct-filter'] }), ref('rt-check', { action: 'inspect', consumableTypeIds: ['ct-oil'] }), ref('rt-none')],
@@ -86,6 +85,7 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     tools: [],
     vehicleConsumables: [row({ chosenProductId: 'p-c', compatibleProductIds: ['p-b', 'p-c'] })],
     vehicleSpecs: [],
+    notionPurchases: [],
     notion: null,
     ...overrides,
   };

@@ -3,6 +3,7 @@ import { todayIso } from '../../shared/dates.ts';
 import { checkOdometer, findDuplicateService } from '../../shared/consistency.ts';
 import { effectiveInterval, pointsOf, readingOn, vehicleDue } from '../../shared/due.ts';
 import { PART_CATEGORIES, type PartCategory } from '../../shared/catalogue.ts';
+import { buyStates } from '../../shared/purchases.ts';
 import { formFigure, mergeNeeds, prefillForType, prefillFromProduct, type MergedNeed } from '../../shared/session-consumables.ts';
 import type { PartUnit, PerformedBy, ServiceKind } from '../../shared/schemas.ts';
 import type { OdometerReading, PartUsed, Service, Snapshot, Vehicle, VehiclePart } from '../../shared/types.ts';
@@ -223,16 +224,22 @@ export function ServiceForm({
   }, [parts]);
 
   // The needs of the ticked Tasks, one block per consumable type.
+  // Whether each required type was bought since its Task was last done (Notion's Achats); the strictest date of the ticked Tasks.
+  const buy = useMemo(
+    () =>
+      new Map(
+        buyStates(snapshot, vehicle.id, [...selected].map((taskId) => ({ taskId, lastDone: due.find((d) => d.taskId === taskId)?.lastDone?.date ?? null }))).map((s) => [s.type.id, s]),
+      ),
+    [snapshot, vehicle.id, selected, due],
+  );
   const needs = useMemo(() => mergeNeeds(snapshot, vehicle.id, due.filter((d) => selected.has(d.taskId)).map((d) => d.taskId)), [snapshot, vehicle.id, due, selected]);
   const needed = new Set(needs.map((n) => n.type.id));
   const keptLines = parts.some((p) => p.consumableTypeId !== null && !needed.has(p.consumableTypeId));
 
   /** The Vehicle's listed parts: those usually bought for a ticked Task first. */
   const listed = snapshot.vehicleParts.filter((p) => p.vehicleId === vehicle.id).sort((a, b) => a.name.localeCompare(b.name));
-  // Bought parts first; those still to buy come last, and picking one marks it bought when the Service is saved.
-  const forTasks = listed.filter((p) => !p.toBuy && p.taskId !== null && selected.has(p.taskId));
-  const others = listed.filter((p) => !p.toBuy && !forTasks.includes(p));
-  const stillToBuy = listed.filter((p) => p.toBuy);
+  const forTasks = listed.filter((p) => p.taskId !== null && selected.has(p.taskId));
+  const others = listed.filter((p) => !forTasks.includes(p));
   function pickListed(id: string) {
     const part = listed.find((p) => p.id === id);
     if (part) setParts([...parts, draftOfListed(part)]);
@@ -366,6 +373,7 @@ export function ServiceForm({
               needs={needs}
               snapshot={snapshot}
               lines={(typeId) => parts.filter((p) => p.consumableTypeId === typeId).map((p) => p.productId)}
+              buy={buy}
               onAdd={addForType}
             />
 
@@ -502,15 +510,6 @@ export function ServiceForm({
                     {others.length > 0 ? (
                       <optgroup label={forTasks.length > 0 ? t.workshop.pickPartOthers : t.workshop.partsListLink}>
                         {others.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {listedLabel(p, t, snapshot)}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ) : null}
-                    {stillToBuy.length > 0 ? (
-                      <optgroup label={t.workshop.pickPartToBuy}>
-                        {stillToBuy.map((p) => (
                           <option key={p.id} value={p.id}>
                             {listedLabel(p, t, snapshot)}
                           </option>

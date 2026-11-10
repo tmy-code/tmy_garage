@@ -70,10 +70,9 @@ function snapshot(vehicles: Vehicle[], tasks: MaintenanceTask[], readings: Odome
     specLines: [],
     vehicleParts: [],
     fillups: [],
-    purchases: [],
     documents: [],
     catalogue: [],
-    refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], vehicleSpecs: [], notion: null,
+    refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], vehicleSpecs: [], notionPurchases: [], notion: null,
   };
 }
 

@@ -881,6 +881,26 @@ const MIGRATIONS: (string | ((db: DatabaseSync) => void))[] = [
   DROP TABLE ref_tasks;
   ALTER TABLE ref_tasks_new RENAME TO ref_tasks;
 `,
+  `
+  -- The owner's Notion "Achats" database, read-only: when an article (a "Consommables par véhicule" page) was bought.
+  -- Only what the app needs: no invoice files, no notes. article_notion_id is the Notion page id of the article, matched
+  -- to vehicle_consumables.notion_id when read, so the order the databases are pulled in does not matter.
+  CREATE TABLE ref_purchases (
+    id TEXT PRIMARY KEY,
+    garage_id TEXT NOT NULL REFERENCES garages(id),
+    notion_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    article_notion_id TEXT NOT NULL,
+    product_id TEXT,
+    quantity REAL,
+    price REAL,
+    shop TEXT,
+    notion_removed INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (garage_id, notion_id)
+  );
+  CREATE INDEX ref_purchases_article ON ref_purchases (article_notion_id);
+`,
 ];
 
 /** Replaces what the owner changed on a template that was split by the same change on each of the new ones. */

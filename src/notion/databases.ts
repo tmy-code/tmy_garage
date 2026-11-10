@@ -1,7 +1,7 @@
-// The Notion databases the app manages (Véhicules and Articles: columns, and how a row becomes Notion property values),
-// and the read-only descriptors of the eight databases the owner makes by hand (ADR 0007).
+// The Notion databases the app manages (Véhicules, plus the journal: columns, and how a row becomes Notion property values),
+// and the read-only descriptors of the nine databases the owner makes by hand (ADR 0007, 0008).
 // Columns marked `owner` are the owner's (Deals, filing reference, equipment): created if missing, never written.
-import { STATE_BOUGHT, STATE_TO_BUY, type ItemRow, type VehicleRow } from './copy.ts';
+import type { VehicleRow } from './copy.ts';
 import {
   ACTION_ADJUST,
   ACTION_CLEAN,
@@ -26,7 +26,7 @@ export interface Column {
   owner?: boolean;
 }
 
-export type DatabaseKey = 'vehicles' | 'items' | 'sessions' | 'interventions' | 'used';
+export type DatabaseKey = 'vehicles' | 'sessions' | 'interventions' | 'used';
 
 /** A value as compared and written: text, number, date, checkbox, tags, or the app ids a relation points at. */
 export type Plain = string | number | boolean | null | string[] | { appIds: string[] };
@@ -86,57 +86,13 @@ export const VEHICLES: Database<VehicleRow> = {
   }),
 };
 
-export const ITEMS: Database<ItemRow> = {
-  key: 'items',
-  title: 'Articles',
-  icon: '🛒',
-  columns: [
-    { name: 'Article', type: 'title' },
-    { name: 'Référence', type: 'rich_text' },
-    {
-      name: 'État',
-      type: 'select',
-      options: [
-        { name: STATE_TO_BUY, color: 'orange' },
-        { name: STATE_BOUGHT, color: 'green' },
-      ],
-    },
-    { name: 'Unité', type: 'select' },
-    { name: 'Quantité habituelle', type: 'number' },
-    { name: 'Dernier prix unitaire', type: 'euro' },
-    { name: 'Tâche', type: 'rich_text' },
-    { name: 'Échéance', type: 'date' },
-    { name: 'Statut', type: 'select' },
-    { name: 'Véhicule', type: 'relation', target: 'vehicles' },
-    // The "Caractéristique" relation of the earlier copy is no longer written (that database is frozen, ADR 0007);
-    // an existing column is left alone.
-    ...common,
-    { name: 'Lien affaire', type: 'url', owner: true },
-    { name: 'Prix affaire', type: 'euro', owner: true },
-    { name: 'Boutique', type: 'rich_text', owner: true },
-    { name: 'Vérifié le', type: 'date', owner: true },
-  ],
-  values: (r) => ({
-    Article: r.name,
-    Référence: r.partNumber,
-    État: r.state,
-    Unité: r.unit,
-    'Quantité habituelle': r.quantity,
-    'Dernier prix unitaire': r.lastUnitPrice,
-    Tâche: r.task,
-    Échéance: r.dueDate,
-    Statut: r.dueStatus,
-    Véhicule: { appIds: [r.vehicleAppId] },
-  }),
-};
-
 /** A column of a hand-made database: the Notion property types it may have. */
 export interface ReferenceColumn {
   name: string;
   types: string[];
 }
 
-export type ReferenceKey = 'tasks' | 'componentTypes' | 'consumableTypes' | 'products' | 'tools' | 'plans' | 'vehicleConsumables' | 'vehicleSpecs';
+export type ReferenceKey = 'tasks' | 'componentTypes' | 'consumableTypes' | 'products' | 'tools' | 'plans' | 'vehicleConsumables' | 'vehicleSpecs' | 'purchases';
 
 /**
  * A database the owner makes and keeps by hand, matched by its title under the parent page. The app only reads it:
@@ -208,6 +164,11 @@ export const REFERENCE_DBS: ReferenceDb[] = [
     title: 'Spécifications',
     required: [col('Élément', 'title'), col('Véhicule', 'relation'), col('Valeur', 'number', 'rich_text')],
     optional: [col('Composant', 'relation'), col('Catégorie', 'select'), col('Unité', 'select'), col('Source', 'rich_text'), col('Statut', 'select')],
+  },  {
+    key: 'purchases',
+    title: 'Achats',
+    required: [col('Achat', 'title'), col('Date', 'date'), col('Article', 'relation')],
+    optional: [col('Produit', 'relation'), col('Quantité', 'number', 'rich_text'), col('Prix payé', 'number'), col('Boutique', 'rich_text')],
   },
 ];
 
