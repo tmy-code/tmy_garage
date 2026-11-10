@@ -872,6 +872,57 @@ textarea {
   min-height: 48px;
 }
 
+/* What a ticked task needs, from the Notion reference data: one block per required consumable type. */
+.consumables summary {
+  cursor: pointer;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+}
+
+.need-title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.need-sheet {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+}
+
+.need {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.need-facts {
+  display: grid;
+  grid-template-columns: minmax(6rem, auto) minmax(0, 1fr);
+  gap: 2px 12px;
+  margin: 0;
+}
+
+.need-facts dt {
+  color: var(--muted);
+}
+
+.need-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.need-torque {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 8px 0;
+}
+
+
 /* A field the owner keeps in Notion: shown as text, not as an input. */
 .locked dl {
   margin: 0;
