@@ -24,7 +24,16 @@ The owner maintains the reference data of the garage in Notion: the task catalog
 
 ## Privacy delta
 
-ADR 0005's list of what never leaves the NAS stays, with these changes. The journal databases planned for later (Séances, Interventions, Consommables utilisés) will carry date, odometer, task and per-line quantity and price of parts used. They will never carry notes, receipts, VINs, shop names, repair titles or the Service total. Nothing of the journal is sent in this first step: only reference data comes in, and the existing Véhicules and Articles copy goes out.
+ADR 0005's list of what never leaves the NAS stays, with these changes. The journal (Séances, Interventions, Consommables utilisés) carries, per Service: its date, odometer, who did the work and whether it was maintenance or a repair; per Task done: the task, its plan and its action; per part line: the consumable type and product when known, the description as typed, and the line's own quantity and unit price. It never carries notes, receipts or other documents, VINs, shop names, repair titles, the Service total, odometer-only readings, Purchases or Fill-ups.
+
+## Write-back rules
+
+The app writes into the owner's hand-made databases in two ways only, both in "Plans d'entretien", and never touches their titles or other columns (nor creates, renames or deletes any column):
+
+- **A plan page** for each Task that follows the catalogue and has none (the Task was derived by the sync), with only its title (Plan), Véhicule and Tâche. Never when a page for that vehicle and task already exists (the owner's own, or one an earlier run made before its id was kept), never for a paused Task, and never again for a page the owner archived: the pull pauses and unlinks that Task, and the next pull links it again by name, still paused. The id of a created page is stored at once on the Task, which then counts as made from a Plan page.
+- **"Dernier fait (km)" and "Dernier fait (date)"** of each linked Task's plan page, from the last Service (a baseline counts), only where the value differs, only when both columns exist as a number and a date (else a warning and nothing is written), and not on a page that covers several vehicles. Notion's value is never read back into the app.
+
+The journal databases (Séances, Interventions, Consommables utilisés) are the app's: created under the parent page with the same title-matching rules, with their missing columns added and existing ones never changed. A relation to one of the owner's databases (Tâche, Plan, Type de consommable, Produit utilisé) is only created when that database exists; a row whose vehicle, task, plan or product has no Notion page leaves that relation empty. Every app-owned database goes through the same removal guard as Véhicules and Articles. A dry run reads and writes nothing in the push.
 
 ## Offline
 

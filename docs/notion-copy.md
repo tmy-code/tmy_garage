@@ -64,4 +64,15 @@ The push has the same kind of guard: it never ticks **Supprimé de l’app** on 
 
 ## What leaves the NAS
 
-Pushed to Notion: owned vehicles (name, kind, make, model, year, Build, odometer, daily distance) and all their items (name, reference, to buy / bought, unit, usual quantity, last price per unit, the task and its due date and status). Never: VINs, sale details, Services and their costs, receipts and other documents, notes, shops, sold vehicles. The journal databases planned for later will carry date, odometer, task and per-line quantity and price of parts used, and never notes, receipts, VINs, shops, repair titles or the Service total.
+Pushed to Notion: owned vehicles (name, kind, make, model, year, Build, odometer, daily distance) and all their items (name, reference, to buy / bought, unit, usual quantity, last price per unit, the task and its due date and status), plus the journal below. Never: VINs, sale details, the cost of a Service, receipts and other documents, notes, shops, repair titles, odometer-only readings, purchases, fill-ups, sold vehicles.
+
+## Writing back to the Plans database
+
+The only writes into the owner's databases are in *Plans d'entretien*:
+
+- A **plan page** is created for each task that follows the catalogue and has none, with only **Plan** (the title), **Véhicule** and **Tâche**. Never twice, never when a page for that vehicle and task exists already, never for a paused task, and never again for a page the owner archived (the pull pauses that task).
+- **Dernier fait (km)** and **Dernier fait (date)** are written from the last Service (a baseline counts), only where the value differs. If either column is missing or has another type, or the page covers several vehicles, a warning says so and nothing is written.
+
+## The journal
+
+Three databases the app creates under the parent page (found by title; missing columns are added, existing ones never changed): **Séances** (one per Service: Séance, Véhicule, Date, Km, Réalisé par, Type Entretien / Réparation), **Interventions** (one per task done: Intervention, Séance, Tâche, Plan, Action Contrôle / Remplacement) and **Consommables utilisés** (one per part line: Ligne, Intervention, Type de consommable, Produit utilisé, Désignation, Quantité, Prix unitaire). All carry **ID app** and **Supprimé de l’app**. A line goes with the intervention whose task needs its consumable type, else with the Service's first task. A line typed by hand has no Produit utilisé and keeps its Désignation. A relation that points at one of your databases is only created when that database exists, and stays empty for a row whose page is not known. A removed row is ticked, never deleted, with the same guard as above.

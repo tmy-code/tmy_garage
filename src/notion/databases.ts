@@ -2,6 +2,15 @@
 // and the read-only descriptors of the eight databases the owner makes by hand (ADR 0007).
 // Columns marked `owner` are the owner's (Deals, filing reference, equipment): created if missing, never written.
 import { STATE_BOUGHT, STATE_TO_BUY, type ItemRow, type VehicleRow } from './copy.ts';
+import {
+  ACTION_INSPECT,
+  ACTION_REPLACE,
+  SESSION_MAINTENANCE,
+  SESSION_REPAIR,
+  type InterventionRow,
+  type SessionRow,
+  type UsedRow,
+} from './journal.ts';
 
 export type ColumnType = 'title' | 'rich_text' | 'number' | 'euro' | 'select' | 'multi_select' | 'date' | 'checkbox' | 'url' | 'relation';
 
@@ -9,13 +18,13 @@ export interface Column {
   name: string;
   type: ColumnType;
   /** For a relation: the key of the database it points at. */
-  target?: DatabaseKey;
+  target?: DatabaseKey | ReferenceKey;
   /** For a select: options created with the column, with their colours. */
   options?: { name: string; color: string }[];
   owner?: boolean;
 }
 
-export type DatabaseKey = 'vehicles' | 'items';
+export type DatabaseKey = 'vehicles' | 'items' | 'sessions' | 'interventions' | 'used';
 
 /** A value as compared and written: text, number, date, checkbox, tags, or the app ids a relation points at. */
 export type Plain = string | number | boolean | null | string[] | { appIds: string[] };
@@ -200,8 +209,91 @@ export const REFERENCE_DBS: ReferenceDb[] = [
   },
 ];
 
+export const SESSIONS: Database<SessionRow> = {
+  key: 'sessions',
+  title: 'Séances',
+  icon: '🛠️',
+  columns: [
+    { name: 'Séance', type: 'title' },
+    { name: 'Véhicule', type: 'relation', target: 'vehicles' },
+    { name: 'Date', type: 'date' },
+    { name: 'Km', type: 'number' },
+    { name: 'Réalisé par', type: 'select' },
+    {
+      name: 'Type',
+      type: 'select',
+      options: [
+        { name: SESSION_MAINTENANCE, color: 'green' },
+        { name: SESSION_REPAIR, color: 'orange' },
+      ],
+    },
+    ...common,
+  ],
+  values: (r) => ({
+    Séance: r.title,
+    Véhicule: { appIds: [r.vehicleAppId] },
+    Date: r.date,
+    Km: r.km,
+    'Réalisé par': r.performedBy,
+    Type: r.type,
+  }),
+};
+
+export const INTERVENTIONS: Database<InterventionRow> = {
+  key: 'interventions',
+  title: 'Interventions',
+  icon: '🔧',
+  columns: [
+    { name: 'Intervention', type: 'title' },
+    { name: 'Séance', type: 'relation', target: 'sessions' },
+    { name: 'Tâche', type: 'relation', target: 'tasks' },
+    { name: 'Plan', type: 'relation', target: 'plans' },
+    {
+      name: 'Action',
+      type: 'select',
+      options: [
+        { name: ACTION_INSPECT, color: 'blue' },
+        { name: ACTION_REPLACE, color: 'purple' },
+      ],
+    },
+    ...common,
+  ],
+  values: (r) => ({
+    Intervention: r.title,
+    Séance: { appIds: [r.sessionAppId] },
+    Tâche: { appIds: r.refTaskKey ? [r.refTaskKey] : [] },
+    Plan: { appIds: r.planKey ? [r.planKey] : [] },
+    Action: r.action,
+  }),
+};
+
+export const USED: Database<UsedRow> = {
+  key: 'used',
+  title: 'Consommables utilisés',
+  icon: '🛢️',
+  columns: [
+    { name: 'Ligne', type: 'title' },
+    { name: 'Intervention', type: 'relation', target: 'interventions' },
+    { name: 'Type de consommable', type: 'relation', target: 'consumableTypes' },
+    { name: 'Produit utilisé', type: 'relation', target: 'products' },
+    { name: 'Désignation', type: 'rich_text' },
+    { name: 'Quantité', type: 'number' },
+    { name: 'Prix unitaire', type: 'euro' },
+    ...common,
+  ],
+  values: (r) => ({
+    Ligne: r.designation,
+    Intervention: { appIds: r.interventionAppId ? [r.interventionAppId] : [] },
+    'Type de consommable': { appIds: r.consumableTypeKey ? [r.consumableTypeKey] : [] },
+    'Produit utilisé': { appIds: r.productKey ? [r.productKey] : [] },
+    Désignation: r.designation,
+    Quantité: r.quantity,
+    'Prix unitaire': r.unitPrice,
+  }),
+};
+
 /** The schema Notion needs to create a column. */
-export function columnSchema(column: Column, dataSourceIds: Partial<Record<DatabaseKey, string>>): Record<string, unknown> {
+export function columnSchema(column: Column, dataSourceIds: Partial<Record<DatabaseKey | ReferenceKey, string>>): Record<string, unknown> {
   switch (column.type) {
     case 'title':
       return { title: {} };

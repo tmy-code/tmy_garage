@@ -106,15 +106,22 @@ export function createNotionSync({ db, garageId, token, parentPageId, apiFactory
 
       // The reference data is in; a failing push is reported but undoes nothing.
       try {
-        const pushed = await pushAll(api, parentPageId, readSnapshot(db, garageId), todayIso(now()), messagesFor('fr'), () => undefined);
-        const pushWarnings = pushed.flatMap(([, counts]) => (counts.warning ? [counts.warning] : []));
+        // A Plan page is kept against its Task as soon as it exists (the Task then counts as made from a Plan page).
+        const keepPlan = db.prepare(
+          `UPDATE maintenance_tasks SET notion_plan_id = ?, plan_auto = 0
+           WHERE id = ? AND notion_plan_id IS NULL AND vehicle_id IN (SELECT id FROM vehicles WHERE garage_id = ?)`,
+        );
+        const pushed = await pushAll(api, parentPageId, readSnapshot(db, garageId), todayIso(now()), messagesFor('fr'), () => undefined, {
+          onPlanCreated: (taskId, pageId) => void keepPlan.run(pageId, taskId, garageId),
+        });
+        const pushWarnings = [...pushed.warnings, ...pushed.databases.flatMap(([, counts]) => (counts.warning ? [counts.warning] : []))];
         const warnings = [...applied.warnings, ...pushWarnings];
         if (pushWarnings.length > 0) saveState({ lastError: null, warnings, pausedTasks: applied.pausedTasks });
         return {
           dryRun: false,
           pulled: summarize(pull),
           applied,
-          pushed: pushed.map(([database, counts]) => ({ database, counts })),
+          pushed: pushed.databases.map(([database, counts]) => ({ database, counts })),
           warnings,
         };
       } catch (error) {

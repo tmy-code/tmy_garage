@@ -144,6 +144,15 @@ Something used for a job, with a size or capacity and whether the owner has it.
 **Equipment** (_Équipements_):
 The tags the owner puts on a Vehicle in Notion (e.g. "Transmission chaîne", "ABS"). A Catalogue Task applies to a Vehicle when every tag of its "Applicable si" is among the Vehicle's Equipment; a task with no tag applies to every Vehicle.
 
+**Session** (_Séance_):
+A Service as it appears in the Notion journal: its date, odometer, who did the work and whether it was maintenance or a repair. Nothing else of the Service leaves the NAS.
+
+**Intervention**:
+One Task done during a Session, with its Action (check or replacement) and, when it has them, its catalogue task and its Plan.
+
+**Plan** (_Plan d'entretien_):
+The Notion page that ties one Vehicle to one Catalogue Task, with optional Intervals of its own and the last time the task was done ("Dernier fait"). The sync creates it for a derived Task and keeps "Dernier fait" up to date.
+
 ## Other
 
 **Document**:
