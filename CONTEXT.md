@@ -144,6 +144,9 @@ Something used for a job, with a size or capacity and whether the owner has it.
 **Equipment** (_Équipements_):
 The tags the owner puts on a Vehicle in Notion (e.g. "Transmission chaîne", "ABS"). A Catalogue Task applies to a Vehicle when every tag of its "Applicable si" is among the Vehicle's Equipment; a task with no tag applies to every Vehicle.
 
+**Required consumable** (_Consommable requis_):
+A Consumable Type that a ticked replacement Task needs, shown on the Service screen with this Vehicle's own sheet (specification, OEM reference, capacity, quantity) and a picker for the Product used. Picking one fills in the line, which stays editable and keeps the type and the product. An inspection shows none.
+
 **Session** (_Séance_):
 A Service as it appears in the Notion journal: its date, odometer, who did the work and whether it was maintenance or a repair. Nothing else of the Service leaves the NAS.
 

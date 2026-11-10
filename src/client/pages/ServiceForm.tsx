@@ -1,8 +1,9 @@
-import { useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { todayIso } from '../../shared/dates.ts';
 import { checkOdometer, findDuplicateService } from '../../shared/consistency.ts';
 import { effectiveInterval, pointsOf, readingOn, vehicleDue } from '../../shared/due.ts';
 import { PART_CATEGORIES, type PartCategory } from '../../shared/catalogue.ts';
+import { formFigure, mergeNeeds, prefillForType, prefillFromProduct, type MergedNeed } from '../../shared/session-consumables.ts';
 import type { PartUnit, PerformedBy, ServiceKind } from '../../shared/schemas.ts';
 import type { OdometerReading, PartUsed, Service, Snapshot, Vehicle, VehiclePart } from '../../shared/types.ts';
 import { newId } from '../api.ts';
@@ -14,6 +15,7 @@ import { navigate } from '../router.ts';
 import { enqueue, online, undoCreate, useStore } from '../store.ts';
 import type { OutboxOp } from '../outbox.ts';
 import { DocumentsPanel } from './Documents.tsx';
+import { OTHER_PRODUCT, SessionConsumables } from './SessionConsumables.tsx';
 
 /** A Part Used as typed in the form: numbers stay text until saved. */
 interface PartDraft {
@@ -28,6 +30,9 @@ interface PartDraft {
   partId: string | null;
   /** A part typed by hand is also kept in the list, unless the owner unticks it. */
   remember: boolean;
+  /** The required Consumable Type (from the Notion catalogue) and the Product it is for, when picked from a Task's block. */
+  consumableTypeId: string | null;
+  productId: string | null;
 }
 
 /** A search box shows above the task list once it is longer than this. */
@@ -45,6 +50,8 @@ function toDraft(p: PartUsed): PartDraft {
     price: p.price != null ? String(p.price) : '',
     partId: p.partId ?? null,
     remember: false,
+    consumableTypeId: p.consumableTypeId ?? null,
+    productId: p.productId ?? null,
   };
 }
 
@@ -58,6 +65,8 @@ function draftOfListed(p: VehiclePart): PartDraft {
     price: p.price !== null ? String(p.price) : '',
     partId: p.id,
     remember: false,
+    consumableTypeId: null,
+    productId: null,
   };
 }
 
@@ -75,6 +84,8 @@ function fromDraft(d: PartDraft, t: Messages): PartUsed {
     // An id made here for a part to keep travels with the Service, so sending it again never doubles it.
     partId: d.partId ?? (d.remember ? newId() : null),
     ...(d.remember && !d.partId ? { remember: true } : {}),
+    ...(d.consumableTypeId ? { consumableTypeId: d.consumableTypeId } : {}),
+    ...(d.productId ? { productId: d.productId } : {}),
   };
 }
 
@@ -170,9 +181,51 @@ export function ServiceForm({
         price: '',
         partId: null,
         remember: true,
+        consumableTypeId: null,
+        productId: null,
       },
     ]);
   }
+
+  /** A line for a required Consumable Type: filled in from the product picked, or empty to type by hand. Everything stays editable. */
+  function addForType(need: MergedNeed, productId: string) {
+    const product = productId === OTHER_PRODUCT ? undefined : snapshot.products.find((p) => p.id === productId);
+    const fill = product ? prefillFromProduct(product, need.type, need.rows) : { ...prefillForType(need.type, need.rows), description: '', partNumber: '', price: '' };
+    const comma = t.locale.startsWith('fr');
+    const key = nextKey++;
+    focusLine.current = key;
+    setParts([
+      ...parts,
+      {
+        key,
+        description: fill.description,
+        partNumber: fill.partNumber,
+        quantity: fill.quantity ? formFigure(fill.quantity, comma) : '1',
+        unit: fill.unit ?? 'piece',
+        price: fill.price ? formFigure(fill.price, comma) : '',
+        partId: null,
+        // A product from the Notion catalogue is not also kept in the parts list; a part typed by hand is.
+        remember: product === undefined,
+        consumableTypeId: fill.consumableTypeId,
+        productId: fill.productId,
+      },
+    ]);
+  }
+
+  // A new line lands far below its picker on a phone: bring it into view, on its quantity.
+  const focusLine = useRef<number | null>(null);
+  useEffect(() => {
+    if (focusLine.current === null) return;
+    const field = document.getElementById(`part-qty-${focusLine.current}`);
+    focusLine.current = null;
+    field?.scrollIntoView({ block: 'center' });
+    field?.focus();
+  }, [parts]);
+
+  // The needs of the ticked Tasks, one block per consumable type.
+  const needs = useMemo(() => mergeNeeds(snapshot, vehicle.id, due.filter((d) => selected.has(d.taskId)).map((d) => d.taskId)), [snapshot, vehicle.id, due, selected]);
+  const needed = new Set(needs.map((n) => n.type.id));
+  const keptLines = parts.some((p) => p.consumableTypeId !== null && !needed.has(p.consumableTypeId));
 
   /** The Vehicle's listed parts: those usually bought for a ticked Task first. */
   const listed = snapshot.vehicleParts.filter((p) => p.vehicleId === vehicle.id).sort((a, b) => a.name.localeCompare(b.name));
@@ -309,6 +362,13 @@ export function ServiceForm({
               </div>
             </fieldset>
 
+            <SessionConsumables
+              needs={needs}
+              snapshot={snapshot}
+              lines={(typeId) => parts.filter((p) => p.consumableTypeId === typeId).map((p) => p.productId)}
+              onAdd={addForType}
+            />
+
             <Field label={t.service.date}>
               <input
                 type="date"
@@ -373,6 +433,7 @@ export function ServiceForm({
           <div className="form">
             <fieldset className="field">
               <legend className="field-label">{t.workshop.partsUsed}</legend>
+              {keptLines ? <p className="muted">{t.notion.keptLines}</p> : null}
               {parts.map((d) => (
                 <div key={d.key} className="card part-used">
                   <div className="section-head">
@@ -385,6 +446,9 @@ export function ServiceForm({
                       {t.workshop.remove}
                     </button>
                   </div>
+                  {snapshot.consumableTypes.find((c) => c.id === d.consumableTypeId) ? (
+                    <p className="muted">{t.notion.forType(snapshot.consumableTypes.find((c) => c.id === d.consumableTypeId)!.name)}</p>
+                  ) : null}
                   <input
                     value={d.description}
                     onChange={(e) => setPart(d.key, { description: e.target.value, ...(d.partId ? { partId: null, remember: true } : {}) })}
@@ -394,7 +458,7 @@ export function ServiceForm({
                   />
                   <div className="row">
                     <Field label={t.workshop.quantity}>
-                      <input inputMode="decimal" value={d.quantity} onChange={(e) => setPart(d.key, { quantity: e.target.value })} />
+                      <input id={`part-qty-${d.key}`} inputMode="decimal" value={d.quantity} onChange={(e) => setPart(d.key, { quantity: e.target.value })} />
                     </Field>
                     <Field label={t.workshop.unit}>
                       <select value={d.unit} onChange={(e) => setPart(d.key, { unit: e.target.value as PartUnit })}>
