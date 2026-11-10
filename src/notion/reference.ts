@@ -1,6 +1,7 @@
 // Reads the owner's hand-made Notion databases (task catalogue, plans, types, products, tools, per-vehicle consumables
 // and specs) into typed rows. Pure: it takes the pages Notion returned and knows nothing of the API or the database.
 // Relations keep Notion page ids; the apply step turns them into the app's ids.
+import type { PartCategory } from '../shared/catalogue.ts';
 import { refKey } from '../shared/workshop.ts';
 import { APP_ID, EQUIPMENT, REFERENCE_DBS, REMOVED, relationPageIds, type ReferenceDb, type ReferenceKey } from './databases.ts';
 
@@ -23,6 +24,8 @@ export interface RefTaskRow {
   componentTypeNotionIds: string[];
   toolNotionIds: string[];
   instructions: string | null;
+  /** The section the Task is listed under on the vehicle page; null when empty or not one the app knows. */
+  category: PartCategory | null;
 }
 
 export interface ComponentTypeRow {
@@ -160,6 +163,20 @@ export function titleKey(title: string): string {
 
 const ACTIONS: Record<string, 'inspect' | 'replace'> = { controle: 'inspect', remplacement: 'replace' };
 const FAMILIES: Record<string, 'fluid' | 'part'> = { fluide: 'fluid', piece: 'part' };
+/** The app's French category labels, plus the spellings used elsewhere in the owner's catalogue. */
+export const CATEGORIES: Record<string, PartCategory> = {
+  moteur: 'engine',
+  transmission: 'transmission',
+  freinage: 'brakes',
+  freins: 'brakes',
+  chassis: 'chassis',
+  roues: 'chassis',
+  electricite: 'electrical',
+  electrique: 'electrical',
+  'refroidissement et climatisation': 'cooling_climate',
+  refroidissement: 'cooling_climate',
+  autre: 'other',
+};
 
 class RowReader {
   readonly warnings: string[];
@@ -360,6 +377,7 @@ export function parseReference(pages: Record<string, any[]>, vehiclePageToAppId:
             componentTypeNotionIds: reader.rel(page, 'Composants'),
             toolNotionIds: reader.rel(page, 'Outils'),
             instructions: reader.text(page, 'Instructions'),
+            category: reader.mapped(page, 'Catégorie', CATEGORIES),
           } satisfies RefTaskRow);
           break;
         case 'componentTypes':

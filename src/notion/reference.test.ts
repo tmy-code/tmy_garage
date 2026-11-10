@@ -84,6 +84,23 @@ describe('parseReference: values', () => {
     expect(pull.tasks.rows[0]).toMatchObject({ consumableTypeNotionIds: ['ct-1'], toolNotionIds: ['tool-a', 'tool-b'], componentTypeNotionIds: ['comp-1'], instructions: 'Chauffer le moteur' });
   });
 
+  it("maps a task's Catégorie to the app's category, accepting the other spellings of the catalogue", () => {
+    const pull = parseReference(
+      {
+        tasks: [
+          taskPage('t1', { Catégorie: sel('Refroidissement et climatisation') }),
+          taskPage('t2', { Catégorie: sel('Freins') }),
+          taskPage('t3', { Catégorie: sel('Électrique') }),
+          taskPage('t4', { Catégorie: sel(null) }),
+          taskPage('t5', { Catégorie: sel('Carrosserie') }),
+        ],
+      },
+      vehicleMap,
+    );
+    expect(pull.tasks.rows.map((r) => r.category)).toEqual(['cooling_climate', 'brakes', 'electrical', null, null]);
+    expect(pull.tasks.warnings.join('\n')).toContain('unknown value "Carrosserie" in "Catégorie"');
+  });
+
   it('skips pages with an empty title', () => {
     const pull = parseReference({ tasks: [taskPage('t1', { Tâche: title('  ') }), taskPage('t2')] }, vehicleMap);
     expect(pull.tasks.rows.map((r) => r.notionId)).toEqual(['t2']);

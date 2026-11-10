@@ -48,6 +48,7 @@ function refTask(notionId: string, name: string, overrides: Partial<RefTaskRow> 
     componentTypeNotionIds: [],
     toolNotionIds: [],
     instructions: null,
+    category: null,
     ...overrides,
   };
 }
@@ -124,6 +125,15 @@ describe('derived and explicit plans', () => {
     const report = apply(pull({ tasks: [refTask('rt-oil', 'Vidange', { defaultKm: null, defaultMonths: null })] }));
     expect(tasksOf('bike')[0]).toMatchObject({ interval_km: 6000, interval_months: 12 });
     expect(report.warnings.join('\n')).toContain('keeps its current one');
+  });
+
+  it("files a task under the catalogue's category, and keeps the task's own when Notion has none", () => {
+    apply(pull({ tasks: [refTask('rt-oil', 'Vidange', { category: 'engine' })] }));
+    expect(tasksOf('bike')[0]).toMatchObject({ category: 'engine' });
+    apply(pull({ tasks: [refTask('rt-oil', 'Vidange', { category: 'brakes' })] }));
+    expect(tasksOf('bike')[0]).toMatchObject({ category: 'brakes' });
+    apply(pull({ tasks: [refTask('rt-oil', 'Vidange')] }));
+    expect(tasksOf('bike')[0]).toMatchObject({ category: 'brakes' });
   });
 
   it('follows the catalogue when its name and intervals change', () => {

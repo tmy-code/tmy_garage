@@ -9,6 +9,7 @@
 | [docs/adr/](docs/adr/) | Changing offline sync, hosting, parts, the Notion copy or the Android app |
 | [docs/plan-templates.md](docs/plan-templates.md) | Changing the built-in maintenance templates (`src/shared/catalogue.ts` is the source of truth) |
 | [docs/notion-copy.md](docs/notion-copy.md) | Working on `npm run notion-sync` |
+| [docs/notion-databases.md](docs/notion-databases.md) | Changing a Notion database or a column the sync reads or writes (keep it up to date) |
 | [docs/deploy.md](docs/deploy.md) | Installing or updating on the NAS |
 | `docs/ux-review-2026-11*.md` | Only when working through those reviews' recommended changes |
 

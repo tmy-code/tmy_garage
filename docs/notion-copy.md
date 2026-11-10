@@ -1,6 +1,6 @@
 # The Notion sync
 
-The server keeps Notion and the app in step ([ADR 0007](adr/0007-two-way-notion-sync.md)). **Notion wins definitions, the app wins logs**: the owner maintains the referentials in Notion (task catalogue, which task applies to which vehicle, specs, tools, consumable types, products); the app stores them offline, read-only, and keeps the logging and the reminders. It also still copies vehicles and items to Notion for deal hunting ([ADR 0005](adr/0005-one-way-copy-to-notion-for-deal-hunting.md)).
+The server keeps Notion and the app in step ([ADR 0007](adr/0007-two-way-notion-sync.md)). **Notion wins definitions, the app wins logs**: the owner maintains the referentials in Notion (task catalogue, which task applies to which vehicle, specs, tools, consumable types, products); the app stores them offline, read-only, and keeps the logging and the reminders. It also still copies vehicles and items to Notion for deal hunting ([ADR 0005](adr/0005-one-way-copy-to-notion-for-deal-hunting.md)). Every database, column and link is described in [notion-databases.md](notion-databases.md).
 
 Each run does, in order: **fetch** the owner's databases, **apply** them to the app in one transaction (an error changes nothing), then **push** the copy. It runs on the NAS server about a minute after start, every 30 minutes, and from *Settings* → *Notion* → *Sync now*. Only the server holds the Notion token.
 
@@ -24,7 +24,7 @@ Found by title under the page set by `NOTION_PARENT_PAGE_ID`. The app never crea
 
 | Database | Columns (required first) |
 | --- | --- |
-| Tâches d'entretien | Tâche (title), Action (select: Contrôle / Remplacement), Applicable si (multi-select), Intervalle par défaut (km), Intervalle par défaut (mois) · Types de consommables requis, Composants, Outils (relations), Instructions |
+| Tâches d'entretien | Tâche (title), Action (select: Contrôle / Remplacement), Applicable si (multi-select), Intervalle par défaut (km), Intervalle par défaut (mois) · Types de consommables requis, Composants, Outils (relations), Instructions, Catégorie (select: Moteur / Transmission / Freinage / Châssis / Électricité / Refroidissement et climatisation / Autre; also Freins, Roues, Électrique) |
 | Types de composants | Nom · Catégorie, Notes |
 | Types de consommables | Nom · Catégorie, Famille (Fluide / Pièce), Notes |
 | Produits | Nom · Type de consommable (relation), Marque, Référence, Fournisseur, Prix, Notes |
