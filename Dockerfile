@@ -20,6 +20,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY src/server ./src/server
 COPY src/shared ./src/shared
+COPY src/notion ./src/notion
 COPY --from=build /app/dist/client ./dist/client
 VOLUME /data
 EXPOSE 3000

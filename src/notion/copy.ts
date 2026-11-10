@@ -4,7 +4,7 @@ import { vehicleDue, type DueInfo } from '../shared/due.ts';
 import type { IsoDate } from '../shared/dates.ts';
 import { purchaseUnitPrice, type Snapshot, type Vehicle } from '../shared/types.ts';
 import { SPEC_FLAGS } from '../shared/catalogue.ts';
-import type { Messages } from '../client/i18n.ts';
+import type { Messages } from '../shared/messages.ts';
 
 export interface VehicleRow {
   appId: string;

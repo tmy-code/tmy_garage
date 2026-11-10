@@ -1,7 +1,7 @@
 // The Notion sync engine (ADR 0007), shared by the server's timer and the `npm run notion-sync` command:
 // - fetchReference reads the owner's hand-made databases (read-only: nothing there is ever created, renamed or written);
 // - pushAll copies Vehicles and Articles (the deal-hunting copy), creating those two databases and their missing columns.
-import type { Messages } from '../client/i18n.ts';
+import type { Messages } from '../shared/messages.ts';
 import type { IsoDate } from '../shared/dates.ts';
 import type { Snapshot } from '../shared/types.ts';
 import type { NotionApi } from './api.ts';

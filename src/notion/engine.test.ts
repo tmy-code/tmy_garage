@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { messagesFor } from '../client/i18n.ts';
+import { messagesFor } from '../shared/messages.ts';
 import type { Snapshot, Vehicle } from '../shared/types.ts';
 import { normalizeSnapshot } from '../shared/workshop.ts';
 import { ITEMS, REFERENCE_DBS, VEHICLES, notionType } from './databases.ts';
