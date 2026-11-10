@@ -58,7 +58,21 @@ function TaskList({ due, tasks, owned }: { due: DueInfo[]; tasks: Map<string, Ma
  * Tasks never done have no due date. They are gathered in one block, each with a quick way to say when
  * it was last done, instead of a wall of identical "no record" rows among the tasks that are tracked.
  */
-function SetupTasks({ due, tasks, today, open, points }: { due: DueInfo[]; tasks: Map<string, MaintenanceTask>; today: string; open: boolean; points: OdometerPoint[] }) {
+function SetupTasks({
+  due,
+  tasks,
+  today,
+  open,
+  points,
+  firstRegistrationDate,
+}: {
+  due: DueInfo[];
+  tasks: Map<string, MaintenanceTask>;
+  today: string;
+  open: boolean;
+  points: OdometerPoint[];
+  firstRegistrationDate: string | null;
+}) {
   const t = useT();
   const [editing, setEditing] = useState<string | null>(null);
   return (
@@ -70,7 +84,15 @@ function SetupTasks({ due, tasks, today, open, points }: { due: DueInfo[]; tasks
           <h3 className="due-group">{t.workshop.partCategories[g.category]}</h3>
           <ul className="list">
             {g.due.map((d) => (
-              <SetupRow key={d.taskId} task={tasks.get(d.taskId)!} today={today} points={points} editing={editing === d.taskId} onEdit={(on) => setEditing(on ? d.taskId : null)} />
+              <SetupRow
+                key={d.taskId}
+                task={tasks.get(d.taskId)!}
+                today={today}
+                points={points}
+                firstRegistrationDate={firstRegistrationDate}
+                editing={editing === d.taskId}
+                onEdit={(on) => setEditing(on ? d.taskId : null)}
+              />
             ))}
           </ul>
         </Fragment>
@@ -79,7 +101,21 @@ function SetupTasks({ due, tasks, today, open, points }: { due: DueInfo[]; tasks
   );
 }
 
-function SetupRow({ task, today, points, editing, onEdit }: { task: MaintenanceTask; today: string; points: OdometerPoint[]; editing: boolean; onEdit: (on: boolean) => void }) {
+function SetupRow({
+  task,
+  today,
+  points,
+  firstRegistrationDate,
+  editing,
+  onEdit,
+}: {
+  task: MaintenanceTask;
+  today: string;
+  points: OdometerPoint[];
+  firstRegistrationDate: string | null;
+  editing: boolean;
+  onEdit: (on: boolean) => void;
+}) {
   const t = useT();
   const { reachable } = useStore();
   const [date, setDate] = useState('');
@@ -87,15 +123,7 @@ function SetupRow({ task, today, points, editing, onEdit }: { task: MaintenanceT
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function save(event: FormEvent) {
-    event.preventDefault();
-    let odometer = km.trim() === '' ? null : parseNumber(km);
-    if (date === '' || date > today || (odometer !== null && (Number.isNaN(odometer) || odometer < 0 || !Number.isInteger(odometer)))) {
-      setError(t.vehicle.setupError);
-      return;
-    }
-    // Only the date given: the odometer is estimated from the logged history.
-    if (odometer === null && task.intervalKm !== null) odometer = estimateOdometerAt(points, date);
+  async function persist(baselineDate: string, baselineOdometer: number | null) {
     setError(null);
     setBusy(true);
     try {
@@ -105,8 +133,8 @@ function SetupRow({ task, today, points, editing, onEdit }: { task: MaintenanceT
         nameFr: task.nameFr,
         intervalKm: task.intervalKm,
         intervalMonths: task.intervalMonths,
-        baselineDate: date,
-        baselineOdometer: odometer,
+        baselineDate,
+        baselineOdometer,
         category: task.category,
         notes: task.notes,
         switchedOff: task.switchedOff,
@@ -117,6 +145,24 @@ function SetupRow({ task, today, points, editing, onEdit }: { task: MaintenanceT
       setError((e as Error).message);
       setBusy(false);
     }
+  }
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    let odometer = km.trim() === '' ? null : parseNumber(km);
+    if (date === '' || date > today || (odometer !== null && (Number.isNaN(odometer) || odometer < 0 || !Number.isInteger(odometer)))) {
+      setError(t.vehicle.setupError);
+      return;
+    }
+    // Only the date given: the odometer is estimated from the logged history.
+    if (odometer === null && task.intervalKm !== null) odometer = estimateOdometerAt(points, date);
+    await persist(date, odometer);
+  }
+
+  /** "Never done": counted from the day the vehicle went on the road, at 0 km when the task has a distance interval. */
+  async function never() {
+    if (firstRegistrationDate === null) return;
+    await persist(firstRegistrationDate, task.intervalKm !== null ? 0 : null);
   }
 
   return (
@@ -135,6 +181,18 @@ function SetupRow({ task, today, points, editing, onEdit }: { task: MaintenanceT
         <span className="muted">{describeInterval(task, t)}</span>
         {editing ? (
           <form className="form" onSubmit={save} noValidate>
+            <div>
+              <button type="button" className="button" onClick={never} disabled={busy || !reachable || firstRegistrationDate === null}>
+                {t.vehicle.setupNever}
+              </button>
+              <p className="muted">
+                {firstRegistrationDate === null
+                  ? t.vehicle.setupNeverMissing
+                  : !reachable
+                    ? t.needsConnection
+                    : t.vehicle.setupNeverHint(formatDate(firstRegistrationDate, t), task.intervalKm !== null)}
+              </p>
+            </div>
             <div className="row">
               <Field label={t.vehicle.setupDate}>
                 <input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} autoFocus />
@@ -359,7 +417,7 @@ export function VehiclePage({ vehicle, snapshot, openSetup = false }: { vehicle:
               <>
                 {noRecord.length > 0 ? (
                   <div ref={setupBlock}>
-                    <SetupTasks due={noRecord} tasks={tasks} today={today} points={pointsOf(snapshot, vehicle.id)} open={openSetup || groups.groups.length === 0} />
+                    <SetupTasks due={noRecord} tasks={tasks} today={today} points={pointsOf(snapshot, vehicle.id)} open={openSetup || groups.groups.length === 0} firstRegistrationDate={vehicle.firstRegistrationDate} />
                   </div>
                 ) : null}
                 {groups.groups.map((g) => (
