@@ -2,6 +2,7 @@
 // and specs) into typed rows. Pure: it takes the pages Notion returned and knows nothing of the API or the database.
 // Relations keep Notion page ids; the apply step turns them into the app's ids.
 import type { PartCategory } from '../shared/catalogue.ts';
+import type { IsoDate } from '../shared/dates.ts';
 import type { TaskAction } from '../shared/schemas.ts';
 import { refKey } from '../shared/workshop.ts';
 import { APP_ID, EQUIPMENT, REFERENCE_DBS, REMOVED, relationPageIds, type ReferenceDb, type ReferenceKey } from './databases.ts';
@@ -104,6 +105,19 @@ export interface VehicleSpecRow {
   status: 'confirmed' | 'to_confirm' | null;
 }
 
+/** One line of the owner's Achats database; no invoice files and no notes are read. */
+export interface PurchaseRow {
+  notionId: string;
+  name: string;
+  date: IsoDate;
+  /** The Notion page of the "Consommables par véhicule" line that was bought. */
+  articleNotionId: string;
+  productNotionId: string | null;
+  quantity: number | null;
+  price: number | null;
+  shop: string | null;
+}
+
 export interface ReferencePull {
   tasks: DbPull<RefTaskRow>;
   componentTypes: DbPull<ComponentTypeRow>;
@@ -113,6 +127,7 @@ export interface ReferencePull {
   plans: DbPull<PlanRow>;
   vehicleConsumables: DbPull<VehicleConsumableRow>;
   vehicleSpecs: DbPull<VehicleSpecRow>;
+  purchases: DbPull<PurchaseRow>;
   /** Plan pages that exist in Notion but could not be used (unknown vehicle or task): they are not "vanished". */
   skippedPlanNotionIds: string[];
   /** Equipment tags by the vehicle's app id, for the vehicles whose Équipements column could be read. */
@@ -343,6 +358,7 @@ export function parseReference(pages: Record<string, any[]>, vehiclePageToAppId:
     plans: empty(),
     vehicleConsumables: empty(),
     vehicleSpecs: empty(),
+    purchases: empty(),
     skippedPlanNotionIds: [],
     equipment: {},
     vehiclePageIds: {},
@@ -473,6 +489,30 @@ export function parseReference(pages: Record<string, any[]>, vehiclePageToAppId:
               status: reader.status(page),
             } satisfies VehicleSpecRow);
           }
+          break;
+        }
+        case 'purchases': {
+          const date = reader.date(page, 'Date');
+          if (date === null) {
+            reader.warn(`"${name}" has no date, skipped`);
+            break;
+          }
+          const articles = reader.rel(page, 'Article');
+          if (articles.length === 0) {
+            reader.warn(`"${name}" has no article, skipped`);
+            break;
+          }
+          if (articles.length > 1) reader.warn(`"${name}" has several articles, only the first is used`);
+          rows.push({
+            notionId: page.id,
+            name,
+            date,
+            articleNotionId: articles[0]!,
+            productNotionId: reader.rel(page, 'Produit')[0] ?? null,
+            quantity: reader.num(page, 'Quantité'),
+            price: reader.num(page, 'Prix payé'),
+            shop: reader.text(page, 'Boutique'),
+          } satisfies PurchaseRow);
           break;
         }
       }

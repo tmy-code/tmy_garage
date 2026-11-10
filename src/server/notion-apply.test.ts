@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { PlanRow, ReferencePull, RefTaskRow, ToolRow } from '../notion/reference.ts';
+import type { PlanRow, PurchaseRow, ReferencePull, RefTaskRow, ToolRow } from '../notion/reference.ts';
 import { createApp, readSnapshot } from './app.ts';
 import { openDatabase } from './db.ts';
 import { applyPull } from './notion-apply.ts';
@@ -27,6 +27,7 @@ function emptyPull(overrides: Partial<ReferencePull> = {}): ReferencePull {
     plans: empty(),
     vehicleConsumables: empty(),
     vehicleSpecs: empty(),
+    purchases: empty(),
     skippedPlanNotionIds: [],
     equipment: { bike: [], car: [] },
     vehiclePageIds: {},
@@ -317,5 +318,58 @@ describe('the built-in templates once the catalogue is active', () => {
     expect(tasksOf(after.id)).toEqual([]);
     const specs = await app.request(`/api/vehicles/${after.id}/add-standard-specs`, json('POST', { lang: 'en' }));
     expect(await specs.json()).toMatchObject({ added: 0, skipped: 'notion_catalogue' });
+  });
+});
+
+describe('the owner’s Achats (read only)', () => {
+  const achat = (notionId: string, overrides: Partial<PurchaseRow> = {}): PurchaseRow => ({
+    notionId,
+    name: `Achat ${notionId}`,
+    date: '2026-05-02',
+    articleNotionId: 'article-1',
+    productNotionId: null,
+    quantity: 3,
+    price: 31.5,
+    shop: 'Boutique Exemple',
+    ...overrides,
+  });
+  const withAchats = (rows: PurchaseRow[], complete = true) => emptyPull({ purchases: { rows, complete, warnings: [] } });
+  const stored = () => db.prepare('SELECT * FROM ref_purchases ORDER BY notion_id').all() as Row[];
+
+  it('stores them, resolving the product to its app id', () => {
+    const products = emptyPull({ products: { rows: [{ notionId: 'prod-n', name: 'Huile test', typeNotionId: null, brand: null, reference: null, supplier: null, price: null, notes: null }], complete: true, warnings: [] } });
+    const report = apply({ ...products, purchases: { rows: [achat('a1', { productNotionId: 'prod-n' })], complete: true, warnings: [] } });
+    const productId = (db.prepare('SELECT id FROM products').get() as Row).id;
+    expect(report.counts.purchases).toEqual({ created: 1, updated: 0, removed: 0 });
+    expect(stored()).toMatchObject([{ notion_id: 'a1', date: '2026-05-02', article_notion_id: 'article-1', product_id: productId, quantity: 3, price: 31.5, shop: 'Boutique Exemple', notion_removed: 0 }]);
+  });
+
+  it('changes nothing the second time', () => {
+    const p = withAchats([achat('a1'), achat('a2', { date: '2026-06-01' })]);
+    apply(p);
+    expect(apply(p).counts.purchases).toEqual({ created: 0, updated: 0, removed: 0 });
+    expect(stored()).toHaveLength(2);
+  });
+
+  it('leaves the rows alone when the database could not be read completely', () => {
+    apply(withAchats([achat('a1')]));
+    apply(withAchats([], false));
+    expect(stored()).toMatchObject([{ notion_id: 'a1', notion_removed: 0 }]);
+  });
+
+  it('keeps the rows when Notion returns none', () => {
+    apply(withAchats([achat('a1')]));
+    const report = apply(withAchats([]));
+    expect(stored()).toMatchObject([{ notion_removed: 0 }]);
+    expect(report.warnings.join('\n')).toContain('Achats: Notion returned no rows');
+  });
+
+  it('hides an Achat that vanished from Notion, and keeps it out of the snapshot', () => {
+    apply(withAchats([achat('a1'), achat('a2')]));
+    expect(readSnapshot(db).notionPurchases.map((x) => x.notionId)).toEqual(['a1', 'a2']);
+    const report = apply(withAchats([achat('a1')]));
+    expect(report.counts.purchases.removed).toBe(1);
+    expect(stored().map((r) => r.notion_removed)).toEqual([0, 1]);
+    expect(readSnapshot(db).notionPurchases.map((x) => x.notionId)).toEqual(['a1']);
   });
 });

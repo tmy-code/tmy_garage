@@ -1,6 +1,6 @@
 // The Notion sync engine (ADR 0007), shared by the server's timer and the `npm run notion-sync` command:
 // - fetchReference reads the owner's hand-made databases (read-only: nothing there is ever created, renamed or written);
-// - pushAll copies Vehicles and Articles (the deal-hunting copy) and the journal (Séances, Interventions, Consommables
+// - pushAll copies Vehicles (the deal-hunting copy; Articles is no longer copied, ADR 0008) and the journal (Séances, Interventions, Consommables
 //   utilisés), creating those databases and their missing columns; and writes back to the owner's Plans database.
 //
 // The ONLY writes into the owner's hand-made databases are, in "Plans d'entretien": a new page with its title (Plan),
@@ -14,7 +14,6 @@ import { buildJournal, buildLastDone, planKey } from './journal.ts';
 import {
   APP_ID,
   INTERVENTIONS,
-  ITEMS,
   REFERENCE_DBS,
   REMOVED,
   SESSIONS,
@@ -37,7 +36,7 @@ import { parseReference, titleKey, vehiclePageMap, type ReferencePull } from './
 export type NotionClient = Pick<NotionApi, 'call' | 'all'>;
 
 /** The databases the app manages itself, each after the ones its relations point at. */
-const MANAGED = [VEHICLES, ITEMS, SESSIONS, INTERVENTIONS, USED] as const;
+const MANAGED = [VEHICLES, SESSIONS, INTERVENTIONS, USED] as const;
 
 /** The title of the owner's Plans database, and the columns the app is allowed to write there. */
 const PLANS = REFERENCE_DBS.find((d) => d.key === 'plans')!;
@@ -83,7 +82,7 @@ export async function fetchReference(api: NotionClient, parentPageId: string): P
 }
 
 /**
- * Finds the app's own databases (Véhicules, Articles) under the parent page by title, creating the missing ones and
+ * Finds the app's own databases (Véhicules, Séances, Interventions, Consommables utilisés) under the parent page by title, creating the missing ones and
  * their missing columns. The owner's hand-made databases are not in this list, so they are never touched.
  */
 export async function ensureDatabases(
@@ -353,7 +352,7 @@ async function syncPlans(
 }
 
 /**
- * Pushes to Notion: the deal-hunting copy (Véhicules, Articles), the Plan pages and "Dernier fait" of the owner's Plans
+ * Pushes to Notion: the deal-hunting copy (Véhicules), the Plan pages and "Dernier fait" of the owner's Plans
  * database, then the journal (Séances, Interventions, Consommables utilisés). Every app database goes through the same
  * removal guard. Returns the counts per database title, the Plan pages created and the warnings.
  */
@@ -381,7 +380,6 @@ export async function pushAll(
     databases.push([db.title, await syncDatabase(api, db, dataSourceIds[db.key], rows, pageIndex, appIdOfPage, hold, skipped.get(db.key))]);
 
   await push(VEHICLES, copy.vehicles);
-  await push(ITEMS, copy.items);
 
   // The owner's pages that relations point at are known by their Notion ids.
   for (const r of snapshot.refTasks) pageIndex.set(r.id, r.notionId);

@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted, mostly superseded by ADR 0008 (the to-buy state and the purchase log were removed; the Parts list remains)
 ---
 
 # A garage-wide Parts section with a purchase log

@@ -61,10 +61,9 @@ const base: Snapshot = {
   specLines: [],
   vehicleParts: [],
   fillups: [],
-  purchases: [],
   documents: [],
   catalogue: [],
-  refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], vehicleSpecs: [], notion: null,
+  refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], vehicleSpecs: [], notionPurchases: [], notion: null,
 };
 
 describe('groupByCategory', () => {
@@ -113,7 +112,7 @@ describe('normalizeSnapshot', () => {
     const s = normalizeSnapshot(old);
     expect(s.vehicles[0]!.equipment).toEqual([]);
     expect(s.tasks[0]).toMatchObject({ refTaskId: null, notionPlanId: null });
-    for (const key of ['refTasks', 'componentTypes', 'consumableTypes', 'products', 'tools', 'vehicleConsumables', 'vehicleSpecs'] as const) expect(s[key]).toEqual([]);
+    for (const key of ['refTasks', 'componentTypes', 'consumableTypes', 'products', 'tools', 'vehicleConsumables', 'vehicleSpecs', 'notionPurchases'] as const) expect(s[key]).toEqual([]);
     expect(s.notion).toBeNull();
   });
 

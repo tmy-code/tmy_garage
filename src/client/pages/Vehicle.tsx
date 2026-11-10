@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { todayIso } from '../../shared/dates.ts';
 import { estimateOdometerAt, pointsOf, vehicleDue, type DueInfo, type OdometerPoint } from '../../shared/due.ts';
+import { buyStates } from '../../shared/purchases.ts';
 import { groupByCategory } from '../../shared/workshop.ts';
 import type { PerformedBy } from '../../shared/schemas.ts';
 import type { MaintenanceTask, PartUsed, Snapshot, Vehicle } from '../../shared/types.ts';
-import { EditHint, Field, FormError, Layout, segmentedKeys, StatusChip, useWide } from '../components.tsx';
+import { BuyChips, EditHint, Field, FormError, Layout, segmentedKeys, StatusChip, useWide } from '../components.tsx';
 import { describeDueShort, describeInterval, formatDate, formatKm, formatMoney, parseNumber, taskName } from '../format.ts';
 import { useT } from '../i18n.ts';
 import { makeAsName, VehicleIcon } from '../brands.tsx';
@@ -22,7 +23,7 @@ type HistoryEntry =
   | { kind: 'reading'; id: string; date: string; odometer: number };
 
 /** Maintenance Tasks, one per line: status, name, interval, when due and when last done. */
-function TaskList({ due, tasks, owned }: { due: DueInfo[]; tasks: Map<string, MaintenanceTask>; owned: boolean }) {
+function TaskList({ due, tasks, owned, snapshot, vehicleId }: { due: DueInfo[]; tasks: Map<string, MaintenanceTask>; owned: boolean; snapshot: Snapshot; vehicleId: string }) {
   const t = useT();
   return (
     <ul className="list">
@@ -47,6 +48,9 @@ function TaskList({ due, tasks, owned }: { due: DueInfo[]; tasks: Map<string, Ma
                 </span>
               ) : null}
             </a>
+            {owned && (d.status === 'overdue' || d.status === 'dueSoon') ? (
+              <BuyChips states={buyStates(snapshot, vehicleId, [{ taskId: d.taskId, lastDone: d.lastDone?.date ?? null }])} />
+            ) : null}
           </li>
         );
       })}
@@ -246,7 +250,6 @@ export function VehiclePage({ vehicle, snapshot, openSetup = false }: { vehicle:
   const specCount = snapshot.specLines.filter((s) => s.vehicleId === vehicle.id).length;
   const vehicleParts = snapshot.vehicleParts.filter((p) => p.vehicleId === vehicle.id);
   const partCount = vehicleParts.length;
-  const toBuyCount = vehicleParts.filter((p) => p.toBuy).length;
   // An electric vehicle has no fuel log.
   const hasFuel = vehicle.fuel !== 'electric';
   const tabs = hasFuel ? TABS : TABS.filter((x) => x !== 'fuel');
@@ -423,13 +426,13 @@ export function VehiclePage({ vehicle, snapshot, openSetup = false }: { vehicle:
                 {groups.groups.map((g) => (
                   <Fragment key={g.category}>
                     <h3 className="due-group">{t.workshop.partCategories[g.category]}</h3>
-                    <TaskList due={g.due} tasks={tasks} owned={owned} />
+                    <TaskList due={g.due} tasks={tasks} owned={owned} snapshot={snapshot} vehicleId={vehicle.id} />
                   </Fragment>
                 ))}
                 {groups.paused.length > 0 ? (
                   <details className="sold">
                     <summary>{t.vehicle.pausedTasks(groups.paused.length)}</summary>
-                    <TaskList due={groups.paused} tasks={tasks} owned={owned} />
+                    <TaskList due={groups.paused} tasks={tasks} owned={owned} snapshot={snapshot} vehicleId={vehicle.id} />
                   </details>
                 ) : null}
               </>
@@ -454,7 +457,7 @@ export function VehiclePage({ vehicle, snapshot, openSetup = false }: { vehicle:
             <ul className="list">
               <li>
                 <a href={`#/parts/vehicle/${vehicle.id}`}>
-                  {t.parts.vehicleLink(partCount, toBuyCount)}
+                  {t.parts.vehicleLink(partCount)}
                 </a>
               </li>
             </ul>

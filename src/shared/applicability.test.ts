@@ -48,7 +48,6 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     fillups: [],
     specLines: [],
     vehicleParts: [],
-    purchases: [],
     documents: [],
     catalogue: [],
     refTasks: [],
@@ -58,6 +57,7 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     tools: [],
     vehicleConsumables: [],
     vehicleSpecs: [],
+    notionPurchases: [],
     notion: null,
     ...overrides,
   };

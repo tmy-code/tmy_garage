@@ -54,7 +54,7 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     services: [],
     readings: [{ id: 'r1', vehicleId: 'v1', date: '2026-10-01', odometer: 13_000 }],
     fillups: [{ id: 'f1', vehicleId: 'v1', date: '2026-10-02', odometer: 13_100, litres: 10, totalPaid: 15, fullTank: true, notes: 'FILLUP-SECRET' }],
-    purchases: [{ id: 'b1', partId: 'p1', vehicleId: 'v1', date: '2026-01-10', quantity: 4, totalPaid: 40, shop: 'SHOP-SECRET', deliveryFees: 5, notes: null }],
+    notionPurchases: [{ id: 'b1', notionId: 'n-b1', date: '2026-01-10', articleNotionId: 'n-art', productId: null, quantity: 4, price: 40, shop: 'SHOP-SECRET' }],
     documents: [{ id: 'd1', vehicleId: 'v1', ownerKind: 'service', ownerId: 's1', type: 'invoice', title: 'RECEIPT-SECRET', issueDate: null, expiryDate: null, fileName: 'receipt-secret.pdf', contentType: 'application/pdf', size: 1 }],
     refTasks: [
       { id: 'rt-oil', name: 'Vidange', action: 'replace', applicableIf: [], defaultKm: 6000, defaultMonths: 12, consumableTypeIds: ['ct-oil', 'ct-filter'], componentTypeIds: [], toolIds: [], instructions: null, notionId: 'n-rt-oil' },

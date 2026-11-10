@@ -1,10 +1,11 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { daysBetween, todayIso } from '../../shared/dates.ts';
 import { usageOf, vehicleDue } from '../../shared/due.ts';
+import { buyStates } from '../../shared/purchases.ts';
 import { averageConsumption, consumptionOf } from '../../shared/fuel.ts';
 import type { Snapshot, Vehicle } from '../../shared/types.ts';
 import { upcoming, type Upcoming } from '../../shared/upcoming.ts';
-import { FormError, Layout, NeedsConnection } from '../components.tsx';
+import { BuyChips, FormError, Layout, NeedsConnection } from '../components.tsx';
 import { formatDate, formatDueIn, formatDecimal, formatKm, parseNumber, taskName } from '../format.ts';
 import { useT, type Messages } from '../i18n.ts';
 import { VehicleIcon } from '../brands.tsx';
@@ -241,17 +242,22 @@ function UpcomingLine({ item, vehicle, snapshot, today }: { item: Upcoming; vehi
   // What is urgent can be dealt with right there: a second target next to the link to the task.
   const urgent = item.kind === 'task' && item.status !== 'ok';
   return (
-    <div className="due-line">
-      <a href={href}>
-        <span>{name}</span>
-        <span className="muted">{text}</span>
-      </a>
-      {urgent ? (
-        <a className="button button-small due-line-act" href={`#/vehicles/${vehicle.id}/service/${item.due.taskId}`} aria-label={t.dashboard.addFor(name)}>
-          {t.dashboard.addShort}
+    <>
+      <div className="due-line">
+        <a href={href}>
+          <span>{name}</span>
+          <span className="muted">{text}</span>
         </a>
+        {urgent ? (
+          <a className="button button-small due-line-act" href={`#/vehicles/${vehicle.id}/service/${item.due.taskId}`} aria-label={t.dashboard.addFor(name)}>
+            {t.dashboard.addShort}
+          </a>
+        ) : null}
+      </div>
+      {item.kind === 'task' && item.status !== 'ok' ? (
+        <BuyChips states={buyStates(snapshot, vehicle.id, [{ taskId: item.due.taskId, lastDone: item.due.lastDone?.date ?? null }])} />
       ) : null}
-    </div>
+    </>
   );
 }
 

@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -7,7 +7,6 @@ import type { DatabaseSync } from 'node:sqlite';
 import type {
   GarageDocument,
   MaintenanceTask,
-  Purchase,
   Snapshot,
   SpecLine,
   VehiclePart,
@@ -563,7 +562,7 @@ describe('spec lines and the plan templates', () => {
     expect((await call('PUT', '/api/services/svc-00010', body)).status).toBe(200);
     expect((await call('PUT', '/api/services/svc-00010', body)).status).toBe(200);
     const parts = (await snapshot()).vehicleParts;
-    expect(parts).toEqual([{ id: 'part-0000001', vehicleId: bike.id, name: 'Mann HU 7008 z', partNumber: 'HU 7008 z', unit: 'piece', quantity: 1, price: 9.9, taskId: task.id, specLineId: null, toBuy: false, notes: null }]);
+    expect(parts).toEqual([{ id: 'part-0000001', vehicleId: bike.id, name: 'Mann HU 7008 z', partNumber: 'HU 7008 z', unit: 'piece', quantity: 1, price: 9.9, taskId: task.id, specLineId: null, notes: null }]);
     expect((await snapshot()).services[0]!.partsUsed[0]).toMatchObject({ partId: 'part-0000001', price: 9.9 });
     // The same part typed again in another Service links to the list instead of doubling it.
     await call('PUT', '/api/services/svc-00011', { ...body, id: 'svc-00011', partsUsed: [{ ...body.partsUsed[0], partId: 'part-0000002' }] });
@@ -575,7 +574,7 @@ describe('spec lines and the plan templates', () => {
   });
 });
 
-describe('the Parts section: parts to buy and the purchase log', () => {
+describe('the Parts section', () => {
   let uploads: string;
   beforeEach(() => {
     uploads = mkdtempSync(join(tmpdir(), 'garage-uploads-'));
@@ -589,18 +588,19 @@ describe('the Parts section: parts to buy and the purchase log', () => {
     return res.json();
   }
 
-  it('keeps a wished part To buy, with notes, until a Purchase is recorded; editing leaves the state alone unless it is sent', async () => {
+  it('keeps notes, and accepts and ignores a "toBuy" sent by an old app', async () => {
     const bike = await createVehicle();
-    const part = await createPart(bike.id, { toBuy: true, notes: 'See https://example.test/oil' });
-    expect(part).toMatchObject({ toBuy: true, notes: 'See https://example.test/oil' });
-    await call('PUT', `/api/parts/${part.id}`, { name: 'Motul 7100 10W-40', unit: 'litre', quantity: 5, notes: 'Cheaper elsewhere' });
-    expect((await snapshot()).vehicleParts[0]).toMatchObject({ toBuy: true, notes: 'Cheaper elsewhere' });
-    const res = await call('POST', `/api/parts/${part.id}/purchases`, { date: '2026-11-02', quantity: 5, totalPaid: 40 });
+    const res = await call('POST', `/api/vehicles/${bike.id}/parts`, { name: 'Motul 7100 10W-40', unit: 'litre', quantity: 5, toBuy: true, notes: 'See https://example.test/oil' });
     expect(res.status).toBe(201);
-    expect((await snapshot()).vehicleParts[0]!.toBuy).toBe(false);
-    // Buying it again: the owner sets it back to To buy by hand, and the next Purchase clears it.
-    await call('PUT', `/api/parts/${part.id}`, { name: 'Motul 7100 10W-40', unit: 'litre', quantity: 5, toBuy: true });
-    expect((await snapshot()).vehicleParts[0]!.toBuy).toBe(true);
+    const part = (await res.json()) as VehiclePart;
+    expect(part).toMatchObject({ notes: 'See https://example.test/oil' });
+    expect(part).not.toHaveProperty('toBuy');
+    expect(db.prepare('SELECT to_buy FROM vehicle_parts WHERE id = ?').get(part.id)).toEqual({ to_buy: 0 });
+    const put = await call('PUT', `/api/parts/${part.id}`, { name: 'Motul 7100 10W-40', unit: 'litre', quantity: 5, toBuy: true, notes: 'Cheaper elsewhere' });
+    expect(put.status).toBe(200);
+    const stored = (await snapshot()).vehicleParts[0]!;
+    expect(stored).toMatchObject({ notes: 'Cheaper elsewhere' });
+    expect(stored).not.toHaveProperty('toBuy');
   });
 
   it('links an item to a Spec Line of its own Vehicle, keeps the link when editing without it, and empties it when the Spec Line goes', async () => {
@@ -623,43 +623,45 @@ describe('the Parts section: parts to buy and the purchase log', () => {
     expect((await snapshot()).vehicleParts[0]!.specLineId).toBeNull();
   });
 
-  it('records, corrects and deletes Purchases, with the delivery fees apart from the Total paid', async () => {
+  it('no longer has purchase routes or the CSV: they answer 404', async () => {
     const bike = await createVehicle();
     const part = await createPart(bike.id);
-    const purchase = (await (await call('POST', `/api/parts/${part.id}/purchases`, { date: '2026-11-02', quantity: 5, totalPaid: 40, shop: 'Exemple Moto', deliveryFees: 4.9 })).json()) as Purchase;
-    expect(purchase).toMatchObject({ partId: part.id, vehicleId: bike.id, quantity: 5, totalPaid: 40, shop: 'Exemple Moto', deliveryFees: 4.9, notes: null });
-    expect((await snapshot()).purchases).toEqual([purchase]);
-    await call('PUT', `/api/purchases/${purchase.id}`, { date: '2026-11-03', quantity: 4, totalPaid: 37.9 });
-    expect((await snapshot()).purchases[0]).toMatchObject({ date: '2026-11-03', quantity: 4, totalPaid: 37.9, shop: null, deliveryFees: null });
-    expect((await call('POST', `/api/parts/${part.id}/purchases`, { date: '2026-11-02', quantity: 0, totalPaid: 1 })).status).toBe(422);
-    expect((await call('POST', `/api/parts/${part.id}/purchases`, { date: '2026-11-02', quantity: 1, totalPaid: -1 })).status).toBe(422);
-    expect((await call('POST', '/api/parts/nope/purchases', { date: '2026-11-02', quantity: 1, totalPaid: 1 })).status).toBe(404);
-    expect((await call('DELETE', `/api/purchases/${purchase.id}`)).status).toBe(204);
-    expect((await snapshot()).purchases).toEqual([]);
+    const body = { date: '2026-11-02', quantity: 5, totalPaid: 40 };
+    expect((await call('POST', `/api/parts/${part.id}/purchases`, body)).status).toBe(404);
+    expect((await call('PUT', '/api/purchases/p1', body)).status).toBe(404);
+    expect((await call('DELETE', '/api/purchases/p1')).status).toBe(404);
+    expect((await call('GET', '/api/purchases.csv')).status).toBe(404);
+    expect(await snapshot()).not.toHaveProperty('purchases');
   });
 
-  it('removes the Purchases of a deleted part, and their receipts with them', async () => {
-    const bike = await createVehicle();
-    const part = await createPart(bike.id);
-    const purchase = (await (await call('POST', `/api/parts/${part.id}/purchases`, { date: '2026-11-02', quantity: 5, totalPaid: 40 })).json()) as Purchase;
+  it('refuses a new Document that belongs to a purchase', async () => {
     const form = new FormData();
     form.set('file', new File(['%PDF-1.4 test'], 'receipt.pdf', { type: 'application/pdf' }));
     form.set('ownerKind', 'purchase');
-    form.set('ownerId', purchase.id);
+    form.set('ownerId', 'x');
     form.set('type', 'invoice');
-    expect((await app.request('/api/documents', { method: 'POST', body: form })).status).toBe(201);
-    expect((await snapshot()).documents).toHaveLength(1);
-    expect(readdirSync(uploads)).toHaveLength(1);
-    expect((await call('DELETE', `/api/parts/${part.id}`)).status).toBe(204);
-    expect((await snapshot()).purchases).toEqual([]);
-    expect((await snapshot()).documents).toEqual([]);
-    expect(readdirSync(uploads)).toHaveLength(0);
+    expect((await app.request('/api/documents', { method: 'POST', body: form })).status).toBe(422);
   });
 
-  it('marks a To buy part Bought when a Service uses it, without inventing a Purchase', async () => {
+  it('deletes a part with a legacy purchase row: the row goes, the receipt file stays on disk', async () => {
+    const bike = await createVehicle();
+    const part = await createPart(bike.id);
+    db.prepare(`INSERT INTO purchases (id, part_id, vehicle_id, date, quantity, total_paid) VALUES ('legacy-p1', ?, ?, '2026-11-02', 5, 40)`).run(part.id, bike.id);
+    db.exec(`INSERT INTO documents (id, garage_id, vehicle_id, owner_kind, owner_id, type, file_name, content_type, size)
+             VALUES ('legacy-doc-1', 'default', '${bike.id}', 'purchase', 'legacy-p1', 'invoice', 'receipt.pdf', 'application/pdf', 13)`);
+    writeFileSync(join(uploads, 'legacy-doc-1'), '%PDF-1.4 test');
+    expect((await call('DELETE', `/api/parts/${part.id}`)).status).toBe(204);
+    expect(db.prepare('SELECT count(*) AS n FROM purchases').get()).toEqual({ n: 0 });
+    expect(existsSync(join(uploads, 'legacy-doc-1'))).toBe(true);
+    // The receipt is not in the snapshot: nothing in the app can reach it.
+    expect((await snapshot()).documents).toEqual([]);
+    expect(readdirSync(uploads)).toHaveLength(1);
+  });
+
+  it('does not mark anything when a Service uses a listed part', async () => {
     const bike = await createVehicle();
     const task = await createTask(bike.id);
-    const part = await createPart(bike.id, { toBuy: true });
+    const part = await createPart(bike.id);
     const body = {
       id: 'svc-00020',
       vehicleId: bike.id,
@@ -670,24 +672,25 @@ describe('the Parts section: parts to buy and the purchase log', () => {
     };
     expect((await call('PUT', '/api/services/svc-00020', body)).status).toBe(200);
     const after = await snapshot();
-    expect(after.vehicleParts[0]!.toBuy).toBe(false);
-    expect(after.purchases).toEqual([]);
+    expect(after.vehicleParts[0]).not.toHaveProperty('toBuy');
+    expect(after.services[0]!.partsUsed[0]).toMatchObject({ partId: part.id });
   });
+});
 
-  it('exports every Purchase as a CSV file with the price per unit worked out', async () => {
-    const bike = await createVehicle('Test bike');
-    const part = await createPart(bike.id, { name: 'Oil; "special"', partNumber: 'REF-1' });
-    await call('POST', `/api/parts/${part.id}/purchases`, { date: '2026-11-02', quantity: 5, totalPaid: 40, shop: 'Exemple Moto', deliveryFees: 4.9 });
-    const res = await call('GET', '/api/purchases.csv');
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toContain('text/csv');
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    // The byte order mark lets Excel read accents correctly.
-    expect([...bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
-    expect(new TextDecoder().decode(bytes.slice(3)).split('\r\n')).toEqual([
-      'vehicle;part;part_number;unit;date;quantity;total_paid;price_per_unit;delivery_fees;shop;notes',
-      'Test bike;"Oil; ""special""";REF-1;litre;2026-11-02;5;40;8;4.9;Exemple Moto;',
-      '',
+describe('the Achats read from Notion', () => {
+  const insert = (id: string, article: string, removed = 0) =>
+    db
+      .prepare(
+        `INSERT INTO ref_purchases (id, garage_id, notion_id, date, article_notion_id, product_id, quantity, price, shop, notion_removed)
+         VALUES (?, 'default', ?, '2026-05-02', ?, NULL, 3, 31.5, 'Boutique Exemple', ?)`,
+      )
+      .run(id, `n-${id}`, article, removed);
+
+  it('are in the snapshot, without the ones that vanished from Notion', async () => {
+    insert('ach-1', 'n-article-1');
+    insert('ach-2', 'n-article-2', 1);
+    expect((await snapshot()).notionPurchases).toEqual([
+      { id: 'ach-1', notionId: 'n-ach-1', date: '2026-05-02', articleNotionId: 'n-article-1', productId: null, quantity: 3, price: 31.5, shop: 'Boutique Exemple' },
     ]);
   });
 });
@@ -1090,7 +1093,7 @@ describe('migrations', () => {
     migrated.close();
   });
 
-  it('keeps the parts and receipts already there when purchases arrive: the parts stay Bought, with an empty log', () => {
+  it('keeps the parts and receipts already there when purchases arrive, with an empty legacy log', () => {
     const path = join(dir, 'garage.sqlite');
     const old = openDatabase(path, undefined, 35);
     old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v1', 'default', 'motorcycle', 'Old bike')`);
@@ -1102,9 +1105,25 @@ describe('migrations', () => {
     expect(migrated.prepare('SELECT id, name, to_buy, notes FROM vehicle_parts').all()).toEqual([{ id: 'p1', name: 'Motul 7100 10W-40', to_buy: 0, notes: null }]);
     expect(migrated.prepare('SELECT count(*) AS n FROM purchases').get()).toEqual({ n: 0 });
     expect(migrated.prepare('SELECT id, owner_kind FROM documents').all()).toEqual([{ id: 'd1', owner_kind: 'vehicle' }]);
-    // Documents may now belong to a purchase.
+    // The legacy CHECK still lets a document belong to a purchase (kept so a rollback works).
     migrated.exec(`INSERT INTO documents (id, garage_id, vehicle_id, owner_kind, owner_id, type, file_name, content_type, size)
                    VALUES ('d2', 'default', 'v1', 'purchase', 'x', 'invoice', 'r.pdf', 'application/pdf', 10)`);
+    migrated.close();
+  });
+
+  it('adds an empty ref_purchases table and leaves the legacy purchases alone', () => {
+    const path = join(dir, 'garage.sqlite');
+    const latest = (openDatabase(':memory:').prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
+    const old = openDatabase(path, undefined, latest - 1);
+    old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v1', 'default', 'motorcycle', 'Old bike')`);
+    old.exec(`INSERT INTO vehicle_parts (id, vehicle_id, name, unit, quantity) VALUES ('p1', 'v1', 'Motul 7100 10W-40', 'litre', 5)`);
+    old.exec(`INSERT INTO purchases (id, part_id, vehicle_id, date, quantity, total_paid) VALUES ('b1', 'p1', 'v1', '2026-01-10', 5, 40)`);
+    expect(() => old.prepare('SELECT * FROM ref_purchases').all()).toThrow();
+    old.close();
+    const migrated = openDatabase(path);
+    expect(migrated.prepare('SELECT count(*) AS n FROM ref_purchases').get()).toEqual({ n: 0 });
+    expect(migrated.prepare('SELECT id FROM purchases').all()).toEqual([{ id: 'b1' }]);
+    expect(migrated.prepare('SELECT id FROM vehicle_parts').all()).toEqual([{ id: 'p1' }]);
     migrated.close();
   });
 
@@ -1377,7 +1396,7 @@ describe('Notion sync migration', () => {
     const dir = mkdtempSync(join(tmpdir(), 'garage-actions-'));
     try {
       const path = join(dir, 'garage.sqlite');
-      const old = openDatabase(path, undefined, latest - 1);
+      const old = openDatabase(path, undefined, latest - 2);
       old.exec(`INSERT INTO ref_tasks (id, garage_id, notion_id, name, action, applicable_if, default_km, category) VALUES ('r1', 'default', 'n1', 'Vidange', 'replace', '["Moto"]', 6000, 'engine')`);
       expect(() => old.exec(`INSERT INTO ref_tasks (id, garage_id, notion_id, name, action) VALUES ('r2', 'default', 'n2', 'Tension', 'adjust')`)).toThrow();
       old.close();

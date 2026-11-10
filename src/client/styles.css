@@ -861,6 +861,31 @@ textarea {
   margin-top: 4px;
 }
 
+/* Bought / To buy per required item (from Notion's Achats), under a task or at the top of an item's details. */
+.buy-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 2px 0 6px;
+}
+
+.buy-state {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.buy-type {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.list li > .buy-chips {
+  padding: 0 14px 10px;
+  margin: 0;
+}
+
 /* A chip that follows a name or a figure on the same line. */
 .history-row :is(strong, span) > .chip {
   margin-left: 8px;

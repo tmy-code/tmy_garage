@@ -56,7 +56,6 @@ function part(id: string, vehicleId: string, overrides: Partial<VehiclePart> = {
     price: null,
     taskId: null,
     specLineId: null,
-    toBuy: true,
     notes: 'Boutique Exemple',
     ...overrides,
   };
@@ -89,13 +88,9 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     specLines: [spec('s1', 'v1', 'fluids'), spec('s2', 'v1', 'torque'), spec('s3', 'v2', 'parts')],
     vehicleParts: [part('p1', 'v1', { taskId: 't1', specLineId: 's1' }), part('p2', 'v1', { specLineId: 's2' }), part('p3', 'v2')],
     fillups: [],
-    purchases: [
-      { id: 'b1', partId: 'p1', vehicleId: 'v1', date: '2026-01-10', quantity: 4, totalPaid: 40, shop: 'Boutique A', deliveryFees: 5, notes: null },
-      { id: 'b2', partId: 'p1', vehicleId: 'v1', date: '2026-06-10', quantity: 3, totalPaid: 31, shop: null, deliveryFees: null, notes: null },
-    ],
     documents: [],
     catalogue: [],
-    refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], vehicleSpecs: [], notion: null,
+    refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], vehicleSpecs: [], notionPurchases: [], notion: null,
     ...overrides,
   };
 }
@@ -117,23 +112,11 @@ describe('buildCopy', () => {
     expect(JSON.stringify(copy)).not.toContain('Ligne s1');
   });
 
-  it('copies every item of owned Vehicles with its last price per unit and Due Date', () => {
-    const { items } = buildCopy(snapshot(), TODAY, fr);
-    expect(items.map((i) => i.appId)).toEqual(['p1', 'p2']);
-    const [oil, other] = items;
-    expect(oil).toMatchObject({
-      unit: 'litre',
-      state: 'À acheter',
-      lastUnitPrice: 10.33,
-      task: 'Vidange moteur',
-      dueDate: '2027-01-15',
-      dueStatus: 'Dans les temps',
-    });
-    expect(other).toMatchObject({ lastUnitPrice: null, task: null, dueDate: null });
-    expect('specAppId' in oil!).toBe(false);
+  it('no longer copies the Articles: the copy is Vehicles only (ADR 0008)', () => {
+    expect(buildCopy(snapshot(), TODAY, fr)).not.toHaveProperty('items');
   });
 
-  it('never copies notes, shops or delivery fees', () => {
+  it('never copies notes or shops', () => {
     const text = JSON.stringify(buildCopy(snapshot(), TODAY, fr));
     expect(text).not.toContain('Boutique');
   });

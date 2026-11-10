@@ -1,6 +1,6 @@
 # The Notion sync
 
-The server keeps Notion and the app in step ([ADR 0007](adr/0007-two-way-notion-sync.md)). **Notion wins definitions, the app wins logs**: the owner maintains the referentials in Notion (task catalogue, which task applies to which vehicle, specs, tools, consumable types, products); the app stores them offline, read-only, and keeps the logging and the reminders. It also still copies vehicles and items to Notion for deal hunting ([ADR 0005](adr/0005-one-way-copy-to-notion-for-deal-hunting.md)). Every database, column and link is described in [notion-databases.md](notion-databases.md).
+The server keeps Notion and the app in step ([ADR 0007](adr/0007-two-way-notion-sync.md)). **Notion wins definitions, the app wins logs**: the owner maintains the referentials in Notion (task catalogue, which task applies to which vehicle, specs, tools, consumable types, products); the app stores them offline, read-only, and keeps the logging and the reminders. It also still copies vehicles to Notion for deal hunting ([ADR 0005](adr/0005-one-way-copy-to-notion-for-deal-hunting.md)); the Articles copy was removed ([ADR 0008](adr/0008-shopping-list-and-purchase-log-move-to-notion.md)): the owner's *Achats* database is read instead, to tell what was bought. Every database, column and link is described in [notion-databases.md](notion-databases.md).
 
 Each run does, in order: **fetch** the owner's databases, **apply** them to the app in one transaction (an error changes nothing), then **push** the copy. It runs on the NAS server about a minute after start, every 30 minutes, and from *Settings* → *Notion* → *Sync now*. Only the server holds the Notion token.
 
@@ -14,8 +14,10 @@ Each run does, in order: **fetch** the owner's databases, **apply** them to the 
 | Name, action, intervals and notes of a task that follows the catalogue | Notion | The Plan's interval overrides the catalogue default. The app answers 409 `notion_owned` if asked to change them or delete the task. |
 | Switched off, baseline (last done before tracking) and category of a task | The app | |
 | Tasks the owner made in the app and that match no catalogue task | The app | Left alone. |
-| Services, odometer readings, fill-ups, documents, purchases | The app | Never pulled from Notion. |
-| *Véhicules* and *Articles* databases (columns the app writes) | The app | Pushed; the owner's columns (JDex, Deals, *Équipements*) are never written. |
+| Services, odometer readings, fill-ups, documents | The app | Never pulled from Notion. |
+| *Achats* (what was bought, for which consumable line of a vehicle) | Notion | Hand-made, read-only. Only date, article, product, quantity, price and shop are kept: never the invoice files or the notes. |
+| *Véhicules* database (columns the app writes) | The app | Pushed; the owner's columns (JDex, Deals, *Équipements*) are never written. |
+| *Articles* | Nobody | No longer written since 2026-11-10 ([ADR 0008](adr/0008-shopping-list-and-purchase-log-move-to-notion.md)). The app never reads, writes or ticks it, and does not mind if it is there or not. Leave it, or archive it in Notion. |
 | *Caractéristiques* | Nobody | Frozen: no longer written, nothing deleted. |
 
 ## The databases the owner makes by hand
@@ -28,6 +30,7 @@ Found by title under the page set by `NOTION_PARENT_PAGE_ID`. The app never crea
 | Types de composants | Nom · Catégorie, Notes |
 | Types de consommables | Nom · Catégorie, Famille (Fluide / Pièce), Notes |
 | Produits | Nom · Type de consommable (relation), Marque, Référence, Fournisseur, Prix, Notes |
+| Achats | Achat (title), Date, Article (relation to *Consommables par véhicule*) · Produit (relation), Quantité, Prix payé, Boutique. A *Facture* (files) or *Notes* column is never read. |
 | Outils | Nom · Type, Taille / capacité, Possédé (checkbox), Prix, Notes |
 | Plans d'entretien | Plan (title), Véhicule, Tâche · Intervalle (km), Intervalle (mois) (per-vehicle overrides), Dernier fait (km), Dernier fait (date), Notes |
 | Consommables par véhicule | Désignation (title), Véhicule, Type · Spécification, Réf. OEM, Capacité, Quantité (number or text), Produits compatibles, Produit retenu, Statut (Confirmé / À confirmer) |
@@ -64,7 +67,7 @@ The push has the same kind of guard: it never ticks **Supprimé de l’app** on 
 
 ## What leaves the NAS
 
-Pushed to Notion: owned vehicles (name, kind, make, model, year, Build, odometer, daily distance) and all their items (name, reference, to buy / bought, unit, usual quantity, last price per unit, the task and its due date and status), plus the journal below. Never: VINs, sale details, the cost of a Service, receipts and other documents, notes, shops, repair titles, odometer-only readings, purchases, fill-ups, sold vehicles.
+Pushed to Notion: owned vehicles (name, kind, make, model, year, Build, odometer, daily distance), plus the journal below. The items (Articles) are no longer pushed. Never: VINs, sale details, the cost of a Service, receipts and other documents, notes, shops, repair titles, odometer-only readings, fill-ups, sold vehicles.
 
 ## Writing back to the Plans database
 

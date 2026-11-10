@@ -11,10 +11,10 @@ Read the section you need: use the table of contents below, not the whole file.
 | [Overview](#overview) | The five parts, storage, conventions |
 | [1. Vehicle Profile](#1-vehicle-profile) | `garages`, `vehicles`, `spec_lines` |
 | [2. Maintenance Plan](#2-maintenance-plan) | `maintenance_tasks`, templates, `catalogue_parts` |
-| [3. Service History Log](#3-service-history-log) | `services`, `service_tasks`, `service_items`, `vehicle_parts`, `purchases`, `documents` |
+| [3. Service History Log](#3-service-history-log) | `services`, `service_tasks`, `service_items`, `vehicle_parts`, `purchases` (legacy), `documents` |
 | [4. Mileage Log and fuel](#4-mileage-log-and-fuel) | `odometer_readings`, `fuel_fillups` |
 | [5. Worked out, not stored](#5-worked-out-not-stored) | Odometer, consumption, Due Date, Status |
-| [Notion referentials](#notion-referentials) | `ref_tasks`, types, `products`, `tools`, `vehicle_consumables`, `vehicle_specs`, `notion_state` |
+| [Notion referentials](#notion-referentials) | `ref_tasks`, types, `products`, `tools`, `vehicle_consumables`, `vehicle_specs`, `ref_purchases` (Achats), `notion_state` |
 | [Todoist](#todoist) · [Deleting](#deleting-things) · [Offline copy](#the-offline-copy) · [Changing the model](#changing-the-data-model) | |
 
 ## Overview
@@ -186,10 +186,10 @@ erDiagram
   vehicles ||--o{ vehicle_parts : buys
   vehicle_parts |o--o{ service_items : picked_into
   maintenance_tasks |o--o{ vehicle_parts : bought_for
-  vehicle_parts ||--o{ purchases : bought
+  vehicle_parts ||--o{ purchases : legacy_log
   spec_lines |o--o{ vehicle_parts : item_for
   services ||--o{ documents : receipt
-  purchases ||--o{ documents : receipt
+  purchases ||--o{ documents : legacy_receipt
 ```
 
 ### `services`
@@ -237,39 +237,37 @@ The Vehicle's **parts list**: what is actually bought ("Motul 7100 10W-40"), unl
 | `price` | Per piece or litre. Changed by hand only; a Service never changes it. |
 | `task_id` | → `maintenance_tasks`, the Task it is usually bought for (its parts are listed first when ticked). Emptied if the Task is deleted; moves to the kept Task on merge. |
 | `spec_line_id` | → `spec_lines` of the same Vehicle (else 422), the factory line it is for; shown as "Spec: …", nothing copied or synced. Loose: emptied if the line is deleted. On edit, omitted keeps it; null removes it. |
-| `to_buy` | Required, yes/no. **To buy** (wanted, planned, or buy again) vs **Bought**. Parts from before Purchases are 0 (Bought, empty log). Recording a Purchase or using the part in a Service sets 0; the owner sets 1 by hand. |
+| `to_buy` | Legacy column, no longer read or written since 2026-11-10 ([ADR 0008](adr/0008-shopping-list-and-purchase-log-move-to-notion.md)); kept so a rollback works; may be dropped later (`ALTER TABLE vehicle_parts DROP COLUMN to_buy`). New rows get the default 0. |
 | `notes` | Free text; links are tappable. |
 
-A Bought part with no Purchase shows "no purchase recorded".
-
-- **Parts section** (all Vehicles; filter by Vehicle and To buy / Bought): add, edit, delete parts, record Purchases, attach receipts. Online only; the list and log travel in the snapshot for reading and for the Service form. A Vehicle page opens it filtered.
-- **From a Service**: a typed component is also kept in the list unless "Keep in the parts list" is unticked. The phone makes the part id and sends it with the Service, so a resend never doubles it (works offline too). A matching name and part number links instead of adding a twin. A Service with exactly one Task ties the new part to it. A picked part still To buy becomes Bought (no Purchase invented). The form lists Bought parts first, To buy last.
+- **Parts section** (all Vehicles; filter by Vehicle, search box): list, add, edit, delete; read-only offline. The list travels in the snapshot for reading and for the Service form. A Vehicle page opens it filtered.
+- **From a Service**: a typed component is also kept in the list unless "Keep in the parts list" is unticked. The phone makes the part id and sends it with the Service, so a resend never doubles it (works offline too). A matching name and part number links instead of adding a twin. A Service with exactly one Task ties the new part to it. The Service form lists the parts for the ticked Tasks first, then the others.
 - Editing the description or part number of a picked component detaches it from the list part.
 
-### `purchases`
+### `purchases` (legacy)
 
-The part's purchase log ([ADR 0004](adr/0004-parts-section-and-purchase-log.md)). Nothing totals it; it is for export (**Download CSV**, `GET /api/purchases.csv`, semicolon-separated, price per unit worked out).
+**Legacy, unused** since 2026-11-10 ([ADR 0008](adr/0008-shopping-list-and-purchase-log-move-to-notion.md)): the app no longer reads or writes it, there is no route for it and the snapshot does not carry it. The table and its rows are kept so a rollback works. What was bought now comes from the owner's Notion Achats (see `ref_purchases`).
 
 | Column | Meaning |
 | --- | --- |
-| `part_id` | Required. → `vehicle_parts`. Deleting the part deletes its Purchases and receipts. |
+| `part_id` | Required. → `vehicle_parts`. Deleting the part still deletes these rows (foreign key cascade); their receipt Documents and files stay stored, unreachable. |
 | `vehicle_id` | Required. → `vehicles`, kept for scoping and export. |
 | `date`, `quantity` | Required. Quantity in the part's unit. |
 | `total_paid` | Required. Goods only, as on the receipt, never delivery. Price per unit worked out, never stored. |
 | `shop`, `notes` | Optional. |
 | `delivery_fees` | Optional. Separate, never inside `total_paid`. |
 
-A Purchase's receipt is a Document with `owner_kind` `purchase`. Recording one marks the part Bought.
+A legacy Purchase's receipt is a Document with `owner_kind` `purchase`; the `documents` check still allows it, and a new one is refused (422).
 
 ### `documents`
 
-Belongs to one owner (`owner_kind` + `owner_id`). Shown only for a Service, Purchase (receipts) and Vehicle. Documents of removed features (insurance, inspections) stay stored, unshown. The server checks the owner exists and removes a Service's Documents, files included, with it.
+Belongs to one owner (`owner_kind` + `owner_id`). Shown only for a Service and a Vehicle. Documents of removed features (insurance, inspections, legacy purchase receipts) stay stored, unshown. The server checks the owner exists and removes a Service's Documents, files included, with it.
 
 | Column | Meaning |
 | --- | --- |
 | `garage_id` | Required. → `garages`. |
 | `vehicle_id` | → `vehicles`. |
-| `owner_kind` | Required. `service`, `purchase`, `vehicle` (older rows may differ). |
+| `owner_kind` | Required. `service` or `vehicle` for new rows (`purchase`: legacy, unused; older rows may differ). |
 | `owner_id` | Required. |
 | `type` | Required. `invoice` for a receipt. |
 | `file_name`, `content_type`, `size` | Required. Original name, e.g. `application/pdf`, bytes. |
@@ -325,9 +323,13 @@ Owned by Notion ([ADR 0007](adr/0007-two-way-notion-sync.md)): the server pulls 
 | `tools` | `name`, `kind`, `size`, `owned`, `price`, `notes`. |
 | `vehicle_consumables` | Per Vehicle (`vehicle_id`): `name`, `type_id`, `specification`, `oem_ref`, `capacity`, `quantity`, `compatible_product_ids`, `chosen_product_id`, `status` (`confirmed`/`to_confirm`). |
 | `vehicle_specs` | Per Vehicle: `label`, `component_type_id`, `category`, `value` (number or text), `unit`, `source`, `status`. Separate from `spec_lines`, which stay the app's own. A Notion page pointing at several Vehicles gives one row each. |
+| `ref_purchases` | The owner's **Achats** database, read-only ([ADR 0008](adr/0008-shopping-list-and-purchase-log-move-to-notion.md)): `date`, `article_notion_id` (the Notion page id of a "Consommables par véhicule" line, matched to `vehicle_consumables.notion_id` when read, so the pull order does not matter), `product_id` (→ `products`, loose), `quantity`, `price`, `shop`. Never invoice files or notes. Not per Vehicle. Rows that left Notion are hidden. |
 | `notion_state` | One row per garage: `last_sync_at`, `last_error`, `warnings` (JSON list), `paused_tasks`. Shown in Settings. |
 
 `service_items` also has `consumable_type_id` and `product_id` (loose, set when a Service sends them), and `vehicle_parts` has `product_id` (loose).
+
+**Bought or To buy** (worked out, never stored; [`purchases.ts`](../src/shared/purchases.ts), snapshot field `notionPurchases`): a required consumable is Bought when an Achat of one of the Vehicle's lines of that type is dated strictly after the Task was last done, otherwise To buy.
+With several Tasks the latest last-done date applies; a type the Vehicle has no line for is not tracked, so nothing is shown.
 
 **What the pull does** (one transaction; any error changes nothing): copies the tables above by `notion_id`; sets each Vehicle's `equipment`; then for each owned Vehicle, creates a Task for every applicable catalogue task that has no Task yet (`plan_auto = 1`), honours explicit Plan pages (`plan_auto = 0`, the Plan's interval overrides the default), and adopts an unlinked Task with the same normalised name instead of duplicating it (Notion's interval replaces the app's only where Notion has a value). A Plan page that vanishes, or a Task that stops applying, unlinks the Task and pauses it: never deleted, history kept. A table is cleaned only from a complete read, and not when Notion returned no rows or when more than the larger of 3 and half of the linked rows would go.
 
@@ -355,8 +357,7 @@ Foreign keys block deletion while rows still need it, except below; the server a
 | Notion referential row | Never deleted by the app: hidden (`notion_removed`) when its page leaves Notion. |
 | Service | Its Task links, components and Documents go too. |
 | Spec Line | Goes; items for it keep everything, lose the link. |
-| Vehicle Part | Goes with its Purchases and receipts; past components keep their copy, lose the link. |
-| Purchase | Goes with its receipts; the part stays. |
+| Vehicle Part | Goes (with any legacy purchase rows; their receipt files stay stored, unreachable); past components keep their copy, lose the link. |
 | Fill-up | Goes; nothing depends on it, consumption is recalculated. |
 | Owner's Plan Template | Goes; Vehicles keep their Tasks. |
 | Built-in Plan Template | Can't be deleted: take it off the list or reset it. |
@@ -365,7 +366,7 @@ Foreign keys block deletion while rows still need it, except below; the server a
 
 The phone keeps one `Snapshot` ([`types.ts`](../src/shared/types.ts)) to work with no signal ([ADR 0001](adr/0001-offline-service-logging-via-send-queue.md)).
 
-- It holds Vehicles (with their equipment), Tasks, Services, readings, Fill-ups, Spec Lines, parts lists, Purchases and Template changes; Document details but not files. It also holds the Notion referentials (catalogue, types, products, tools, per-Vehicle consumables and specs) and the last sync status, **read-only**: they need no send queue.
+- It holds Vehicles (with their equipment), Tasks, Services, readings, Fill-ups, Spec Lines, parts lists and Template changes; Document details but not files. It also holds the Notion referentials (catalogue, types, products, tools, per-Vehicle consumables and specs, and the Achats as `notionPurchases`) and the last sync status, **read-only**: they need no send queue.
 - It is shaped for screens, not tables (a Service carries `taskIds` and `partsUsed`).
 - Services, Odometer Readings and Fill-ups can be logged offline: queued on the phone, sent on reconnect. Everything else needs a connection.
 - `normalizeSnapshot` in [`workshop.ts`](../src/shared/workshop.ts) fills what an older saved snapshot lacks (e.g. no Fill-ups) and drops removed fields.

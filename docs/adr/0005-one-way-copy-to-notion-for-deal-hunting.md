@@ -1,5 +1,5 @@
 ---
-status: superseded by 0007 (the Articles deal-hunting copy remains)
+status: superseded by 0007 and 0008 (the Articles copy was removed)
 ---
 
 # A one-way copy to Notion for deal hunting

@@ -38,6 +38,7 @@ describe('createNotionSync', () => {
     const outcome = await sync.run({ dryRun: true });
     expect(outcome).toMatchObject({ dryRun: true, applied: null, pushed: null });
     expect(outcome.pulled.tasks).toEqual({ rows: 0, complete: false });
+    expect(Object.keys(outcome.pulled)).toHaveLength(9);
     expect(outcome.warnings.join('\n')).toContain('not found');
     expect(state()).toBeUndefined();
   });
@@ -59,10 +60,12 @@ describe('createNotionSync', () => {
 
   it('applies the pull, then pushes, and records the status for the snapshot', async () => {
     const writes: string[] = [];
+    const createdTitles: string[] = [];
     // Only the app-managed databases exist, and they can be created: the hand-made ones are missing, so nothing is applied.
     const api = {
-      call: async (method: string, path: string) => {
+      call: async (method: string, path: string, body?: any) => {
         if (method !== 'GET') writes.push(`${method} ${path}`);
+        if (path === '/databases') createdTitles.push(body?.title?.[0]?.text?.content);
         if (path === '/databases') return { id: 'db-new', data_sources: [{ id: 'ds-new' }] };
         if (path.startsWith('/data_sources/')) return { properties: {} };
         return {};
@@ -73,8 +76,9 @@ describe('createNotionSync', () => {
     const sync = createNotionSync({ db, garageId: 'default', token: TOKEN, parentPageId: 'parent', apiFactory: () => api, now: () => now });
     const outcome = await sync.run();
     expect(outcome.applied!.warnings.join('\n')).toContain('not found');
-    expect(outcome.pushed!.map((p) => p.database)).toEqual(['Véhicules', 'Articles', 'Séances', 'Interventions', 'Consommables utilisés']);
+    expect(outcome.pushed!.map((p) => p.database)).toEqual(['Véhicules', 'Séances', 'Interventions', 'Consommables utilisés']);
     expect(writes).toContain('POST /databases');
+    expect(createdTitles).not.toContain('Articles');
     expect(state()).toMatchObject({ last_sync_at: now.toISOString(), last_error: null });
 
     const app = createApp(db, undefined, { notionSync: sync });
@@ -137,6 +141,27 @@ function livingWorkspace() {
   } as unknown as NotionClient;
   return { client, writes, dbs };
 }
+
+describe('reading the owner’s Achats', () => {
+  it('copies them into ref_purchases and never writes to that database', async () => {
+    const { client, writes, dbs } = livingWorkspace();
+    dbs.find((d) => d.id === 'db-purchases')!.pages.push({
+      id: 'achat-1',
+      properties: {
+        Achat: { type: 'title', title: [{ plain_text: 'Huile test' }] },
+        Date: { type: 'date', date: { start: '2026-05-02' } },
+        Article: { type: 'relation', relation: [{ id: 'article-1' }] },
+        'Prix payé': { type: 'number', number: 31.5 },
+        Boutique: { type: 'rich_text', rich_text: [{ plain_text: 'Boutique Exemple' }] },
+      },
+    });
+    const sync = createNotionSync({ db, garageId: 'default', token: TOKEN, parentPageId: 'parent', apiFactory: () => client });
+    const outcome = await sync.run();
+    expect(outcome.applied!.counts.purchases).toEqual({ created: 1, updated: 0, removed: 0 });
+    expect(db.prepare('SELECT date, article_notion_id, price, shop FROM ref_purchases').all()).toMatchObject([{ date: '2026-05-02', article_notion_id: 'article-1', price: 31.5, shop: 'Boutique Exemple' }]);
+    expect(writes.filter((w) => w.path.includes('db-purchases') || w.body?.parent?.data_source_id === 'ds-db-purchases')).toEqual([]);
+  });
+});
 
 describe('writing plan pages back to Notion', () => {
   const seed = () => {

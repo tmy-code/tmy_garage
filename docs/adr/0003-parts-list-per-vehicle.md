@@ -1,5 +1,5 @@
 ---
-status: accepted, extended by ADR 0004 (parts can also be To buy, and have a purchase log)
+status: accepted, extended by ADR 0004 (parts can also be To buy, and have a purchase log; removed by 0008)
 ---
 
 # A parts list per Vehicle, picked when logging a Service

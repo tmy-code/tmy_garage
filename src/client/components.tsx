@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from 'react';
 import type { OdometerCheck } from '../shared/consistency.ts';
 import type { DueInfo } from '../shared/due.ts';
+import type { ConsumableBuyState } from '../shared/purchases.ts';
 import type { Service } from '../shared/types.ts';
 import { confirmAction, dismissToast, useFeedback } from './feedback.ts';
 import { formatDate, formatKm } from './format.ts';
@@ -434,6 +435,27 @@ export function LanguageSwitch() {
         >
           {label}
         </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Whether what a Task needs was bought since it was last done, read from the owner's Notion Achats (ADR 0008): per
+ * required type, a "Bought <date>" chip or a "To buy" one. Types the vehicle has no line for are not shown. Read-only.
+ */
+export function BuyChips({ states, shop = false }: { states: ConsumableBuyState[]; shop?: boolean }) {
+  const t = useT();
+  const tracked = states.filter((s) => s.tracked);
+  if (tracked.length === 0) return null;
+  return (
+    <div className="buy-chips" role="group" aria-label={t.notion.purchaseStateTitle}>
+      {tracked.map((s) => (
+        <span key={s.type.id} className="buy-state">
+          <span className="buy-type">{s.type.name}</span>
+          {s.bought ? <span className="chip chip-ok">{t.notion.boughtOn(formatDate(s.bought.date, t))}</span> : <span className="chip chip-dueSoon">{t.notion.toBuyState}</span>}
+          {shop && s.bought?.shop ? <span className="buy-type">{t.notion.purchaseShop(s.bought.shop)}</span> : null}
+        </span>
       ))}
     </div>
   );

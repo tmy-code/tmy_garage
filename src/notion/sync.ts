@@ -39,7 +39,7 @@ async function loadSnapshot(): Promise<Snapshot> {
 }
 
 function report(copy: NotionCopy): void {
-  console.log(`To copy: ${copy.vehicles.length} vehicles, ${copy.items.length} items.`);
+  console.log(`To copy: ${copy.vehicles.length} vehicles.`);
 }
 
 async function main(): Promise<void> {

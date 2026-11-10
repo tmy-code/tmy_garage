@@ -19,7 +19,6 @@ erDiagram
     VEHICULES ||--o{ CONSOMMABLES_PAR_VEHICULE : "Véhicule"
     VEHICULES ||--o{ PLANS_D_ENTRETIEN : "Véhicule"
     VEHICULES ||--o{ SEANCES : "Véhicule"
-    VEHICULES ||--o{ ARTICLES : "Véhicule"
     VEHICULES ||--o{ CARACTERISTIQUES : "Véhicule"
     TACHES_D_ENTRETIEN ||--o{ PLANS_D_ENTRETIEN : "Tâche"
     TACHES_D_ENTRETIEN }o--o{ TYPES_DE_CONSOMMABLES : "Types de consommables requis"
@@ -35,16 +34,18 @@ erDiagram
     INTERVENTIONS ||--o{ CONSOMMABLES_UTILISES : "Intervention"
     TYPES_DE_CONSOMMABLES ||--o{ CONSOMMABLES_UTILISES : "Type de consommable"
     PRODUITS ||--o{ CONSOMMABLES_UTILISES : "Produit utilisé"
-    CARACTERISTIQUES ||--o{ ARTICLES : "Caractéristique"
+    ACHATS }o--|| CONSOMMABLES_PAR_VEHICULE : "Article"
+    PRODUITS ||--o{ ACHATS : "Produit"
 ```
 
-The databases fall into four groups:
+The databases fall into five groups:
 
 | Group | Databases | Made by |
 | --- | --- | --- |
 | Catalogue | Tâches d'entretien, Types de composants, Types de consommables, Produits, Outils | Owner |
 | Per vehicle | Spécifications, Consommables par véhicule, Plans d'entretien | Owner (the app creates plan pages) |
-| Copied from the app | Véhicules, Articles, Séances, Interventions, Consommables utilisés | App |
+| Purchases | Achats | Owner, read-only |
+| Copied from the app | Véhicules, Séances, Interventions, Consommables utilisés | App |
 | Frozen | Caractéristiques | Neither: no longer written, kept for history |
 
 ## The category labels
@@ -178,6 +179,28 @@ One page per vehicle and task. The app creates a page when a catalogue task appl
 | Notes | text | Owner | Shown on the app's task. |
 | Interventions | relation ← Interventions | Notion | Back-link of Interventions' Plan. |
 
+## Purchases
+
+### Achats
+
+What the owner bought, by hand, for a consumable line of a vehicle. Read-only for the app ([ADR 0008](adr/0008-shopping-list-and-purchase-log-move-to-notion.md)):
+a required consumable shows as Bought when an Achat of its line is dated after the task was last done, otherwise To buy.
+
+| Column | Type | Written by | Notes |
+| --- | --- | --- | --- |
+| Achat | title | Owner | Required. |
+| Date | date | Owner | Required. An Achat with no date is skipped, with a warning. |
+| Article | relation → Consommables par véhicule | Owner | Required. The line that was bought. An Achat with no article is skipped; with several, the first is used (warning). |
+| Produit | relation → Produits | Owner | Optional. |
+| Quantité | number | Owner | Optional. Text is accepted too (a leading number is read). |
+| Prix payé | number (€) | Owner | Optional. |
+| Boutique | text | Owner | Optional. |
+| Facture | files | Owner | **Never read or copied** (privacy). |
+| Notes | text | Owner | **Never read or copied** (privacy); not even in the app's description of the database. |
+
+A missing required column (or a missing database) makes the database "incomplete": a warning is shown in Settings and nothing is removed because of it. A missing optional column is tolerated.
+The app keeps only the date, the article, the product, the quantity, the price and the shop. It never creates, renames or writes this database.
+
 ## Copied from the app
 
 Each of these databases has **ID app** (text, the app's id, which links a page to its record) and **Supprimé de l’app**
@@ -196,27 +219,7 @@ Each of these databases has **ID app** (text, the app's id, which links a page t
 | JDex | text | Owner | Filing reference. |
 | Spécifications, Consommables, Plans d'entretien, Séances | relations | Notion | Back-links. |
 
-### Articles
-
-The parts and fluids bought for a vehicle, for deal hunting.
-
-| Column | Type | Written by | Notes |
-| --- | --- | --- | --- |
-| Article | title | App | |
-| Référence | text | App | |
-| État | select | App | À acheter or Achetée. |
-| Unité | select | App | litre or pièce. |
-| Quantité habituelle | number | App | |
-| Dernier prix unitaire | number (€) | App | |
-| Tâche | text | App | The task's name, as text. |
-| Échéance | date | App | |
-| Statut | select | App | The task's status. |
-| Véhicule | relation → Véhicules | App | One-way. |
-| Lien affaire | url | Owner | |
-| Prix affaire | number (€) | Owner | |
-| Boutique | text | Owner | |
-| Vérifié le | date | Owner | |
-| Caractéristique | relation → Caractéristiques | Nobody | Left from the earlier copy, no longer written. |
+Articles: no longer written by the app since 2026-11-10; leave or archive it in Notion.
 
 ### Séances
 
@@ -269,6 +272,6 @@ Pièces), Valeur, Réf. OEM, ID app, Supprimé de l’app.
 
 ## If a relation is recreated
 
-The app creates a missing relation column of its own databases (Séances, Interventions, Consommables utilisés, Articles)
+The app creates a missing relation column of its own databases (Séances, Interventions, Consommables utilisés)
 as **one-way**. If that happens, turn it back into a two-way relation in Notion (column menu › Edit property › Show on
 the other database), with the back-link name from the tables above.
