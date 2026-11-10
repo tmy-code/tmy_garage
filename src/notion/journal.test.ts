@@ -87,11 +87,16 @@ describe('buildJournal', () => {
     ]);
   });
 
-  it('makes an intervention per Task of a Service, with its action when it is a check or a replacement', () => {
+  it('makes an intervention per Task of a Service, with its action', () => {
     expect(journal.interventions).toEqual([
       { appId: 's1:t-oil', sessionAppId: 's1', title: 'Tâche t-oil', refTaskKey: 'rt-oil', planKey: 'plan:t-oil', action: 'Remplacement' },
       { appId: 's1:t-check', sessionAppId: 's1', title: 'Tâche t-check', refTaskKey: null, planKey: null, action: 'Contrôle' },
     ]);
+  });
+
+  it('gives a cleaning and an adjustment their own action', () => {
+    const s2 = snapshot({ tasks: [task('t-clean', { action: 'clean' }), task('t-adjust', { action: 'adjust' })], services: [service('s1', { taskIds: ['t-clean', 't-adjust'] })] });
+    expect(buildJournal(s2, fr).interventions.map((i) => i.action)).toEqual(['Nettoyage', 'Réglage']);
   });
 
   it('makes a line per part used, with its own quantity and unit price; a free-typed line has no type or product', () => {

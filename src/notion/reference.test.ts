@@ -33,7 +33,12 @@ describe('parseReference: vocabulary', () => {
   it('maps Action, Famille and Statut to the app values', () => {
     const pull = parseReference(
       {
-        tasks: [taskPage('t1'), taskPage('t2', { Tâche: title('Niveau'), Action: sel('Contrôle') })],
+        tasks: [
+          taskPage('t1'),
+          taskPage('t2', { Tâche: title('Niveau'), Action: sel('Contrôle') }),
+          taskPage('t3', { Tâche: title('Graissage'), Action: sel('Nettoyage') }),
+          taskPage('t4', { Tâche: title('Tension'), Action: sel('Réglage') }),
+        ],
         consumableTypes: [
           page('c1', { Nom: title('Huile'), Catégorie: sel('Moteur'), Famille: sel('Fluide'), Notes: rich('') }),
           page('c2', { Nom: title('Filtre'), Catégorie: sel('Moteur'), Famille: sel('Pièce'), Notes: rich('') }),
@@ -45,16 +50,16 @@ describe('parseReference: vocabulary', () => {
       },
       vehicleMap,
     );
-    expect(pull.tasks.rows.map((r) => r.action)).toEqual(['replace', 'inspect']);
+    expect(pull.tasks.rows.map((r) => r.action)).toEqual(['replace', 'inspect', 'clean', 'adjust']);
     expect(pull.consumableTypes.rows.map((r) => r.family)).toEqual(['fluid', 'part']);
     expect(pull.vehicleSpecs.rows.map((r) => r.status)).toEqual(['to_confirm', 'confirmed']);
   });
 
   it('maps unknown vocabulary to null with a warning, and lists the vocabularies found', () => {
-    const pull = parseReference({ tasks: [taskPage('t1', { Action: sel('Nettoyage') })] }, vehicleMap);
+    const pull = parseReference({ tasks: [taskPage('t1', { Action: sel('Polissage') })] }, vehicleMap);
     expect(pull.tasks.rows[0]!.action).toBeNull();
-    expect(pull.tasks.warnings.join('\n')).toContain('unknown value "Nettoyage" in "Action"');
-    expect(pull.vocabularies["Tâches d'entretien / Action"]).toEqual(['Nettoyage']);
+    expect(pull.tasks.warnings.join('\n')).toContain('unknown value "Polissage" in "Action"');
+    expect(pull.vocabularies["Tâches d'entretien / Action"]).toEqual(['Polissage']);
   });
 });
 

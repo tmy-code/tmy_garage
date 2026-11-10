@@ -24,7 +24,7 @@ Found by title under the page set by `NOTION_PARENT_PAGE_ID`. The app never crea
 
 | Database | Columns (required first) |
 | --- | --- |
-| Tâches d'entretien | Tâche (title), Action (select: Contrôle / Remplacement), Applicable si (multi-select), Intervalle par défaut (km), Intervalle par défaut (mois) · Types de consommables requis, Composants, Outils (relations), Instructions, Catégorie (select: Moteur / Transmission / Freinage / Châssis / Électricité / Refroidissement et climatisation / Autre; also Freins, Roues, Électrique) |
+| Tâches d'entretien | Tâche (title), Action (select: Contrôle / Remplacement / Nettoyage / Réglage), Applicable si (multi-select), Intervalle par défaut (km), Intervalle par défaut (mois) · Types de consommables requis, Composants, Outils (relations), Instructions, Catégorie (select: Moteur / Transmission / Freinage / Châssis / Électricité / Refroidissement et climatisation / Autre; also Freins, Roues, Électrique) |
 | Types de composants | Nom · Catégorie, Notes |
 | Types de consommables | Nom · Catégorie, Famille (Fluide / Pièce), Notes |
 | Produits | Nom · Type de consommable (relation), Marque, Référence, Fournisseur, Prix, Notes |
@@ -33,7 +33,7 @@ Found by title under the page set by `NOTION_PARENT_PAGE_ID`. The app never crea
 | Consommables par véhicule | Désignation (title), Véhicule, Type · Spécification, Réf. OEM, Capacité, Quantité (number or text), Produits compatibles, Produit retenu, Statut (Confirmé / À confirmer) |
 | Spécifications | Élément (title), Véhicule, Valeur (number or text) · Composant, Catégorie, Unité, Source, Statut |
 
-In *Véhicules* (the app's database) the owner adds the multi-select **Équipements**. A page that points at several vehicles gives one row per vehicle. Words the app does not know (an Action other than Contrôle or Remplacement…) are read as empty, with a warning.
+In *Véhicules* (the app's database) the owner adds the multi-select **Équipements**. A page that points at several vehicles gives one row per vehicle. Words the app does not know (an Action other than Contrôle, Remplacement, Nettoyage or Réglage…) are read as empty, with a warning.
 
 ## How the plan is built
 
@@ -75,4 +75,4 @@ The only writes into the owner's databases are in *Plans d'entretien*:
 
 ## The journal
 
-Three databases the app creates under the parent page (found by title; missing columns are added, existing ones never changed): **Séances** (one per Service: Séance, Véhicule, Date, Km, Réalisé par, Type Entretien / Réparation), **Interventions** (one per task done: Intervention, Séance, Tâche, Plan, Action Contrôle / Remplacement) and **Consommables utilisés** (one per part line: Ligne, Intervention, Type de consommable, Produit utilisé, Désignation, Quantité, Prix unitaire). All carry **ID app** and **Supprimé de l’app**. A line goes with the intervention whose task needs its consumable type, else with the Service's first task. A line typed by hand has no Produit utilisé and keeps its Désignation. A relation that points at one of your databases is only created when that database exists, and stays empty for a row whose page is not known. A removed row is ticked, never deleted, with the same guard as above.
+Three databases the app creates under the parent page (found by title; missing columns are added, existing ones never changed): **Séances** (one per Service: Séance, Véhicule, Date, Km, Réalisé par, Type Entretien / Réparation), **Interventions** (one per task done: Intervention, Séance, Tâche, Plan, Action Contrôle / Remplacement / Nettoyage / Réglage) and **Consommables utilisés** (one per part line: Ligne, Intervention, Type de consommable, Produit utilisé, Désignation, Quantité, Prix unitaire). All carry **ID app** and **Supprimé de l’app**. A line goes with the intervention whose task needs its consumable type, else with the Service's first task. A line typed by hand has no Produit utilisé and keeps its Désignation. A relation that points at one of your databases is only created when that database exists, and stays empty for a row whose page is not known. A removed row is ticked, never deleted, with the same guard as above.
