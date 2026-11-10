@@ -155,7 +155,7 @@ export const REFERENCE_DBS: ReferenceDb[] = [
     key: 'tasks',
     title: "Tâches d'entretien",
     required: [col('Tâche', 'title'), col('Action', 'select'), col('Applicable si', 'multi_select'), col('Intervalle par défaut (km)', 'number'), col('Intervalle par défaut (mois)', 'number')],
-    optional: [col('Types de consommables requis', 'relation'), col('Composants', 'relation'), col('Outils', 'relation'), col('Instructions', 'rich_text')],
+    optional: [col('Types de consommables requis', 'relation'), col('Composants', 'relation'), col('Outils', 'relation'), col('Instructions', 'rich_text'), col('Catégorie', 'select')],
   },
   {
     key: 'componentTypes',

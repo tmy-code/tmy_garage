@@ -5,6 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { applicableRefTasks, resolveInterval } from '../shared/applicability.ts';
+import type { PartCategory } from '../shared/catalogue.ts';
 import type { RefTask, Snapshot } from '../shared/types.ts';
 import { refKey } from '../shared/workshop.ts';
 import type { ReferencePull } from '../notion/reference.ts';
@@ -191,6 +192,7 @@ export function applyPull(db: DatabaseSync, garageId: string, pull: ReferencePul
             component_type_ids: resolve(componentIds, r.componentTypeNotionIds, `Tâche "${r.name}"`),
             tool_ids: resolve(toolIds, r.toolNotionIds, `Tâche "${r.name}"`),
             instructions: r.instructions,
+            category: r.category,
           },
         };
       }),
@@ -269,7 +271,7 @@ export function applyPull(db: DatabaseSync, garageId: string, pull: ReferencePul
     }
 
     function planTasks(): void {
-      const refs: (RefTask & { notionId: string })[] = (db.prepare('SELECT * FROM ref_tasks WHERE garage_id = ? AND notion_removed = 0').all(garageId) as Row[]).map((r) => ({
+      const refs: (RefTask & { notionId: string; category: PartCategory | null })[] = (db.prepare('SELECT * FROM ref_tasks WHERE garage_id = ? AND notion_removed = 0').all(garageId) as Row[]).map((r) => ({
         id: r.id,
         name: r.name,
         action: r.action,
@@ -281,6 +283,7 @@ export function applyPull(db: DatabaseSync, garageId: string, pull: ReferencePul
         toolIds: parseList(r.tool_ids),
         instructions: r.instructions,
         notionId: r.notion_id,
+        category: r.category as PartCategory | null,
       }));
       const plans = new Map<string, (typeof pull.plans.rows)[number]>();
       for (const p of pull.plans.rows) {
@@ -293,7 +296,7 @@ export function applyPull(db: DatabaseSync, garageId: string, pull: ReferencePul
       for (const v of snapshot.vehicles) {
         if (v.status !== 'owned') continue;
         const equipment = equipmentOf.get(v.id) ?? [];
-        const applicable = applicableRefTasks(refs, equipment) as (RefTask & { notionId: string })[];
+        const applicable = applicableRefTasks(refs, equipment) as (RefTask & { notionId: string; category: PartCategory | null })[];
         const applicableIds = new Set(applicable.map((r) => r.id));
         const tasks = db.prepare('SELECT * FROM maintenance_tasks WHERE vehicle_id = ? ORDER BY created_at, rowid').all(v.id) as Row[];
         const freed = new Set<string>();
@@ -334,6 +337,8 @@ export function applyPull(db: DatabaseSync, garageId: string, pull: ReferencePul
               action: ref.action,
               interval_km: intervalKm,
               interval_months: intervalMonths,
+              // Notion's category replaces the Task's only where Notion has one.
+              category: ref.category ?? linked.category,
               notes: plan?.notes ?? linked.notes,
               notion_plan_id: plan ? plan.notionId : linked.notion_plan_id,
               plan_auto: plan ? 0 : linked.plan_auto,
@@ -353,6 +358,7 @@ export function applyPull(db: DatabaseSync, garageId: string, pull: ReferencePul
               // Notion's interval replaces the app's only where Notion has one.
               interval_km: want.intervalKm ?? adopted.interval_km,
               interval_months: want.intervalMonths ?? adopted.interval_months,
+              category: ref.category ?? adopted.category,
               notes: plan?.notes ?? adopted.notes,
               notion_plan_id: plan ? plan.notionId : null,
               plan_auto: plan ? 0 : 1,
@@ -372,6 +378,7 @@ export function applyPull(db: DatabaseSync, garageId: string, pull: ReferencePul
             action: ref.action,
             interval_km: want.intervalKm,
             interval_months: want.intervalMonths,
+            category: ref.category,
             notes: plan?.notes ?? null,
             ref_task_id: ref.id,
             notion_plan_id: plan ? plan.notionId : null,

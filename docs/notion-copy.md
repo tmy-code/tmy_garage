@@ -24,7 +24,7 @@ Found by title under the page set by `NOTION_PARENT_PAGE_ID`. The app never crea
 
 | Database | Columns (required first) |
 | --- | --- |
-| Tâches d'entretien | Tâche (title), Action (select: Contrôle / Remplacement), Applicable si (multi-select), Intervalle par défaut (km), Intervalle par défaut (mois) · Types de consommables requis, Composants, Outils (relations), Instructions |
+| Tâches d'entretien | Tâche (title), Action (select: Contrôle / Remplacement), Applicable si (multi-select), Intervalle par défaut (km), Intervalle par défaut (mois) · Types de consommables requis, Composants, Outils (relations), Instructions, Catégorie (select: Moteur / Transmission / Freinage / Châssis / Électricité / Refroidissement et climatisation / Autre; also Freins, Roues, Électrique) |
 | Types de composants | Nom · Catégorie, Notes |
 | Types de consommables | Nom · Catégorie, Famille (Fluide / Pièce), Notes |
 | Produits | Nom · Type de consommable (relation), Marque, Référence, Fournisseur, Prix, Notes |

@@ -849,6 +849,10 @@ const MIGRATIONS: (string | ((db: DatabaseSync) => void))[] = [
     paused_tasks INTEGER NOT NULL DEFAULT 0
   );
 `,
+  `
+  -- The category a catalogue task gives the vehicles' Tasks made from it; null leaves each Task's own.
+  ALTER TABLE ref_tasks ADD COLUMN category TEXT CHECK (category IN ('engine', 'transmission', 'brakes', 'chassis', 'electrical', 'cooling_climate', 'other'));
+`,
 ];
 
 /** Replaces what the owner changed on a template that was split by the same change on each of the new ones. */

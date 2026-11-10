@@ -145,7 +145,7 @@ Factory reference values for the workshop ("Engine oil: 10W-40, 3.2 L", "Drain p
 | `notes` | Instructions, torque values, part codes, links. |
 | `switched_off` | Required, yes/no. Paused: no Due Date. |
 | `template_code` | The Plan Template it came from, empty for the owner's own. Shown as a "Standard" badge. Unique per Vehicle. |
-| `ref_task_id` | → `ref_tasks`. Set when the Task follows the Notion catalogue: its `name`, `name_fr`, `action`, intervals and `notes` are then Notion's (read-only in the app, 409 `notion_owned`); `switched_off`, the baseline and `category` stay the app's. Unique per Vehicle. |
+| `ref_task_id` | → `ref_tasks`. Set when the Task follows the Notion catalogue: its `name`, `name_fr`, `action`, intervals and `notes` are then Notion's (read-only in the app, 409 `notion_owned`); `switched_off` and the baseline stay the app's, and so does `category` unless the catalogue task has one (then each sync sets it). Unique per Vehicle. |
 | `notion_plan_id` | The Notion Plan page behind a linked Task, empty until one exists. Unique. |
 | `plan_auto` | Yes/no. 1 when the sync derived the Task (no Plan page yet), 0 for a Task made from a Plan page. |
 | `notion_removed` | Reserved (0). A Task is never hidden or deleted by the sync. |
@@ -318,7 +318,7 @@ Owned by Notion ([ADR 0007](adr/0007-two-way-notion-sync.md)): the server pulls 
 
 | Table | Holds |
 | --- | --- |
-| `ref_tasks` | The task catalogue: `name`, `action` (`inspect`/`replace`), `applicable_if` (equipment tags, all required; empty = every Vehicle), `default_km`, `default_months`, `consumable_type_ids`, `component_type_ids`, `tool_ids`, `instructions` (plain text). |
+| `ref_tasks` | The task catalogue: `name`, `action` (`inspect`/`replace`), `applicable_if` (equipment tags, all required; empty = every Vehicle), `default_km`, `default_months`, `consumable_type_ids`, `component_type_ids`, `tool_ids`, `instructions` (plain text), `category` (from Notion's "Catégorie": the app's French labels, plus Freins, Roues, Électrique; null when empty or unknown). |
 | `ref_component_types` | `name`, `category`, `notes`. |
 | `consumable_types` | `name`, `category`, `family` (`fluid`/`part`), `notes`. |
 | `products` | `type_id`, `name`, `brand`, `reference`, `supplier`, `price` (a default, not a purchase), `notes`. |
