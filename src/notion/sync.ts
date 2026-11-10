@@ -12,6 +12,7 @@ import type { Snapshot } from '../shared/types.ts';
 import { normalizeSnapshot } from '../shared/workshop.ts';
 import { NotionApi } from './api.ts';
 import { buildCopy, type NotionCopy } from './copy.ts';
+import { buildJournal } from './journal.ts';
 import { fetchReference, pushAll } from './engine.ts';
 
 function option(name: string): string | undefined {
@@ -55,15 +56,16 @@ async function main(): Promise<void> {
   report(copy);
 
   if (process.argv.includes('--dry-run')) {
-    console.log(JSON.stringify(copy, null, 2));
+    console.log(JSON.stringify({ ...copy, journal: buildJournal(snapshot, messagesFor('fr')) }, null, 2));
     return;
   }
 
   const api = new NotionApi(required('NOTION_TOKEN'));
   const results = await pushAll(api, required('NOTION_PARENT_PAGE_ID'), snapshot, todayIso(), messagesFor('fr'));
-  for (const [title, c] of results) {
+  for (const [title, c] of results.databases) {
     console.log(`${title}: ${c.created} created, ${c.updated} updated, ${c.unchanged} unchanged, ${c.removed} marked removed.`);
   }
+  for (const w of [...results.warnings, ...results.databases.flatMap(([, c]) => (c.warning ? [c.warning] : []))]) console.log(`Warning: ${w}`);
   console.log(`Done in ${api.requests} Notion requests.`);
 }
 
