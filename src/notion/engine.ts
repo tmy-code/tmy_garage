@@ -1,10 +1,13 @@
 // The Notion sync engine (ADR 0007), shared by the server's timer and the `npm run notion-sync` command:
-// - fetchReference reads the owner's hand-made databases (read-only: nothing there is ever created, renamed or written);
+// - fetchReference reads the owner's hand-made databases (read only);
 // - pushAll copies Vehicles (the deal-hunting copy; Articles is no longer copied, ADR 0008) and the journal (Séances, Interventions, Consommables
 //   utilisés), creating those databases and their missing columns; and writes back to the owner's Plans database.
 //
-// The ONLY writes into the owner's hand-made databases are, in "Plans d'entretien": a new page with its title (Plan),
-// Véhicule and Tâche, and the two columns "Dernier fait (km)" and "Dernier fait (date)" of an existing page.
+// The writes into the owner's hand-made databases are, in "Plans d'entretien": a new page with its title (Plan),
+// Véhicule and Tâche, and the two columns "Dernier fait (km)" and "Dernier fait (date)" of an existing page; and, since
+// ADR 0009 (superseding ADR 0007 for these two), the pages of the Item Spec and Component Spec databases, written by
+// src/notion/spec-pages.ts on a desktop edit and by the one-off move of the Spec Lines. No column is ever created,
+// renamed or retyped there.
 import type { Messages } from '../shared/messages.ts';
 import type { IsoDate } from '../shared/dates.ts';
 import type { Snapshot } from '../shared/types.ts';
@@ -28,6 +31,7 @@ import {
   type Database,
   type DatabaseKey,
   type Plain,
+  type ReferenceDb,
   type ReferenceKey,
 } from './databases.ts';
 import { parseReference, titleKey, vehiclePageMap, type ReferencePull } from './reference.ts';
@@ -53,14 +57,25 @@ export interface Counts {
 }
 
 /** The databases under the parent page, by normalised title: the id of each one. */
-async function databasesUnder(api: NotionClient, parentPageId: string): Promise<Map<string, string>> {
+export async function databasesUnder(api: NotionClient, parentPageId: string): Promise<Map<string, string>> {
   const children = await api.all('GET', `/blocks/${parentPageId}/children`);
   return new Map<string, string>(children.filter((b) => b.type === 'child_database').map((b) => [titleKey(b.child_database.title as string), b.id as string]));
 }
 
-async function dataSourceOf(api: NotionClient, databaseId: string): Promise<string> {
+export async function dataSourceOf(api: NotionClient, databaseId: string): Promise<string> {
   const database = await api.call('GET', `/databases/${databaseId}`);
   return database.data_sources[0].id as string;
+}
+
+export type FoundDb = { databaseId: string; title: string } | { ambiguous: string[] } | null;
+
+/** The database under the parent page by its new title or an old one; both present is ambiguous (read nothing, write nothing). */
+export function findReferenceDatabase(existing: Map<string, string>, db: ReferenceDb): FoundDb {
+  const titles = [db.title, ...(db.oldTitles ?? [])];
+  const found = titles.filter((title) => existing.has(titleKey(title)));
+  if (found.length === 0) return null;
+  if (found.length > 1) return { ambiguous: found };
+  return { databaseId: existing.get(titleKey(found[0]!))!, title: found[0]! };
 }
 
 /**
@@ -71,14 +86,25 @@ async function dataSourceOf(api: NotionClient, databaseId: string): Promise<stri
 export async function fetchReference(api: NotionClient, parentPageId: string): Promise<ReferencePull> {
   const existing = await databasesUnder(api, parentPageId);
   const pages: Record<string, any[]> = {};
-  const wanted = [...REFERENCE_DBS.map((d) => [d.key, d.title] as const), ['vehicles', VEHICLES.title] as const];
-  for (const [key, title] of wanted) {
-    const databaseId = existing.get(titleKey(title));
-    if (!databaseId) continue;
-    const dataSourceId = await dataSourceOf(api, databaseId);
-    pages[key] = await api.all('POST', `/data_sources/${dataSourceId}/query`);
+  const titles: Partial<Record<ReferenceKey, string>> = {};
+  const ambiguous: [ReferenceKey, string][] = [];
+  for (const db of REFERENCE_DBS) {
+    const found = findReferenceDatabase(existing, db);
+    if (found === null) continue;
+    if ('ambiguous' in found) {
+      // Neither is read, so the database counts as incomplete and nothing is removed because of it.
+      ambiguous.push([db.key, `${db.title}: both "${found.ambiguous[0]}" and "${found.ambiguous[1]}" exist under the parent page; archive or rename one`]);
+      continue;
+    }
+    titles[db.key] = found.title;
+    const dataSourceId = await dataSourceOf(api, found.databaseId);
+    pages[db.key] = await api.all('POST', `/data_sources/${dataSourceId}/query`);
   }
-  return parseReference(pages, vehiclePageMap(pages.vehicles ?? []));
+  const vehiclesId = existing.get(titleKey(VEHICLES.title));
+  if (vehiclesId) pages.vehicles = await api.all('POST', `/data_sources/${await dataSourceOf(api, vehiclesId)}/query`);
+  const pull = parseReference(pages, vehiclePageMap(pages.vehicles ?? []), titles);
+  for (const [key, message] of ambiguous) (pull[key] as { warnings: string[] }).warnings.push(message);
+  return pull;
 }
 
 /**
@@ -99,7 +125,8 @@ export async function ensureDatabases(
   async function targetOf(key: DatabaseKey | ReferenceKey): Promise<string | undefined> {
     if (dataSourceIds[key]) return dataSourceIds[key];
     const reference = REFERENCE_DBS.find((d) => d.key === key);
-    const databaseId = reference ? existing.get(titleKey(reference.title)) : undefined;
+    const found = reference ? findReferenceDatabase(existing, reference) : null;
+    const databaseId = found && 'databaseId' in found ? found.databaseId : undefined;
     return databaseId ? (dataSourceIds[key] = await dataSourceOf(api, databaseId)) : undefined;
   }
 
@@ -280,7 +307,8 @@ async function syncPlans(
     if (!warnings.includes(message)) warnings.push(message);
   };
 
-  const databaseId = (await databasesUnder(api, parentPageId)).get(titleKey(PLANS.title));
+  const foundPlans = findReferenceDatabase(await databasesUnder(api, parentPageId), PLANS);
+  const databaseId = foundPlans && 'databaseId' in foundPlans ? foundPlans.databaseId : undefined;
   if (!databaseId) {
     warn(`${PLANS.title}: the database was not found, so no plan page was created and "Dernier fait" was not written`);
     return { counts, created };

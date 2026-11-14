@@ -12,6 +12,7 @@ import { confirmDelete, ConsistencyWarnings, Field, FormError, Layout, segmented
 import { formatKm, formatMoney, formatQuantity, matchesQuery, parseNumber, taskName } from '../format.ts';
 import { showToast } from '../feedback.ts';
 import { useT, type Messages } from '../i18n.ts';
+import { isDesktop } from '../native.ts';
 import { navigate } from '../router.ts';
 import { enqueue, online, undoCreate, useStore } from '../store.ts';
 import type { OutboxOp } from '../outbox.ts';
@@ -72,6 +73,8 @@ function draftOfListed(p: VehiclePart): PartDraft {
 }
 
 function fromDraft(d: PartDraft, t: Messages): PartUsed {
+  // The phone does not add to the items list (ADR 0009): nothing is kept from a Service logged there.
+  const remember = d.remember && isDesktop;
   const quantity = parseNumber(d.quantity);
   const price = parseNumber(d.price);
   if (!d.description.trim() || quantity === null || Number.isNaN(quantity) || quantity <= 0) throw new Error(t.workshop.partError);
@@ -83,8 +86,8 @@ function fromDraft(d: PartDraft, t: Messages): PartUsed {
     unit: d.unit,
     price,
     // An id made here for a part to keep travels with the Service, so sending it again never doubles it.
-    partId: d.partId ?? (d.remember ? newId() : null),
-    ...(d.remember && !d.partId ? { remember: true } : {}),
+    partId: d.partId ?? (remember ? newId() : null),
+    ...(remember && !d.partId ? { remember: true } : {}),
     ...(d.consumableTypeId ? { consumableTypeId: d.consumableTypeId } : {}),
     ...(d.productId ? { productId: d.productId } : {}),
   };
@@ -478,7 +481,7 @@ export function ServiceForm({
                       <input inputMode="decimal" value={d.price} onChange={(e) => setPart(d.key, { price: e.target.value })} />
                     </Field>
                   </div>
-                  {d.partId === null ? (
+                  {d.partId === null && isDesktop ? (
                     <label className="check">
                       <input type="checkbox" checked={d.remember} onChange={(e) => setPart(d.key, { remember: e.target.checked })} />
                       <span>{t.workshop.keepPart}</span>
@@ -545,16 +548,23 @@ export function ServiceForm({
         ) : null}
       </form>
       {existing && !pending ? (
-        <DocumentsPanel snapshot={snapshot} ownerKind="service" ownerId={existing.id} defaultType="invoice" title={t.papers.receipt} />
+        // Receipts are added and removed on the desktop only, and never sent to Notion (ADR 0009).
+        isDesktop ? (
+          <DocumentsPanel snapshot={snapshot} ownerKind="service" ownerId={existing.id} defaultType="invoice" title={t.papers.receipt} />
+        ) : (
+          <p className="muted">{t.desktop.receipt}</p>
+        )
       ) : null}
     </Layout>
   );
 }
 
-/** "Motul 7100 10W-40 · 3.2 L · spec 10W-40, 3.2 L" in the picker: the factory spec it is for is shown to compare. */
+/** "Motul 7100 10W-40 · 3.2 L · spec 10W-40, 3.2 L" in the picker: the Item Spec it is for is shown to compare (the old Spec Line while it is still listed). */
 function listedLabel(p: VehiclePart, t: Messages, snapshot: Snapshot): string {
-  const spec = snapshot.specLines.find((l) => l.id === p.specLineId);
-  return `${p.name} · ${formatQuantity(p.quantity, p.unit, t)}${p.price !== null ? ` · ${formatMoney(p.price, t)}` : ''}${spec?.value ? ` · ${t.parts.specShown(spec.value)}` : ''}`;
+  const itemSpec = snapshot.itemSpecs.find((s) => s.id === p.itemSpecId);
+  const line = itemSpec ? undefined : snapshot.specLines.find((l) => l.id === p.specLineId);
+  const specValue = itemSpec ? [itemSpec.specification, itemSpec.capacity].filter(Boolean).join(', ') : line?.value;
+  return `${p.name} · ${formatQuantity(p.quantity, p.unit, t)}${p.price !== null ? ` · ${formatMoney(p.price, t)}` : ''}${specValue ? ` · ${t.parts.specShown(specValue)}` : ''}`;
 }
 
 /** Says a Service or Odometer Reading was saved; a new one can be taken back for a few seconds. */

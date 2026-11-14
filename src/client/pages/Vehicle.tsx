@@ -5,11 +5,12 @@ import { buyStates } from '../../shared/purchases.ts';
 import { groupByCategory } from '../../shared/workshop.ts';
 import type { PerformedBy } from '../../shared/schemas.ts';
 import type { MaintenanceTask, PartUsed, Snapshot, Vehicle } from '../../shared/types.ts';
-import { BuyChips, EditHint, Field, FormError, Layout, segmentedKeys, StatusChip, useWide } from '../components.tsx';
+import { BuyChips, DesktopOnlyNote, EditHint, Field, FormError, Layout, segmentedKeys, StatusChip, useWide } from '../components.tsx';
 import { describeDueShort, describeInterval, formatDate, formatKm, formatMoney, parseNumber, taskName } from '../format.ts';
 import { useT } from '../i18n.ts';
 import { makeAsName, VehicleIcon } from '../brands.tsx';
 import { Icon } from '../icons.tsx';
+import { isDesktop } from '../native.ts';
 import { online, useStore } from '../store.ts';
 import { showToast } from '../feedback.ts';
 import { FuelSection } from './Fuel.tsx';
@@ -176,7 +177,7 @@ function SetupRow({
           <a href={`#/tasks/${task.id}`}>
             <strong>{taskName(task, t)}</strong>
           </a>
-          {!editing ? (
+          {!editing && isDesktop ? (
             <button type="button" className="button button-small" onClick={() => onEdit(true)}>
               {t.vehicle.setLastDone}
             </button>
@@ -247,7 +248,8 @@ export function VehiclePage({ vehicle, snapshot, openSetup = false }: { vehicle:
   const noRecord = owned ? due.filter((d) => d.status === 'unknown') : [];
   const groups = groupByCategory(owned ? due.filter((d) => d.status !== 'unknown') : due, tasks);
   const pending = new Set(outbox.map((op) => op.data.id));
-  const specCount = snapshot.specLines.filter((s) => s.vehicleId === vehicle.id).length;
+  // Item Specs and Component Specs (Notion), plus the old Spec Lines not moved there yet.
+  const specCount = [snapshot.itemSpecs, snapshot.componentSpecs, snapshot.specLines].reduce((n, list) => n + list.filter((s) => s.vehicleId === vehicle.id).length, 0);
   const vehicleParts = snapshot.vehicleParts.filter((p) => p.vehicleId === vehicle.id);
   const partCount = vehicleParts.length;
   // An electric vehicle has no fuel log.
@@ -321,9 +323,11 @@ export function VehiclePage({ vehicle, snapshot, openSetup = false }: { vehicle:
       title={vehicle.name}
       back="/"
       titleAction={
-        <a className="button button-small" href={`#/vehicles/${vehicle.id}/edit`} aria-label={t.vehicle.edit}>
-          <Icon name="pencil" /> {t.vehicle.editShort}
-        </a>
+        isDesktop ? (
+          <a className="button button-small" href={`#/vehicles/${vehicle.id}/edit`} aria-label={t.vehicle.edit}>
+            <Icon name="pencil" /> {t.vehicle.editShort}
+          </a>
+        ) : undefined
       }
     >
       <div className="split">
@@ -401,7 +405,7 @@ export function VehiclePage({ vehicle, snapshot, openSetup = false }: { vehicle:
           <section {...panel('plan')} aria-labelledby={wide ? undefined : 'tab-plan'}>
             <div className="heading-row">
               <h2>{t.vehicle.tasks}</h2>
-              {owned ? (
+              {owned && isDesktop ? (
                 <a className="button button-small" href={`#/vehicles/${vehicle.id}/tasks/new`}>
                   {t.vehicle.addTask}
                 </a>
@@ -410,7 +414,7 @@ export function VehiclePage({ vehicle, snapshot, openSetup = false }: { vehicle:
             {due.length === 0 ? (
               <div className="empty">
                 <p>{t.vehicle.noTasks}</p>
-                {owned ? (
+                {owned && isDesktop ? (
                   <a className="button" href={`#/vehicles/${vehicle.id}/copy-tasks`}>
                     {t.vehicle.copyTasks}
                   </a>
@@ -530,19 +534,22 @@ export function VehiclePage({ vehicle, snapshot, openSetup = false }: { vehicle:
           </section>
 
           <section className="actions actions-footer" {...panel('plan')}>
-            {owned && snapshot.refTasks.length === 0 ? (
+            <DesktopOnlyNote />
+            {owned && isDesktop && snapshot.refTasks.length === 0 ? (
               <button type="button" className="button" onClick={() => void addFromTemplates()}>
                 {t.vehicle.addFromTemplates}
               </button>
             ) : null}
-            {owned && due.length > 0 ? (
+            {owned && isDesktop && due.length > 0 ? (
               <a className="button" href={`#/vehicles/${vehicle.id}/copy-tasks`}>
                 {t.vehicle.copyTasksShort}
               </a>
             ) : null}
-            <a className="button" href={`#/vehicles/${vehicle.id}/sell`}>
-              {owned ? t.vehicle.markSold : t.vehicle.saleDetails}
-            </a>
+            {isDesktop ? (
+              <a className="button" href={`#/vehicles/${vehicle.id}/sell`}>
+                {owned ? t.vehicle.markSold : t.vehicle.saleDetails}
+              </a>
+            ) : null}
           </section>
         </div>
       </div>

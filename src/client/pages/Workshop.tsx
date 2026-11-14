@@ -1,23 +1,22 @@
-import { Fragment, useMemo, useState, useSyncExternalStore, type FormEvent, type ReactNode } from 'react';
-import { PART_CATEGORIES, type PartCategory } from '../../shared/catalogue.ts';
+import { Fragment, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { PART_CATEGORIES } from '../../shared/catalogue.ts';
 import { todayIso } from '../../shared/dates.ts';
 import { requiredConsumables, torqueSpecs } from '../../shared/applicability.ts';
 import { vehicleDue } from '../../shared/due.ts';
-import type { PartUnit, SpecGroup } from '../../shared/schemas.ts';
-import type { MaintenanceTask, PartUsed, Snapshot, SpecLine, Vehicle, VehiclePart, ComponentSpec } from '../../shared/types.ts';
-import { confirmDelete, Field, FormError, Layout, NeedsConnection, segmentedKeys, StatusChip } from '../components.tsx';
-import { describeDue, describeInterval, formatDate, formatKm, formatMoney, localizeNumber, matchesQuery, parseNumber, taskName } from '../format.ts';
+import type { PartUnit } from '../../shared/schemas.ts';
+import type { ComponentSpec, Confirmation, ItemSpec, MaintenanceTask, PartUsed, Snapshot, SpecLine, Vehicle, VehiclePart } from '../../shared/types.ts';
+import { confirmAction } from '../feedback.ts';
+import { confirmDelete, DesktopOnlyNote, Field, FormError, Layout, NeedsConnection, segmentedKeys, StatusChip, useWide } from '../components.tsx';
+import { describeDue, describeInterval, formatDate, formatKm, formatMoney, localizeNumber, matchesQuery, parseNumber, specErrorText, taskName } from '../format.ts';
 import { VehicleIcon } from '../brands.tsx';
 import { Icon } from '../icons.tsx';
-import { showToast } from '../feedback.ts';
-import { getLang, messages, useT } from '../i18n.ts';
+import { messages, useT } from '../i18n.ts';
+import { isAndroidApp, isDesktop } from '../native.ts';
 import { online } from '../store.ts';
 import { useSubmit } from './SetupForms.tsx';
 
-// Specs are desk work and need a connection, like other setup. Reading them works offline from the phone's copy,
-// which is what matters mid-job.
-
-const GROUPS: readonly SpecGroup[] = ['fluids', 'parts', 'torque', 'other'];
+// Specs are desk work: edited on the desktop only, and written to Notion first, so they need a connection. Reading them
+// works offline from the phone's copy, which is what matters mid-job (ADR 0009).
 
 /** "Motul 7100 10W-40 · ref. 123" */
 export function describePart(part: PartUsed): string {
@@ -48,6 +47,8 @@ function InlineEditor({
   onDelete,
   disabled,
   error,
+  saveLabel,
+  onChange,
   children,
 }: {
   onSubmit: () => void;
@@ -55,6 +56,10 @@ function InlineEditor({
   onDelete?: () => void;
   disabled: boolean;
   error: string | null;
+  /** Replaces "Save" while a change is being written. */
+  saveLabel?: string;
+  /** Called on any change of a field: the editor then holds typed input. */
+  onChange?: () => void;
   children: ReactNode;
 }) {
   const t = useT();
@@ -63,102 +68,241 @@ function InlineEditor({
     onSubmit();
   }
   return (
-    <form onSubmit={submit} className="form card inline-editor">
+    <form onSubmit={submit} onChange={onChange} className="form card inline-editor">
       {children}
       <FormError error={error} />
-      <div className="actions">
-        <button type="button" className="button" onClick={onCancel}>
-          {t.workshop.cancel}
-        </button>
-        <button type="submit" className="button button-primary" disabled={disabled}>
-          {t.workshop.save}
-        </button>
+      <NeedsConnection />
+      <div className="sticky-actions">
+        <div className="actions">
+          <button type="button" className="button" onClick={onCancel}>
+            {t.workshop.cancel}
+          </button>
+          <button type="submit" className="button button-primary" disabled={disabled}>
+            {saveLabel ?? t.workshop.save}
+          </button>
+        </div>
       </div>
       {onDelete ? (
-        <button type="button" className="button button-danger button-block" onClick={onDelete} disabled={disabled}>
-          {t.workshop.delete}
-        </button>
+        <div className="inline-editor-danger">
+          <button type="button" className="button button-danger button-block" onClick={onDelete} disabled={disabled}>
+            {t.workshop.delete}
+          </button>
+        </div>
       ) : null}
     </form>
   );
 }
 
-type Editing = string | 'new' | null;
-
-function AddButton({ editor, label }: { editor: ReturnType<typeof useEditor>; label?: string }) {
-  const t = useT();
-  if (editor.editing === 'new') return null;
-  return (
-    <button type="button" className="button button-small" onClick={() => editor.setEditing('new')}>
-      + {label ?? t.workshop.add}
-    </button>
-  );
-}
+type Editing = string | null;
 
 function useEditor() {
   const [editing, setEditing] = useState<Editing>(null);
+  const dirty = useRef(false);
   const submit = useSubmit();
   function save(fn: () => Promise<unknown>, done?: string) {
     void submit.run(async () => {
       await fn();
+      dirty.current = false;
       setEditing(null);
     }, done);
   }
-  function remove(name: string, fn: () => Promise<unknown>) {
+  function remove(name: string, fn: () => Promise<unknown>, message?: string) {
     const t = messages();
-    void confirmDelete(t.workshop.confirmDelete(name)).then((ok) => ok && save(fn, t.feedback.deleted));
+    void confirmDelete(message ?? t.workshop.confirmDelete(name)).then((ok) => ok && save(fn, t.feedback.deleted));
   }
-  return { editing, setEditing: (e: Editing) => (submit.setError(null), setEditing(e)), save, remove, ...submit };
+  /** Opens another editor, or closes this one; asks first when the open one holds typed input. */
+  function open(next: Editing) {
+    if (next === editing) return;
+    const go = () => {
+      dirty.current = false;
+      submit.setError(null);
+      setEditing(next);
+    };
+    if (!dirty.current || editing === null) return go();
+    const t = messages();
+    void confirmAction(t.specs.discard, { confirm: t.specs.discardConfirm, cancel: t.specs.keepEditing }).then((ok) => ok && go());
+  }
+  /** Cancel is the user's own choice: no question. */
+  function close() {
+    dirty.current = false;
+    submit.setError(null);
+    setEditing(null);
+  }
+  return { editing, setEditing: open, close, markDirty: () => void (dirty.current = true), save, remove, ...submit };
 }
 
-// --- Spec lines of a Vehicle Profile ---
+// --- Item Specs and Component Specs of a Vehicle (kept in Notion; edited on the desktop, written to Notion first) ---
 
-const WIDE = '(min-width: 1000px)';
+/** Runs a call to the server for a spec edit, telling the owner what went wrong in the app's language. */
+async function specCall<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    throw new Error(specErrorText(error, messages()));
+  }
+}
 
-/** Whether the screen is wide enough for an editor beside its list (the same width the page layout switches at). */
-function useWide(): boolean {
-  return useSyncExternalStore(
-    (listener) => {
-      const query = window.matchMedia(WIDE);
-      query.addEventListener('change', listener);
-      return () => query.removeEventListener('change', listener);
-    },
-    () => window.matchMedia(WIDE).matches,
+const CONFIRMATIONS = [null, 'confirmed', 'to_confirm'] as const;
+
+function ConfirmationPicker({ value, onChange }: { value: Confirmation; onChange: (value: Confirmation) => void }) {
+  const t = useT();
+  const labels = { unset: t.specs.unset, confirmed: t.notion.confirmed, to_confirm: t.notion.toConfirm };
+  return (
+    <Field label={t.specs.confirmation}>
+      <div className="segmented" role="radiogroup" aria-label={t.specs.confirmation} onKeyDown={segmentedKeys}>
+        {CONFIRMATIONS.map((c) => (
+          <button type="button" key={c ?? 'unset'} role="radio" aria-checked={value === c} className={value === c ? 'on' : ''} onClick={() => onChange(c)}>
+            {labels[c ?? 'unset']}
+          </button>
+        ))}
+      </div>
+    </Field>
   );
 }
 
-function SpecEditor({ vehicle, existing, editor }: { vehicle: Vehicle; existing?: SpecLine; editor: ReturnType<typeof useEditor> }) {
+/** How many vehicles the Notion page of a spec covers (an edit changes it for all of them). */
+function pageVehicles(rows: { notionId: string; vehicleId: string }[], spec: { notionId: string }): number {
+  return new Set(rows.filter((r) => r.notionId === spec.notionId).map((r) => r.vehicleId)).size;
+}
+
+function ItemSpecEditor({ vehicle, existing, snapshot, editor }: { vehicle: Vehicle; existing?: ItemSpec; snapshot: Snapshot; editor: ReturnType<typeof useEditor> }) {
   const t = useT();
-  const [group, setGroup] = useState<SpecGroup>(existing?.group ?? 'fluids');
+  const [name, setName] = useState(existing?.name ?? '');
+  const [typeId, setTypeId] = useState(existing?.typeId ?? '');
+  const [specification, setSpecification] = useState(existing?.specification ?? '');
+  const [capacity, setCapacity] = useState(existing?.capacity ?? '');
+  const [quantity, setQuantity] = useState(existing?.quantity === null || existing?.quantity === undefined ? '' : String(existing.quantity));
+  const [oemRef, setOemRef] = useState(existing?.oemRef ?? '');
+  const [productId, setProductId] = useState(existing?.chosenProductId ?? '');
+  const [confirmation, setConfirmation] = useState<Confirmation>(existing?.confirmation ?? null);
+  const shared = existing ? pageVehicles(snapshot.itemSpecs, existing) : 1;
+  const products = snapshot.products.filter((p) => p.id === productId || (typeId !== '' && p.typeId === typeId));
+  const base = `/api/notion`;
+
+  function body() {
+    const q = parseNumber(quantity);
+    if (Number.isNaN(q)) throw new Error(t.specs.quantityError);
+    return { name, typeId: typeId || null, specification, oemRef, capacity, quantity: q, chosenProductId: productId || null, confirmation };
+  }
+
+  return (
+    <InlineEditor
+      onSubmit={() =>
+        editor.save(() => {
+          const payload = body();
+          return specCall(() => (existing ? online('PUT', `${base}/item-specs/${existing.id}`, payload) : online('POST', `${base}/vehicles/${vehicle.id}/item-specs`, payload)));
+        })
+      }
+      onCancel={editor.close}
+      onChange={editor.markDirty}
+      onDelete={
+        existing
+          ? () => editor.remove(existing.name, () => specCall(() => online('DELETE', `${base}/item-specs/${existing.id}`)), shared > 1 ? t.specs.confirmDetach(existing.name) : t.specs.confirmDelete(existing.name))
+          : undefined
+      }
+      disabled={editor.disabled}
+      error={editor.error}
+      saveLabel={editor.busy ? t.specs.saving : undefined}
+    >
+      {shared > 1 ? <p className="banner banner-warn">{t.specs.shared(shared)}</p> : null}
+      <Field label={t.specs.name} hint={t.specs.nameHint}>
+        <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={200} autoFocus />
+      </Field>
+      <Field label={t.specs.type}>
+        <select
+          value={typeId}
+          onChange={(e) => {
+            setTypeId(e.target.value);
+            setProductId('');
+          }}
+        >
+          <option value="">{t.specs.noType}</option>
+          {[...snapshot.consumableTypes].sort((a, b) => a.name.localeCompare(b.name)).map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label={t.specs.specification} hint={t.specs.specificationHint}>
+        <input value={specification} onChange={(e) => setSpecification(e.target.value)} maxLength={200} />
+      </Field>
+      <div className="row">
+        <Field label={t.specs.capacity} hint={t.specs.capacityHint}>
+          <input value={capacity} onChange={(e) => setCapacity(e.target.value)} maxLength={80} />
+        </Field>
+        <Field label={t.specs.quantity} hint={t.specs.quantityHint}>
+          <input inputMode="decimal" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+        </Field>
+      </div>
+      <Field label={t.specs.oemRef}>
+        <input value={oemRef} onChange={(e) => setOemRef(e.target.value)} maxLength={120} />
+      </Field>
+      <Field label={t.specs.chosenProduct} hint={t.specs.compatibleInNotion}>
+        <select value={productId} onChange={(e) => setProductId(e.target.value)}>
+          <option value="">{t.specs.noProduct}</option>
+          {products.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name || [p.brand, p.reference].filter(Boolean).join(' ')}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <ConfirmationPicker value={confirmation} onChange={setConfirmation} />
+    </InlineEditor>
+  );
+}
+
+function ComponentSpecEditor({ vehicle, existing, snapshot, editor }: { vehicle: Vehicle; existing?: ComponentSpec; snapshot: Snapshot; editor: ReturnType<typeof useEditor> }) {
+  const t = useT();
   const [label, setLabel] = useState(existing?.label ?? '');
+  const [componentTypeId, setComponentTypeId] = useState(existing?.componentTypeId ?? '');
+  const known = PART_CATEGORIES as readonly string[];
+  const [category, setCategory] = useState(existing?.category && known.includes(existing.category) ? existing.category : '');
   const [value, setValue] = useState(existing?.value ?? '');
-  const [oem, setOem] = useState(existing?.oem ?? '');
-  const [category, setCategory] = useState<PartCategory | null>(existing?.category ?? null);
-  const body = { group, label, value, oem, category };
+  const [unit, setUnit] = useState(existing?.unit ?? '');
+  const [source, setSource] = useState(existing?.source ?? '');
+  const [confirmation, setConfirmation] = useState<Confirmation>(existing?.confirmation ?? null);
+  const shared = existing ? pageVehicles(snapshot.componentSpecs, existing) : 1;
+  const units = [...new Set(snapshot.componentSpecs.flatMap((s) => (s.unit ? [s.unit] : [])))].sort();
+  const base = `/api/notion`;
+  const payload = { label, componentTypeId: componentTypeId || null, category: category || null, value, unit, source, confirmation };
+
   return (
     <InlineEditor
       onSubmit={() =>
         editor.save(() =>
-          existing ? online('PUT', `/api/specs/${existing.id}`, body) : online('POST', `/api/vehicles/${vehicle.id}/specs`, body),
+          specCall(() => (existing ? online('PUT', `${base}/component-specs/${existing.id}`, payload) : online('POST', `${base}/vehicles/${vehicle.id}/component-specs`, payload))),
         )
       }
-      onCancel={() => editor.setEditing(null)}
-      onDelete={existing ? () => editor.remove(existing.label, () => online('DELETE', `/api/specs/${existing.id}`)) : undefined}
+      onCancel={editor.close}
+      onChange={editor.markDirty}
+      onDelete={
+        existing
+          ? () => editor.remove(existing.label, () => specCall(() => online('DELETE', `${base}/component-specs/${existing.id}`)), shared > 1 ? t.specs.confirmDetach(existing.label) : t.specs.confirmDelete(existing.label))
+          : undefined
+      }
       disabled={editor.disabled}
       error={editor.error}
+      saveLabel={editor.busy ? t.specs.saving : undefined}
     >
-      <div className="segmented" role="radiogroup" aria-label={t.workshop.specGroup} onKeyDown={segmentedKeys}>
-        {GROUPS.map((g) => (
-          <button type="button" key={g} role="radio" aria-checked={group === g} className={group === g ? 'on' : ''} onClick={() => setGroup(g)}>
-            {t.workshop.specGroups[g]}
-          </button>
-        ))}
-      </div>
-      <Field label={t.workshop.specLabel} hint={t.workshop.specLabelHint}>
-        <input value={label} onChange={(e) => setLabel(e.target.value)} required maxLength={80} autoFocus />
+      {shared > 1 ? <p className="banner banner-warn">{t.specs.shared(shared)}</p> : null}
+      <Field label={t.specs.label} hint={t.specs.labelHint}>
+        <input value={label} onChange={(e) => setLabel(e.target.value)} required maxLength={200} autoFocus />
+      </Field>
+      <Field label={t.specs.componentType}>
+        <select value={componentTypeId} onChange={(e) => setComponentTypeId(e.target.value)}>
+          <option value="">{t.specs.noType}</option>
+          {[...snapshot.componentTypes].sort((a, b) => a.name.localeCompare(b.name)).map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
       </Field>
       <Field label={t.setup.taskCategory}>
-        <select value={category ?? 'other'} onChange={(e) => setCategory(e.target.value === 'other' ? null : (e.target.value as PartCategory))}>
+        <select value={category} onChange={(e) => setCategory(e.target.value)}>
+          <option value="">{t.specs.unset}</option>
           {PART_CATEGORIES.map((c) => (
             <option key={c} value={c}>
               {t.workshop.partCategories[c]}
@@ -166,32 +310,74 @@ function SpecEditor({ vehicle, existing, editor }: { vehicle: Vehicle; existing?
           ))}
         </select>
       </Field>
-      <Field label={t.workshop.specValue} hint={t.workshop.specValueHint}>
-        <input value={value} onChange={(e) => setValue(e.target.value)} required maxLength={200} />
+      <div className="row">
+        <Field label={t.specs.value} hint={t.specs.valueHint}>
+          <input value={value} onChange={(e) => setValue(e.target.value)} maxLength={200} />
+        </Field>
+        <Field label={t.specs.unit} hint={t.specs.unitHint}>
+          <input value={unit} onChange={(e) => setUnit(e.target.value)} maxLength={20} list="spec-units" />
+          <datalist id="spec-units">
+            {units.map((u) => (
+              <option key={u} value={u} />
+            ))}
+          </datalist>
+        </Field>
+      </div>
+      <Field label={t.specs.source} hint={t.specs.sourceHint}>
+        <input value={source} onChange={(e) => setSource(e.target.value)} maxLength={500} />
       </Field>
-      <Field label={t.workshop.specOem} hint={t.workshop.specOemHint}>
-        <input value={oem} onChange={(e) => setOem(e.target.value)} maxLength={80} />
-      </Field>
+      <ConfirmationPicker value={confirmation} onChange={setConfirmation} />
     </InlineEditor>
   );
 }
 
-/**
- * A Vehicle's spec lines by category in screen order (what is in none is under Other), then by group (fluids, parts,
- * torque, other), in the order they were entered. Empty categories and groups are left out.
- */
-export function specCategoriesOf(snapshot: Snapshot, vehicleId: string): [PartCategory, [SpecGroup, SpecLine[]][]][] {
-  const lines = snapshot.specLines.filter((s) => s.vehicleId === vehicleId);
-  return PART_CATEGORIES.map((c) => {
-    const inCategory = lines.filter((s) => (s.category ?? 'other') === c);
-    const groups = GROUPS.map((g) => [g, inCategory.filter((s) => s.group === g).sort((a, b) => a.sort - b.sort)] as [SpecGroup, SpecLine[]]).filter(
-      ([, items]) => items.length > 0,
-    );
-    return [c, groups] as [PartCategory, [SpecGroup, SpecLine[]][]];
-  }).filter(([, groups]) => groups.length > 0);
+function ConfirmationChip({ confirmation }: { confirmation: Confirmation }) {
+  const t = useT();
+  if (!confirmation) return null;
+  return <span className={`chip ${confirmation === 'confirmed' ? 'chip-ok' : 'chip-dueSoon'}`}>{confirmation === 'confirmed' ? t.notion.confirmed : t.notion.toConfirm}</span>;
 }
 
-function SpecText({ spec }: { spec: SpecLine }) {
+/** The Item Spec row: what the vehicle takes, in a few words. */
+function ItemSpecText({ spec }: { spec: ItemSpec }) {
+  const t = useT();
+  const detail = [spec.specification, spec.capacity ? localizeNumber(spec.capacity, t) : null, spec.quantity !== null ? `×${localizeNumber(spec.quantity, t)}` : null].filter(Boolean).join(' · ');
+  return (
+    <>
+      <span>
+        <strong>{spec.name}</strong>
+        <span className="spec-badges">
+          <ConfirmationChip confirmation={spec.confirmation} />
+        </span>
+      </span>
+      <span>
+        {detail || <span className="muted">{t.workshop.specToFill}</span>}
+        {spec.oemRef ? <small className="muted spec-oem">{t.workshop.specOemShown(spec.oemRef)}</small> : null}
+      </span>
+    </>
+  );
+}
+
+/** The Component Spec row: a figure with its unit and where it comes from. */
+function ComponentSpecText({ spec }: { spec: ComponentSpec }) {
+  const t = useT();
+  return (
+    <>
+      <span>
+        <strong>{spec.label}</strong>
+        <span className="spec-badges">
+          <ConfirmationChip confirmation={spec.confirmation} />
+        </span>
+      </span>
+      <span>
+        {spec.value ? [localizeNumber(spec.value, t), spec.unit].filter(Boolean).join(' ') : <span className="muted">{t.workshop.specToFill}</span>}
+        {spec.source ? <small className="muted spec-oem">{spec.source}</small> : null}
+      </span>
+    </>
+  );
+}
+
+/** An old Spec Line not moved to Notion: read-only. */
+function SpecLineText({ spec }: { spec: SpecLine }) {
   const t = useT();
   return (
     <>
@@ -204,30 +390,16 @@ function SpecText({ spec }: { spec: SpecLine }) {
   );
 }
 
-/** A spec from Notion: read-only, with where it comes from and whether it is confirmed. */
-function NotionSpecRow({ spec }: { spec: ComponentSpec }) {
-  const t = useT();
-  return (
-    <li>
-      <div className="spec-row">
-        <span>
-          <strong>{spec.label}</strong>
-          <span className="spec-badges">
-            <span className="chip chip-neutral">{t.notion.badge}</span>
-            {spec.confirmation ? <span className={`chip ${spec.confirmation === 'confirmed' ? 'chip-ok' : 'chip-dueSoon'}`}>{spec.confirmation === 'confirmed' ? t.notion.confirmed : t.notion.toConfirm}</span> : null}
-          </span>
-        </span>
-        <span>
-          {spec.value ? [localizeNumber(spec.value, t), spec.unit].filter(Boolean).join(' ') : <span className="muted">{t.workshop.specToFill}</span>}
-          {spec.source ? <small className="muted spec-oem">{spec.source}</small> : null}
-        </span>
-      </div>
-    </li>
-  );
+/** A Vehicle's Item Specs by the category of their consumable type (what has no type is last), in the order Notion gave them. */
+function itemSpecGroups(snapshot: Snapshot, vehicleId: string): [string | null, ItemSpec[]][] {
+  const specs = snapshot.itemSpecs.filter((s) => s.vehicleId === vehicleId);
+  const categoryOf = (s: ItemSpec) => snapshot.consumableTypes.find((c) => c.id === s.typeId)?.category ?? null;
+  const categories = [...new Set(specs.map(categoryOf))].sort((a, b) => (a === null ? 1 : b === null ? -1 : a.localeCompare(b)));
+  return categories.map((c) => [c, specs.filter((s) => categoryOf(s) === c)]);
 }
 
-/** The specs Notion keeps for a Vehicle, by category (what has none is last), in the order Notion gave them. */
-function notionSpecGroups(snapshot: Snapshot, vehicleId: string): [string | null, ComponentSpec[]][] {
+/** The Component Specs of a Vehicle by category (what has none is last), in the order Notion gave them. */
+function componentSpecGroups(snapshot: Snapshot, vehicleId: string): [string | null, ComponentSpec[]][] {
   const specs = snapshot.componentSpecs.filter((s) => s.vehicleId === vehicleId);
   const categories = [...new Set(specs.map((s) => s.category))].sort((a, b) => (a === null ? 1 : b === null ? -1 : a.localeCompare(b)));
   return categories.map((c) => [c, specs.filter((s) => s.category === c)]);
@@ -237,80 +409,125 @@ export function SpecsPage({ vehicle, snapshot }: { vehicle: Vehicle; snapshot: S
   const t = useT();
   const editor = useEditor();
   const wide = useWide();
-  const categories = specCategoriesOf(snapshot, vehicle.id);
-  const notionGroups = notionSpecGroups(snapshot, vehicle.id);
-  // Once the Notion catalogue exists the usual specs are not added any more.
-  const catalogueActive = snapshot.refTasks.length > 0;
-  const editing = snapshot.specLines.find((l) => l.id === editor.editing);
-  async function addStandard() {
-    try {
-      const { added, skipped } = await online<{ added: number; skipped?: string }>('POST', `/api/vehicles/${vehicle.id}/add-standard-specs`, { lang: getLang() });
-      showToast(skipped ? t.notion.standardSkipped : t.workshop.standardSpecsAdded(added));
-    } catch (e) {
-      showToast((e as Error).message);
-    }
+  const itemGroups = itemSpecGroups(snapshot, vehicle.id);
+  const componentGroups = componentSpecGroups(snapshot, vehicle.id);
+  const legacy = snapshot.specLines.filter((l) => l.vehicleId === vehicle.id);
+  const empty = itemGroups.length === 0 && componentGroups.length === 0 && legacy.length === 0;
+  // Specs are written to Notion first, on the desktop only; a sold vehicle has no Notion page.
+  const sold = vehicle.ownership !== 'owned';
+  const canEdit = isDesktop && snapshot.notion !== null && !sold;
+  const editing = editor.editing;
+  const editingItem = editing?.startsWith('item:') ? snapshot.itemSpecs.find((s) => s.id === editing.slice(5)) : undefined;
+  const editingComponent = editing?.startsWith('component:') ? snapshot.componentSpecs.find((s) => s.id === editing.slice(10)) : undefined;
+  const editorFor = (e: string) =>
+    e.startsWith('item:') ? (
+      <ItemSpecEditor key={e} vehicle={vehicle} existing={editingItem} snapshot={snapshot} editor={editor} />
+    ) : (
+      <ComponentSpecEditor key={e} vehicle={vehicle} existing={editingComponent} snapshot={snapshot} editor={editor} />
+    );
+
+  const addButton = (kind: 'item' | 'component') =>
+    canEdit && editing !== `${kind}:new` ? (
+      <button type="button" className="button button-small" aria-label={kind === 'item' ? t.specs.addItem : t.specs.addComponent} onClick={() => editor.setEditing(`${kind}:new`)}>
+        + {t.workshop.add}
+      </button>
+    ) : null;
+
+  function note() {
+    if (isAndroidApp) return <DesktopOnlyNote />;
+    if (snapshot.notion === null) return <p className="muted">{t.specs.notionOff}</p>;
+    if (sold) return <p className="muted">{t.specs.soldNoEdit}</p>;
+    return null;
   }
+
+  function row(kind: 'item' | 'component', id: string, content: ReactNode) {
+    const key = `${kind}:${id}`;
+    if (!canEdit) return <div className="spec-row">{content}</div>;
+    return (
+      <button type="button" className={`item-row spec-row ${editing === key ? 'item-selected' : ''}`} onClick={() => editor.setEditing(key)}>
+        {content}
+      </button>
+    );
+  }
+
   return (
-    <Layout title={t.workshop.specsTitle(vehicle.name)} back={`/vehicles/${vehicle.id}`} titleAction={<AddButton editor={editor} />}>
+    <Layout title={t.workshop.specsTitle(vehicle.name)} back={`/vehicles/${vehicle.id}`}>
       <NeedsConnection />
-      <p className="muted">{t.workshop.specsIntro}</p>
+      <p className="muted">{canEdit ? t.specs.intro : t.specs.readOnlyIntro}</p>
+      {note()}
       <div className={wide ? 'split' : undefined}>
         <div className="split-main">
-          {catalogueActive ? null : (
-            <button type="button" className="button button-block" onClick={addStandard}>
-              {t.workshop.addStandardSpecs}
-            </button>
-          )}
-          {notionGroups.length > 0 ? (
-            <section>
-              <h2>{t.notion.specsFromNotion}</h2>
-              <p className="muted">{t.notion.readOnlyHint}</p>
-              {notionGroups.map(([category, specs]) => (
-                <Fragment key={category ?? 'none'}>
-                  {category ? <h3 className="due-group">{category}</h3> : null}
-                  <ul className="list list-plain">
-                    {specs.map((spec) => (
-                      <NotionSpecRow key={spec.id} spec={spec} />
-                    ))}
-                  </ul>
-                </Fragment>
-              ))}
-            </section>
+          {empty && editing !== 'item:new' && editing !== 'component:new' ? (
+            <p className="empty">
+              {t.specs.empty} {canEdit ? t.specs.emptyDesktop : ''}
+            </p>
           ) : null}
-          {!wide && editor.editing === 'new' ? <SpecEditor vehicle={vehicle} editor={editor} /> : null}
-          {categories.length === 0 && notionGroups.length === 0 && editor.editing !== 'new' ? <p className="empty">{t.workshop.noSpecs}</p> : null}
-          {categories.length > 0 && notionGroups.length > 0 ? <h2>{t.notion.specsOwn}</h2> : null}
-          {categories.map(([category, groups]) => (
-            <section key={category}>
-              <h2>{t.workshop.partCategories[category]}</h2>
-              {groups.map(([group, items]) => (
-                <Fragment key={group}>
-                  <h3 className="due-group">{t.workshop.specGroups[group]}</h3>
-                  <ul className="list list-plain">
-                    {items.map((spec) =>
-                      !wide && editor.editing === spec.id ? (
-                        <li key={spec.id} className="editing">
-                          <SpecEditor vehicle={vehicle} existing={spec} editor={editor} />
-                        </li>
-                      ) : (
-                        <li key={spec.id}>
-                          <button type="button" className={`item-row spec-row ${editor.editing === spec.id ? 'item-selected' : ''}`} onClick={() => editor.setEditing(spec.id)}>
-                            <SpecText spec={spec} />
-                          </button>
-                        </li>
-                      ),
-                    )}
-                  </ul>
-                </Fragment>
-              ))}
-            </section>
-          ))}
+
+          <section>
+            <div className="heading-row">
+              <h2>{t.specs.itemTitle}</h2>
+              {addButton('item')}
+            </div>
+            {!wide && editing === 'item:new' ? editorFor('item:new') : null}
+            {itemGroups.map(([category, specs]) => (
+              <Fragment key={category ?? 'none'}>
+                <h3 className="due-group">{category ?? t.specs.noTypeGroup}</h3>
+                <ul className="list list-plain">
+                  {specs.map((spec) =>
+                    !wide && editing === `item:${spec.id}` ? (
+                      <li key={spec.id} className="editing">
+                        {editorFor(`item:${spec.id}`)}
+                      </li>
+                    ) : (
+                      <li key={spec.id}>{row('item', spec.id, <ItemSpecText spec={spec} />)}</li>
+                    ),
+                  )}
+                </ul>
+              </Fragment>
+            ))}
+          </section>
+
+          <section>
+            <div className="heading-row">
+              <h2>{t.specs.componentTitle}</h2>
+              {addButton('component')}
+            </div>
+            {!wide && editing === 'component:new' ? editorFor('component:new') : null}
+            {componentGroups.map(([category, specs]) => (
+              <Fragment key={category ?? 'none'}>
+                <h3 className="due-group">{category ?? t.specs.noTypeGroup}</h3>
+                <ul className="list list-plain">
+                  {specs.map((spec) =>
+                    !wide && editing === `component:${spec.id}` ? (
+                      <li key={spec.id} className="editing">
+                        {editorFor(`component:${spec.id}`)}
+                      </li>
+                    ) : (
+                      <li key={spec.id}>{row('component', spec.id, <ComponentSpecText spec={spec} />)}</li>
+                    ),
+                  )}
+                </ul>
+              </Fragment>
+            ))}
+          </section>
+
+          {legacy.length > 0 ? (
+            <details>
+              <summary>{t.specs.legacyTitle}</summary>
+              <p className="muted">{t.specs.legacyHint}</p>
+              <ul className="list list-plain">
+                {legacy.map((spec) => (
+                  <li key={spec.id}>
+                    <div className="spec-row">
+                      <SpecLineText spec={spec} />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
         </div>
-        {wide && editor.editing ? (
-          <div className="side-editor">
-            <SpecEditor key={editor.editing} vehicle={vehicle} existing={editing} editor={editor} />
-          </div>
-        ) : null}
+        {wide && editing && (editing === 'item:new' || editing === 'component:new' || editingItem || editingComponent) ? <div className="side-editor">{editorFor(editing)}</div> : null}
       </div>
     </Layout>
   );
@@ -429,9 +646,11 @@ export function TaskPage({ task, vehicle, snapshot }: { task: MaintenanceTask; v
       title={taskName(task, t)}
       back={`/vehicles/${vehicle.id}`}
       titleAction={
-        <a className="button button-small" href={`#/tasks/${task.id}/edit`} aria-label={t.workshop.editTask}>
-          <Icon name="pencil" /> {t.vehicle.editShort}
-        </a>
+        isDesktop ? (
+          <a className="button button-small" href={`#/tasks/${task.id}/edit`} aria-label={t.workshop.editTask}>
+            <Icon name="pencil" /> {t.vehicle.editShort}
+          </a>
+        ) : undefined
       }
     >
       <section className="card">
@@ -549,9 +768,13 @@ export function WorkshopPage({ snapshot }: { snapshot: Snapshot }) {
       {snapshot.vehicles.length > 0 && shown.length === 0 ? (
         <div className="empty">
           <p>{t.dashboard.noneShown}</p>
-          <a className="button" href="#/vehicles/manage">
-            {t.dashboard.manage}
-          </a>
+          {isDesktop ? (
+            <a className="button" href="#/vehicles/manage">
+              {t.dashboard.manage}
+            </a>
+          ) : (
+            <DesktopOnlyNote />
+          )}
         </div>
       ) : null}
       <nav className="vehicle-tabs" aria-label={t.workshop.section}>

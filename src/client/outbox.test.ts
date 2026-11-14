@@ -12,7 +12,7 @@ const base: Snapshot = {
   fillups: [],
   documents: [],
   catalogue: [],
-  refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], componentSpecs: [], notionPurchases: [], notion: null,
+  refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], itemSpecs: [], componentSpecs: [], notionPurchases: [], notion: null,
 };
 
 const service = (id: string, odometer: number): OutboxOp => ({

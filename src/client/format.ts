@@ -1,6 +1,7 @@
 import { effectiveInterval, type DueInfo } from '../shared/due.ts';
 import type { PartUnit } from '../shared/schemas.ts';
 import type { MaintenanceTask } from '../shared/types.ts';
+import { ApiError, NetworkError } from './api.ts';
 import { messages, type Messages } from './i18n.ts';
 
 // Distances use French digit grouping ("24 000 km") in both languages.
@@ -152,6 +153,14 @@ export function describeDueShort(due: DueInfo, m: Messages = messages()): { when
     distance:
       due.kmRemaining === null ? null : due.kmRemaining < 0 ? m.due.over(formatKm(-due.kmRemaining)) : m.due.left(formatKm(due.kmRemaining)),
   };
+}
+
+/** What to tell the owner when a spec edit (written to Notion first) failed: by the server's reason, in the app's language. */
+export function specErrorText(error: unknown, t: Messages): string {
+  if (error instanceof NetworkError) return t.needsConnection;
+  const errors = t.specs.errors as Record<string, string>;
+  if (error instanceof ApiError && error.code !== undefined && error.code in errors) return errors[error.code]!;
+  return t.specs.errors.notion_failed;
 }
 
 /** Parses a numeric text field: empty means "not set". Spaces are allowed ("24 000"). */

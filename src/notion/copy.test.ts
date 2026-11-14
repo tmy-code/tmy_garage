@@ -55,6 +55,7 @@ function part(id: string, vehicleId: string, overrides: Partial<VehiclePart> = {
     quantity: 3.2,
     price: null,
     taskId: null,
+    itemSpecId: null,
     specLineId: null,
     notes: 'Boutique Exemple',
     ...overrides,
@@ -90,7 +91,7 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     fillups: [],
     documents: [],
     catalogue: [],
-    refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], componentSpecs: [], notionPurchases: [], notion: null,
+    refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], itemSpecs: [], componentSpecs: [], notionPurchases: [], notion: null,
     ...overrides,
   };
 }

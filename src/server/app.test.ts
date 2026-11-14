@@ -372,34 +372,38 @@ describe('fuel log (replayed by the offline send queue)', () => {
 });
 
 describe('spec lines and the plan templates', () => {
-  it('keeps a Vehicle’s spec lines by group, one label once, and lists them in the snapshot', async () => {
+  /** A Spec Line as the earlier releases left it: no route writes them any more. */
+  const specLine = (vehicleId: string, id: string, label: string, group = 'fluids') =>
+    db.prepare('INSERT INTO spec_lines (id, vehicle_id, label, value, spec_group, sort) VALUES (?, ?, ?, ?, ?, 0)').run(id, vehicleId, label, '10W-40, 3.2 L', group);
+
+  it('lists the Spec Lines not moved to Notion, read-only: the routes that wrote them are gone', async () => {
     const bike = await createVehicle();
-    const line = (await (await call('POST', `/api/vehicles/${bike.id}/specs`, { label: 'Engine oil', value: '10W-40, 3.2 L', group: 'fluids' })).json()) as SpecLine;
-    expect(line).toMatchObject({ label: 'Engine oil', group: 'fluids', sort: 0 });
-    expect((await call('POST', `/api/vehicles/${bike.id}/specs`, { label: 'Engine oil', value: 'x', group: 'fluids' })).status).toBe(409);
-    expect((await call('POST', `/api/vehicles/${bike.id}/specs`, { label: 'Tyre', value: 'x', group: 'wheels' })).status).toBe(422);
-    await call('PUT', `/api/specs/${line.id}`, { label: 'Engine oil', value: '10W-40, 3.0 L', group: 'torque' });
-    expect((await snapshot()).specLines).toEqual([{ ...line, value: '10W-40, 3.0 L', group: 'torque', sort: 0 }]);
-    expect((await call('DELETE', `/api/specs/${line.id}`)).status).toBe(204);
-    expect((await snapshot()).specLines).toEqual([]);
+    specLine(bike.id, 'line-1', 'Engine oil');
+    specLine(bike.id, 'line-2', 'Drain plug', 'torque');
+    expect((await snapshot()).specLines.map((l) => l.id)).toEqual(['line-1', 'line-2']);
+    expect((await call('POST', `/api/vehicles/${bike.id}/specs`, { label: 'X', value: 'x', group: 'fluids' })).status).toBe(404);
+    expect((await call('PUT', '/api/specs/line-1', { label: 'X', value: 'x', group: 'fluids' })).status).toBe(404);
+    expect((await call('DELETE', '/api/specs/line-1')).status).toBe(404);
+    expect((await call('POST', `/api/vehicles/${bike.id}/add-standard-specs`, { lang: 'fr' })).status).toBe(404);
+    // A line moved to Notion leaves the snapshot; the row stays for tracing.
+    db.prepare("INSERT INTO spec_line_moves (spec_line_id, target, notion_id, created_page) VALUES ('line-1', 'item_spec', 'page-item-1', 1)").run();
+    expect((await snapshot()).specLines.map((l) => l.id)).toEqual(['line-2']);
+    expect(db.prepare('SELECT count(*) AS n FROM spec_lines').get()).toEqual({ n: 2 });
   });
 
-  it('adds the usual spec lines for the Build with empty values, once, whatever they were renamed to', async () => {
+  it('answers the Item Specs and Component Specs routes with 503 when Notion is not set up', async () => {
     const bike = await createVehicle();
-    const hand = (await (await call('POST', `/api/vehicles/${bike.id}/specs`, { label: 'huile moteur', value: '10W-40', group: 'fluids' })).json()) as SpecLine;
-    expect(await (await call('POST', `/api/vehicles/${bike.id}/add-standard-specs`, { lang: 'fr' })).json()).toMatchObject({ added: expect.any(Number) });
-    const lines = (await snapshot()).specLines.filter((l) => l.vehicleId === bike.id);
-    const labels = lines.map((l) => l.label);
-    expect(labels).toContain('Liquide de frein');
-    expect(labels).toContain('Chaîne');
-    expect(labels).not.toContain('Courroie de transmission finale');
-    expect(labels.filter((l) => l.toLowerCase() === 'huile moteur')).toHaveLength(1);
-    expect(lines.find((l) => l.id === hand.id)!.value).toBe('10W-40');
-    expect(lines.find((l) => l.label === 'Liquide de frein')).toMatchObject({ value: '', group: 'fluids', category: 'brakes' });
-    const renamed = lines.find((l) => l.label === 'Liquide de frein')!;
-    await call('PUT', `/api/specs/${renamed.id}`, { label: 'DOT 4', value: 'DOT 4', group: 'fluids', category: 'brakes' });
-    expect(await (await call('POST', `/api/vehicles/${bike.id}/add-standard-specs`, { lang: 'fr' })).json()).toEqual({ added: 0 });
-    expect((await snapshot()).specLines.filter((l) => l.vehicleId === bike.id)).toHaveLength(lines.length);
+    const item = { name: 'Huile moteur' };
+    const component = { label: 'Bouchon de vidange', value: '25' };
+    expect((await call('POST', `/api/notion/vehicles/${bike.id}/item-specs`, item)).status).toBe(503);
+    expect((await call('PUT', '/api/notion/item-specs/x', item)).status).toBe(503);
+    expect((await call('DELETE', '/api/notion/item-specs/x')).status).toBe(503);
+    expect((await call('POST', `/api/notion/vehicles/${bike.id}/component-specs`, component)).status).toBe(503);
+    expect((await call('PUT', '/api/notion/component-specs/x', component)).status).toBe(503);
+    expect((await call('DELETE', '/api/notion/component-specs/x')).status).toBe(503);
+    expect((await call('POST', '/api/notion/spec-migration?dryRun=1')).status).toBe(503);
+    const refused = await call('POST', `/api/notion/vehicles/${bike.id}/item-specs`, item);
+    expect(await refused.json()).toMatchObject({ code: 'notion_off' });
   });
 
   it('gives every new car and motorcycle a monthly tyre pressure check that replaces no part', async () => {
@@ -409,24 +413,6 @@ describe('spec lines and the plan templates', () => {
       expect(task, code).toBeDefined();
       expect(task).toMatchObject({ name: 'Check and adjust tyre pressure', action: 'adjust', category: 'chassis', intervalKm: null, intervalMonths: 1 });
     }
-  });
-
-  it('chooses the usual spec lines by the Build', async () => {
-    const car = (await (await call('POST', '/api/vehicles', { ...CAR, name: 'Diesel', fuel: 'diesel', distribution: 'belt', hasAc: true })).json()) as Vehicle;
-    await call('POST', `/api/vehicles/${car.id}/add-standard-specs`, { lang: 'en' });
-    const labels = (await snapshot()).specLines.filter((l) => l.vehicleId === car.id).map((l) => l.label);
-    expect(labels).toEqual(expect.arrayContaining(['Fuel filter', 'Timing belt kit', 'A/C refrigerant', 'Gearbox oil', 'Wheel nuts']));
-    expect(labels).not.toContain('Spark plugs');
-    expect(labels).not.toContain('Reduction gear oil');
-  });
-
-  it('files a spec line under a category, empty meaning other, and refuses an unknown one', async () => {
-    const bike = await createVehicle();
-    const line = (await (await call('POST', `/api/vehicles/${bike.id}/specs`, { label: 'Spark plug', value: 'NGK CR8E', group: 'parts', category: 'engine' })).json()) as SpecLine;
-    expect(line.category).toBe('engine');
-    await call('PUT', `/api/specs/${line.id}`, { label: 'Spark plug', value: 'NGK CR8E', group: 'parts' });
-    expect((await snapshot()).specLines[0]!.category).toBeNull();
-    expect((await call('POST', `/api/vehicles/${bike.id}/specs`, { label: 'X', value: 'x', group: 'parts', category: 'garden' })).status).toBe(422);
   });
 
   it('gives a new vehicle the templates of its build, each with an action and category, then leaves its plan alone', async () => {
@@ -562,7 +548,7 @@ describe('spec lines and the plan templates', () => {
     expect((await call('PUT', '/api/services/svc-00010', body)).status).toBe(200);
     expect((await call('PUT', '/api/services/svc-00010', body)).status).toBe(200);
     const parts = (await snapshot()).vehicleParts;
-    expect(parts).toEqual([{ id: 'part-0000001', vehicleId: bike.id, name: 'Mann HU 7008 z', partNumber: 'HU 7008 z', unit: 'piece', quantity: 1, price: 9.9, taskId: task.id, specLineId: null, notes: null }]);
+    expect(parts).toEqual([{ id: 'part-0000001', vehicleId: bike.id, name: 'Mann HU 7008 z', partNumber: 'HU 7008 z', unit: 'piece', quantity: 1, price: 9.9, taskId: task.id, itemSpecId: null, specLineId: null, notes: null }]);
     expect((await snapshot()).services[0]!.partsUsed[0]).toMatchObject({ partId: 'part-0000001', price: 9.9 });
     // The same part typed again in another Service links to the list instead of doubling it.
     await call('PUT', '/api/services/svc-00011', { ...body, id: 'svc-00011', partsUsed: [{ ...body.partsUsed[0], partId: 'part-0000002' }] });
@@ -603,24 +589,40 @@ describe('the Parts section', () => {
     expect(stored).not.toHaveProperty('toBuy');
   });
 
-  it('links an item to a Spec Line of its own Vehicle, keeps the link when editing without it, and empties it when the Spec Line goes', async () => {
+  /** An Item Spec as the Notion pull stores it (the table keeps its old name, vehicle_consumables). */
+  function itemSpec(vehicleId: string, id: string, name = 'Huile moteur', removed = 0) {
+    db.prepare("INSERT INTO vehicle_consumables (id, garage_id, vehicle_id, notion_id, name, notion_removed) VALUES (?, 'default', ?, ?, ?, ?)").run(id, vehicleId, `page-${id}`, name, removed);
+  }
+
+  it('links an item to an Item Spec of its own Vehicle, keeps the link when editing without it, and empties it when asked', async () => {
     const bike = await createVehicle();
     const other = await createVehicle('Other bike');
-    const spec = (await (await call('POST', `/api/vehicles/${bike.id}/specs`, { label: 'Engine oil', value: '10W-40, 3.2 L', group: 'fluids' })).json()) as SpecLine;
-    const foreign = (await (await call('POST', `/api/vehicles/${other.id}/specs`, { label: 'Engine oil', value: '5W-30', group: 'fluids' })).json()) as SpecLine;
-    expect((await call('POST', `/api/vehicles/${bike.id}/parts`, { name: 'x', unit: 'litre', quantity: 1, specLineId: foreign.id })).status).toBe(422);
-    expect((await call('POST', `/api/vehicles/${bike.id}/parts`, { name: 'x', unit: 'litre', quantity: 1, specLineId: 'nope' })).status).toBe(422);
-    const part = await createPart(bike.id, { specLineId: spec.id });
-    expect(part.specLineId).toBe(spec.id);
+    itemSpec(bike.id, 'spec-own');
+    itemSpec(other.id, 'spec-foreign');
+    itemSpec(bike.id, 'spec-hidden', 'Gone', 1);
+    const body = { name: 'x', unit: 'litre', quantity: 1 };
+    expect((await call('POST', `/api/vehicles/${bike.id}/parts`, { ...body, itemSpecId: 'spec-foreign' })).status).toBe(422);
+    expect((await call('POST', `/api/vehicles/${bike.id}/parts`, { ...body, itemSpecId: 'nope' })).status).toBe(422);
+    expect((await call('POST', `/api/vehicles/${bike.id}/parts`, { ...body, itemSpecId: 'spec-hidden' })).status).toBe(422);
+    const part = await createPart(bike.id, { itemSpecId: 'spec-own' });
+    expect(part.itemSpecId).toBe('spec-own');
     // Editing without the field keeps the link; null removes it.
     await call('PUT', `/api/parts/${part.id}`, { name: part.name, unit: 'litre', quantity: 5 });
-    expect((await snapshot()).vehicleParts[0]!.specLineId).toBe(spec.id);
-    expect((await call('DELETE', `/api/specs/${spec.id}`)).status).toBe(204);
-    expect((await snapshot()).vehicleParts[0]!.specLineId).toBeNull();
-    const again = (await (await call('POST', `/api/vehicles/${bike.id}/specs`, { label: 'Oil 2', value: '10W-40', group: 'fluids' })).json()) as SpecLine;
-    await call('PUT', `/api/parts/${part.id}`, { name: part.name, unit: 'litre', quantity: 5, specLineId: again.id });
-    await call('PUT', `/api/parts/${part.id}`, { name: part.name, unit: 'litre', quantity: 5, specLineId: null });
-    expect((await snapshot()).vehicleParts[0]!.specLineId).toBeNull();
+    expect((await snapshot()).vehicleParts[0]!.itemSpecId).toBe('spec-own');
+    await call('PUT', `/api/parts/${part.id}`, { name: part.name, unit: 'litre', quantity: 5, itemSpecId: null });
+    expect((await snapshot()).vehicleParts[0]!.itemSpecId).toBeNull();
+    // An old app's specLineId is stripped, never written.
+    await call('PUT', `/api/parts/${part.id}`, { name: part.name, unit: 'litre', quantity: 5, specLineId: 'line-1' });
+    expect(db.prepare('SELECT spec_line_id FROM vehicle_parts WHERE id = ?').get(part.id)).toEqual({ spec_line_id: null });
+  });
+
+  it('puts the Item Specs in the snapshot under itemSpecs, hiding the ones Notion no longer has', async () => {
+    const bike = await createVehicle();
+    itemSpec(bike.id, 'spec-a');
+    itemSpec(bike.id, 'spec-b', 'Gone', 1);
+    const s = (await snapshot()) as unknown as Record<string, any>;
+    expect(s.itemSpecs.map((x: { id: string }) => x.id)).toEqual(['spec-a']);
+    expect(s).not.toHaveProperty('vehicleConsumables');
   });
 
   it('no longer has purchase routes or the CSV: they answer 404', async () => {
@@ -1114,7 +1116,7 @@ describe('migrations', () => {
   it('adds an empty ref_purchases table and leaves the legacy purchases alone', () => {
     const path = join(dir, 'garage.sqlite');
     const latest = (openDatabase(':memory:').prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
-    const old = openDatabase(path, undefined, latest - 2);
+    const old = openDatabase(path, undefined, latest - 3);
     old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v1', 'default', 'motorcycle', 'Old bike')`);
     old.exec(`INSERT INTO vehicle_parts (id, vehicle_id, name, unit, quantity) VALUES ('p1', 'v1', 'Motul 7100 10W-40', 'litre', 5)`);
     old.exec(`INSERT INTO purchases (id, part_id, vehicle_id, date, quantity, total_paid) VALUES ('b1', 'p1', 'v1', '2026-01-10', 5, 40)`);
@@ -1278,7 +1280,7 @@ describe('Notion-owned tasks and the Notion snapshot', () => {
     expect(s.consumableTypes).toMatchObject([{ id: 'c1', family: 'fluid' }]);
     expect(s.products).toMatchObject([{ id: 'p1', typeId: 'c1', price: 9.5 }]);
     expect(s.tools.map((t) => [t.name, t.owned])).toEqual([['Clé', true]]);
-    expect(s.vehicleConsumables).toMatchObject([{ id: 'vc1', quantity: 3.2, compatibleProductIds: ['p1'], confirmation: 'to_confirm' }]);
+    expect(s.itemSpecs).toMatchObject([{ id: 'vc1', quantity: 3.2, compatibleProductIds: ['p1'], confirmation: 'to_confirm' }]);
     expect(s.componentSpecs).toMatchObject([{ id: 'vs1', value: '25', unit: 'N·m', confirmation: 'confirmed' }]);
     expect(s.notion).toBeNull();
   });
@@ -1396,7 +1398,7 @@ describe('Notion sync migration', () => {
     const dir = mkdtempSync(join(tmpdir(), 'garage-actions-'));
     try {
       const path = join(dir, 'garage.sqlite');
-      const old = openDatabase(path, undefined, latest - 3);
+      const old = openDatabase(path, undefined, latest - 4);
       old.exec(`INSERT INTO ref_tasks (id, garage_id, notion_id, name, action, applicable_if, default_km, category) VALUES ('r1', 'default', 'n1', 'Vidange', 'replace', '["Moto"]', 6000, 'engine')`);
       expect(() => old.exec(`INSERT INTO ref_tasks (id, garage_id, notion_id, name, action) VALUES ('r2', 'default', 'n2', 'Tension', 'adjust')`)).toThrow();
       old.close();
@@ -1424,7 +1426,8 @@ describe('the glossary rename migration', () => {
 
   const latest = () => (openDatabase(':memory:').prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
   const seed = (path: string, backupDir?: string) => {
-    const old = openDatabase(path, undefined, latest() - 1);
+    // The version just before the rename (the ADR 0009 migration came after it).
+    const old = openDatabase(path, undefined, latest() - 2);
     old.exec(`
       INSERT INTO vehicles (id, garage_id, kind, name, status) VALUES ('v1', 'default', 'car', 'Sold car', 'sold'), ('v2', 'default', 'car', 'Kept car', 'owned');
       INSERT INTO vehicle_consumables (id, garage_id, vehicle_id, notion_id, name, status) VALUES ('vc1', 'default', 'v1', 'n1', 'Huile', 'to_confirm');
@@ -1457,9 +1460,9 @@ describe('the glossary rename migration', () => {
     const backups = join(dir, 'backups');
     seed(path);
     openDatabase(path, backups).close();
-    const copy = readdirSync(backups).find((f) => f.startsWith(`garage-v${latest() - 1}-`) && f.endsWith('.sqlite'));
+    const copy = readdirSync(backups).find((f) => f.startsWith(`garage-v${latest() - 2}-`) && f.endsWith('.sqlite'));
     expect(copy).toBeDefined();
-    const saved = openDatabase(join(backups, copy!), undefined, latest() - 1);
+    const saved = openDatabase(join(backups, copy!), undefined, latest() - 2);
     expect(saved.prepare('SELECT status FROM vehicles WHERE id = ?').get('v1')).toEqual({ status: 'sold' });
     expect(saved.prepare('SELECT status FROM vehicle_specs').all()).toEqual([{ status: 'confirmed' }]);
     saved.close();
@@ -1476,8 +1479,57 @@ describe('the glossary rename migration', () => {
     expect(s.vehicles[0]).not.toHaveProperty('status');
     expect(s.componentSpecs).toMatchObject([{ id: 'vs1', confirmation: 'confirmed' }]);
     expect(s).not.toHaveProperty('vehicleSpecs');
-    expect(s.vehicleConsumables[0]).toHaveProperty('confirmation', 'to_confirm');
-    expect(s.vehicleConsumables[0]).not.toHaveProperty('status');
+    expect(s.itemSpecs[0]).toHaveProperty('confirmation', 'to_confirm');
+    expect(s.itemSpecs[0]).not.toHaveProperty('status');
     expect(s.componentSpecs[0]).not.toHaveProperty('status');
+  });
+});
+
+describe('the Item Spec migration (ADR 0009)', () => {
+  it('adds the Item Spec link and the move record, keeping the parts and Spec Lines already there', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'garage-itemspec-'));
+    try {
+      const path = join(dir, 'garage.sqlite');
+      const latest = (openDatabase(':memory:').prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
+      const old = openDatabase(path, undefined, latest - 1);
+      old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v1', 'default', 'motorcycle', 'Old bike')`);
+      old.exec(`INSERT INTO spec_lines (id, vehicle_id, label, value, spec_group, sort) VALUES ('s1', 'v1', 'Engine oil', '10W-40', 'fluids', 0)`);
+      old.exec(`INSERT INTO vehicle_parts (id, vehicle_id, name, unit, quantity, spec_line_id) VALUES ('p1', 'v1', 'Motul 7100 10W-40', 'litre', 5, 's1')`);
+      expect(() => old.prepare('SELECT item_spec_id FROM vehicle_parts').all()).toThrow();
+      expect(() => old.prepare('SELECT * FROM spec_line_moves').all()).toThrow();
+      old.close();
+
+      const migrated = openDatabase(path);
+      expect(migrated.prepare('SELECT id, spec_line_id, item_spec_id FROM vehicle_parts').all()).toEqual([{ id: 'p1', spec_line_id: 's1', item_spec_id: null }]);
+      expect(migrated.prepare('SELECT id, label FROM spec_lines').all()).toEqual([{ id: 's1', label: 'Engine oil' }]);
+      expect(migrated.prepare('SELECT count(*) AS n FROM spec_line_moves').get()).toEqual({ n: 0 });
+      migrated.exec(`INSERT INTO spec_line_moves (spec_line_id, target, notion_id, created_page) VALUES ('s1', 'item_spec', 'page-item-1', 1)`);
+      expect(() => migrated.exec(`INSERT INTO spec_line_moves (spec_line_id, target, notion_id, created_page) VALUES ('s1', 'item_spec', 'page-item-2', 1)`)).toThrow();
+      expect(() => migrated.exec(`INSERT INTO spec_line_moves (spec_line_id, target, notion_id, created_page) VALUES ('s1', 'wheel', 'x', 0)`)).toThrow();
+      migrated.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('still accepts a Document upload from any client: the desktop-only rule is in the screens only', async () => {
+    const uploads = mkdtempSync(join(tmpdir(), 'garage-uploads-'));
+    try {
+      app = createApp(db, undefined, { uploadsDir: uploads });
+      const bike = await createVehicle();
+      const form = new FormData();
+      form.set('file', new File(['%PDF-1.4 test'], 'receipt.pdf', { type: 'application/pdf' }));
+      form.set('ownerKind', 'vehicle');
+      form.set('ownerId', bike.id);
+      form.set('type', 'invoice');
+      expect((await app.request('/api/documents', { method: 'POST', body: form })).status).toBe(201);
+    } finally {
+      rmSync(uploads, { recursive: true, force: true });
+    }
+  });
+
+  it('sends the API version 3 header', async () => {
+    expect(API_VERSION).toBe(3);
+    expect((await call('GET', '/api/snapshot')).headers.get('x-api-version')).toBe('3');
   });
 });

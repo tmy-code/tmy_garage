@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import type { PartUnit } from '../../shared/schemas.ts';
 import type { Snapshot, Vehicle, VehiclePart } from '../../shared/types.ts';
-import { confirmDelete, Field, FormError, Layout, NeedsConnection } from '../components.tsx';
+import { itemSpecText } from '../../shared/workshop.ts';
+import { confirmDelete, DesktopOnlyNote, Field, FormError, Layout, NeedsConnection } from '../components.tsx';
 import { formatMoney, formatQuantity, matchesQuery, parseNumber, taskName } from '../format.ts';
 import { useT } from '../i18n.ts';
+import { isDesktop } from '../native.ts';
 import { navigate } from '../router.ts';
 import { online } from '../store.ts';
 import { Submit, useSubmit } from './SetupForms.tsx';
@@ -11,9 +13,11 @@ import { Submit, useSubmit } from './SetupForms.tsx';
 // The Parts section: every Vehicle's parts and fluids in one place. Desk work, so it needs a connection; it can be read
 // offline from the phone's copy. What was bought is tracked in Notion (ADR 0008).
 
-/** "Engine oil: 10W-40, 3.2 L" (just the label while its value is still to fill in). */
-function specText(snapshot: Snapshot, specLineId: string | null): string | null {
-  const line = snapshot.specLines.find((l) => l.id === specLineId);
+/** "Engine oil: 10W-40, 3.2 L" from the item's Item Spec; for an item not re-pointed yet, from its old Spec Line while that is still listed. */
+function specText(snapshot: Snapshot, part: VehiclePart): string | null {
+  const spec = snapshot.itemSpecs.find((s) => s.id === part.itemSpecId);
+  if (spec) return itemSpecText(spec);
+  const line = snapshot.specLines.find((l) => l.id === part.specLineId);
   return line ? (line.value ? `${line.label}: ${line.value}` : line.label) : null;
 }
 
@@ -29,9 +33,10 @@ export function PartsPage({ snapshot, vehicleId }: { snapshot: Snapshot; vehicle
   const addPath = vehicleFilter ? `#/parts/new/${vehicleFilter}` : '#/parts/new';
 
   return (
-    <Layout title={t.parts.title} back={vehicleId ? `/vehicles/${vehicleId}` : undefined} titleAction={<a className="button button-small" href={addPath}>{t.parts.add}</a>}>
+    <Layout title={t.parts.title} back={vehicleId ? `/vehicles/${vehicleId}` : undefined} titleAction={isDesktop ? <a className="button button-small" href={addPath}>{t.parts.add}</a> : undefined}>
       <NeedsConnection />
       <p className="muted">{t.parts.intro}</p>
+      <DesktopOnlyNote />
       <div className="row filters">
         <Field label={t.parts.vehicle}>
           <select value={vehicleFilter} onChange={(e) => setVehicleFilter(e.target.value)}>
@@ -49,9 +54,10 @@ export function PartsPage({ snapshot, vehicleId }: { snapshot: Snapshot; vehicle
       ) : null}
       {parts.length === 0 ? <p className="empty">{snapshot.vehicleParts.length === 0 ? t.parts.empty : t.parts.emptyFiltered}</p> : null}
       <ul className="list list-grid list-even">
-        {parts.map((part) => (
-          <li key={part.id}>
-            <a className="history-row" href={`#/parts/part/${part.id}`}>
+        {parts.map((part) => {
+          const spec = specText(snapshot, part);
+          const content = (
+            <>
               <strong>{part.name}</strong>
               {part.partNumber ? <span>{part.partNumber}</span> : null}
               {vehicleFilter === '' ? <span className="muted">{vehicles.get(part.vehicleId)?.name}</span> : null}
@@ -59,10 +65,21 @@ export function PartsPage({ snapshot, vehicleId }: { snapshot: Snapshot; vehicle
                 {t.workshop.usualQuantity}: {formatQuantity(part.quantity, part.unit, t)}
                 {part.price !== null ? <> · <span className="nowrap">{formatMoney(part.price, t)} / {t.parts.unitSingular[part.unit]}</span></> : null}
               </span>
-              {specText(snapshot, part.specLineId) ? <span className="muted">{t.parts.specShown(specText(snapshot, part.specLineId)!)}</span> : null}
-            </a>
-          </li>
-        ))}
+              {spec ? <span className="muted">{t.parts.specShown(spec)}</span> : null}
+            </>
+          );
+          return (
+            <li key={part.id}>
+              {isDesktop ? (
+                <a className="history-row" href={`#/parts/part/${part.id}`}>
+                  {content}
+                </a>
+              ) : (
+                <div className="history-row">{content}</div>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </Layout>
   );
@@ -79,11 +96,11 @@ export function VehiclePartForm({ snapshot, existing, vehicleId }: { snapshot: S
   const [quantity, setQuantity] = useState(String(existing?.quantity ?? 1));
   const [price, setPrice] = useState(existing?.price != null ? String(existing.price) : '');
   const [taskId, setTaskId] = useState(existing?.taskId ?? '');
-  const [specLineId, setSpecLineId] = useState(existing?.specLineId ?? '');
+  const [itemSpecId, setItemSpecId] = useState(existing?.itemSpecId ?? '');
   const [notes, setNotes] = useState(existing?.notes ?? '');
   const { error, setError, busy, disabled, run } = useSubmit();
   const tasks = snapshot.tasks.filter((task) => task.vehicleId === vehicle);
-  const specLines = snapshot.specLines.filter((l) => l.vehicleId === vehicle).sort((a, b) => a.label.localeCompare(b.label));
+  const itemSpecs = snapshot.itemSpecs.filter((s) => s.vehicleId === vehicle).sort((a, b) => a.name.localeCompare(b.name));
   const owner: Vehicle | undefined = snapshot.vehicles.find((v) => v.id === vehicle);
 
   function submit(event: FormEvent) {
@@ -94,7 +111,7 @@ export function VehiclePartForm({ snapshot, existing, vehicleId }: { snapshot: S
       setError(t.workshop.partError);
       return;
     }
-    const body = { name, partNumber, unit, quantity: qty, price: unitPrice, taskId: taskId || null, specLineId: specLineId || null, notes };
+    const body = { name, partNumber, unit, quantity: qty, price: unitPrice, taskId: taskId || null, itemSpecId: itemSpecId || null, notes };
     void run(async () => {
       if (existing) {
         await online('PUT', `/api/parts/${existing.id}`, body);
@@ -125,7 +142,7 @@ export function VehiclePartForm({ snapshot, existing, vehicleId }: { snapshot: S
             onChange={(e) => {
               setVehicle(e.target.value);
               setTaskId('');
-              setSpecLineId('');
+              setItemSpecId('');
             }}
           >
             {(existing ? snapshot.vehicles : owned).map((v) => (
@@ -166,11 +183,11 @@ export function VehiclePartForm({ snapshot, existing, vehicleId }: { snapshot: S
           </select>
         </Field>
         <Field label={t.parts.forSpec} hint={t.parts.forSpecHint}>
-          <select value={specLineId} onChange={(e) => setSpecLineId(e.target.value)}>
+          <select value={itemSpecId} onChange={(e) => setItemSpecId(e.target.value)}>
             <option value="">{t.parts.noSpec}</option>
-            {specLines.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.value ? `${l.label}: ${l.value}` : l.label}
+            {itemSpecs.map((s) => (
+              <option key={s.id} value={s.id}>
+                {itemSpecText(s)}
               </option>
             ))}
           </select>

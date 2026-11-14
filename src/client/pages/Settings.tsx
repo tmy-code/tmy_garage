@@ -5,7 +5,7 @@ import { formatDateTime } from '../format.ts';
 import { useT } from '../i18n.ts';
 import { Icon } from '../icons.tsx';
 import { showToast } from '../feedback.ts';
-import { isAndroidApp } from '../native.ts';
+import { isAndroidApp, isDesktop } from '../native.ts';
 import { online, useStore } from '../store.ts';
 import { ServerAddress } from './Server.tsx';
 
@@ -117,27 +117,31 @@ export function SettingsPage() {
     <Layout title={t.settings.title} back="/">
       <NeedsConnection />
       <NotionCard />
-      <section>
-        <h2 className="with-icon">
-          <Icon name="part" /> {t.settings.partsTitle}
-        </h2>
-        <ul className="list">
-          <li>
-            <a href="#/settings/parts" className="history-row">
-              <span>{t.settings.partsLink}</span>
-              <span className="muted">{t.settings.partsLinkHint}</span>
-            </a>
-          </li>
-          {showTools ? (
-            <li>
-              <a href="#/tools" className="history-row">
-                <span>{t.notion.toolsLink}</span>
-                <span className="muted">{t.notion.toolsLinkHint}</span>
-              </a>
-            </li>
-          ) : null}
-        </ul>
-      </section>
+      {isDesktop || showTools ? (
+        <section>
+          <h2 className="with-icon">
+            <Icon name="part" /> {t.settings.partsTitle}
+          </h2>
+          <ul className="list">
+            {isDesktop ? (
+              <li>
+                <a href="#/settings/parts" className="history-row">
+                  <span>{t.settings.partsLink}</span>
+                  <span className="muted">{t.settings.partsLinkHint}</span>
+                </a>
+              </li>
+            ) : null}
+            {showTools ? (
+              <li>
+                <a href="#/tools" className="history-row">
+                  <span>{t.notion.toolsLink}</span>
+                  <span className="muted">{t.notion.toolsLinkHint}</span>
+                </a>
+              </li>
+            ) : null}
+          </ul>
+        </section>
+      ) : null}
       {isAndroidApp ? (
         <section>
           <h2>{t.server.title}</h2>

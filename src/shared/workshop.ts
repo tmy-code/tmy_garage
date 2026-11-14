@@ -1,6 +1,6 @@
 import { PART_CATEGORIES, type PartCategory } from './catalogue.ts';
 import type { DueInfo } from './due.ts';
-import type { ComponentSpec, Confirmation, MaintenanceTask, Ownership, Service, Snapshot } from './types.ts';
+import type { ComponentSpec, Confirmation, ItemSpec, MaintenanceTask, Ownership, Service, Snapshot } from './types.ts';
 
 /** A Maintenance Task's category: the one the owner picked, else 'other'. */
 export function taskCategory(task: MaintenanceTask): PartCategory {
@@ -38,12 +38,13 @@ export function refKey(s: string | null | undefined): string {
 /**
  * The mapping from the old names stays while phones may hold old snapshots (or an old server may answer): the
  * Component Specs were `vehicleSpecs`, and `status` was the `ownership` of a Vehicle and the `confirmation` of a
- * Vehicle Consumable or Component Spec.
+ * Item Spec (once the Vehicle Consumable) or Component Spec, and the Item Specs were `vehicleConsumables`.
  */
 type LegacyStatus = { status?: unknown };
-type LegacySnapshot = Omit<Snapshot, 'vehicles' | 'vehicleConsumables' | 'componentSpecs'> & {
+type LegacySnapshot = Omit<Snapshot, 'vehicles' | 'itemSpecs' | 'componentSpecs'> & {
   vehicles: (Omit<Snapshot['vehicles'][number], 'ownership'> & { ownership?: Ownership } & LegacyStatus)[];
-  vehicleConsumables?: (Omit<Snapshot['vehicleConsumables'][number], 'confirmation'> & { confirmation?: Confirmation } & LegacyStatus)[];
+  vehicleConsumables?: (Omit<ItemSpec, 'confirmation'> & { confirmation?: Confirmation } & LegacyStatus)[];
+  itemSpecs?: (Omit<ItemSpec, 'confirmation'> & { confirmation?: Confirmation } & LegacyStatus)[];
   componentSpecs?: (Omit<ComponentSpec, 'confirmation'> & { confirmation?: Confirmation } & LegacyStatus)[];
   vehicleSpecs?: (Omit<ComponentSpec, 'confirmation'> & { confirmation?: Confirmation } & LegacyStatus)[];
 };
@@ -53,7 +54,7 @@ type LegacySnapshot = Omit<Snapshot, 'vehicles' | 'vehicleConsumables' | 'compon
  * before workshop data existed; screens can then rely on every field being there.
  */
 export function normalizeSnapshot(input: Snapshot): Snapshot {
-  const { vehicleSpecs: legacySpecs, ...snapshot } = input as unknown as LegacySnapshot;
+  const { vehicleSpecs: legacySpecs, vehicleConsumables: legacyItemSpecs, ...snapshot } = input as unknown as LegacySnapshot;
   return {
     ...snapshot,
     tasks: snapshot.tasks.map((t) => ({
@@ -71,7 +72,7 @@ export function normalizeSnapshot(input: Snapshot): Snapshot {
     consumableTypes: snapshot.consumableTypes ?? [],
     products: snapshot.products ?? [],
     tools: snapshot.tools ?? [],
-    vehicleConsumables: (snapshot.vehicleConsumables ?? []).map(({ status, ...c }) => ({
+    itemSpecs: (snapshot.itemSpecs ?? legacyItemSpecs ?? []).map(({ status, ...c }) => ({
       ...c,
       compatibleProductIds: c.compatibleProductIds ?? [],
       specification: c.specification ?? null,
@@ -83,7 +84,7 @@ export function normalizeSnapshot(input: Snapshot): Snapshot {
     services: snapshot.services.map(normalizeService),
     catalogue: (snapshot.catalogue ?? []).map((e) => ({ ...e, overrides: e.overrides ?? null, own: e.own ? { ...e.own, action: e.own.action ?? 'replace' } : null })),
     specLines: (snapshot.specLines ?? []).map((l) => ({ ...l, oem: l.oem ?? null, category: l.category ?? null })),
-    vehicleParts: (snapshot.vehicleParts ?? []).map((p) => ({ ...p, partNumber: p.partNumber ?? null, price: p.price ?? null, taskId: p.taskId ?? null, specLineId: p.specLineId ?? null, notes: p.notes ?? null })),
+    vehicleParts: (snapshot.vehicleParts ?? []).map((p) => ({ ...p, partNumber: p.partNumber ?? null, price: p.price ?? null, taskId: p.taskId ?? null, itemSpecId: p.itemSpecId ?? null, specLineId: p.specLineId ?? null, notes: p.notes ?? null })),
     vehicles: snapshot.vehicles.map(({ status, ...v }) => ({
       ...v,
       ownership: v.ownership ?? (status as Ownership | undefined) ?? 'owned',
@@ -111,6 +112,12 @@ export function normalizeSnapshot(input: Snapshot): Snapshot {
     fillups: (snapshot.fillups ?? []).map((f) => ({ ...f, odometer: f.odometer ?? null, notes: f.notes ?? null, fullTank: f.fullTank ?? true })),
     documents: snapshot.documents ?? [],
   };
+}
+
+/** "Huile moteur: 10W-40, 3,2 L" (the name alone when nothing else is known). */
+export function itemSpecText(spec: Pick<ItemSpec, 'name' | 'specification' | 'capacity'>): string {
+  const detail = [spec.specification, spec.capacity].filter((s): s is string => !!s && s.trim() !== '').join(', ');
+  return detail ? `${spec.name}: ${detail}` : spec.name;
 }
 
 export function normalizeService(service: Service): Service {

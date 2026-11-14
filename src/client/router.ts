@@ -46,6 +46,23 @@ export function useRoute(): string[] {
   return path.split('/').filter(Boolean);
 }
 
+/**
+ * Whether a screen only changes the garage's setup (vehicles, tasks, items, templates): on the phone it shows a note
+ * instead (ADR 0009). Services, odometer readings and fill-ups, new or edited, and every read page stay open.
+ */
+export function desktopOnlyRoute(route: string[]): boolean {
+  const [section, id, sub, subId] = route;
+  if (section === 'vehicles') {
+    if (id === 'new' || id === 'manage') return true;
+    if (sub === 'edit' || sub === 'sell' || sub === 'copy-tasks' || sub === 'setup') return true;
+    return sub === 'tasks' && subId === 'new';
+  }
+  if (section === 'tasks') return sub === 'edit';
+  if (section === 'parts') return id === 'new' || id === 'part';
+  if (section === 'settings') return id === 'parts';
+  return false;
+}
+
 export function navigate(path: string, { replace = false } = {}): void {
   if (replace) window.location.replace(`#${path}`);
   else window.location.hash = path;

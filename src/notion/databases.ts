@@ -1,5 +1,5 @@
 // The Notion databases the app manages (Véhicules, plus the journal: columns, and how a row becomes Notion property values),
-// and the read-only descriptors of the nine databases the owner makes by hand (ADR 0007, 0008).
+// and the descriptors of the nine databases the owner makes by hand (ADR 0007, 0008): read only, except Plans and the two spec databases (ADR 0009).
 // Columns marked `owner` are the owner's (Deals, filing reference, equipment): created if missing, never written.
 import type { VehicleRow } from './copy.ts';
 import {
@@ -92,16 +92,20 @@ export interface ReferenceColumn {
   types: string[];
 }
 
-export type ReferenceKey = 'tasks' | 'componentTypes' | 'consumableTypes' | 'products' | 'tools' | 'plans' | 'vehicleConsumables' | 'componentSpecs' | 'purchases';
+export type ReferenceKey = 'tasks' | 'componentTypes' | 'consumableTypes' | 'products' | 'tools' | 'plans' | 'itemSpecs' | 'componentSpecs' | 'purchases';
 
 /**
- * A database the owner makes and keeps by hand, matched by its title under the parent page. The app only reads it:
- * these descriptors are never passed to column creation, and its title column is never written. A missing required
- * column makes the database "incomplete" (nothing is removed because of it); a missing optional column is tolerated.
+ * A database the owner makes and keeps by hand, matched by its title under the parent page. The app reads it. It writes
+ * pages (title included) only in Plans and in the two spec databases (Item Specs, Component Specs; ADR 0009), and never
+ * creates, renames or retypes the columns of any of them: these descriptors are never passed to column creation.
+ * A missing required column makes the database "incomplete" (nothing is removed because of it); a missing optional
+ * column is tolerated.
  */
 export interface ReferenceDb {
   key: ReferenceKey;
   title: string;
+  /** Earlier titles still accepted during a rename. */
+  oldTitles?: string[];
   required: ReferenceColumn[];
   optional: ReferenceColumn[];
 }
@@ -146,8 +150,9 @@ export const REFERENCE_DBS: ReferenceDb[] = [
     optional: [col('Intervalle (km)', 'number'), col('Intervalle (mois)', 'number'), col('Dernier fait (km)', 'number'), col('Dernier fait (date)', 'date'), col('Notes', 'rich_text')],
   },
   {
-    key: 'vehicleConsumables',
-    title: 'Consommables par véhicule',
+    key: 'itemSpecs',
+    title: "Spécifications d'articles",
+    oldTitles: ['Consommables par véhicule'],
     required: [col('Désignation', 'title'), col('Véhicule', 'relation'), col('Type', 'relation')],
     optional: [
       col('Spécification', 'rich_text'),
@@ -161,10 +166,12 @@ export const REFERENCE_DBS: ReferenceDb[] = [
   },
   {
     key: 'componentSpecs',
-    title: 'Spécifications',
+    title: 'Spécifications de composants',
+    oldTitles: ['Spécifications'],
     required: [col('Élément', 'title'), col('Véhicule', 'relation'), col('Valeur', 'number', 'rich_text')],
     optional: [col('Composant', 'relation'), col('Catégorie', 'select'), col('Unité', 'select'), col('Source', 'rich_text'), col('Statut', 'select')],
-  },  {
+  },
+  {
     key: 'purchases',
     title: 'Achats',
     required: [col('Achat', 'title'), col('Date', 'date'), col('Article', 'relation')],

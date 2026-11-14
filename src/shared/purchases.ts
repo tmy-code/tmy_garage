@@ -2,7 +2,7 @@
 // Pure and read-only: no React, nothing from the client, so the server image can load it.
 import { requiredConsumables } from './applicability.ts';
 import type { IsoDate } from './dates.ts';
-import type { ConsumableType, NotionPurchase, Snapshot, VehicleConsumable } from './types.ts';
+import type { ConsumableType, NotionPurchase, Snapshot, ItemSpec } from './types.ts';
 
 export interface Bought {
   date: IsoDate;
@@ -19,7 +19,7 @@ export interface ConsumableBuyState {
 }
 
 /** The latest Achat of one of `lines` dated strictly after `after` (null = never done: any Achat counts); a tie on the date keeps the later one in the list. */
-export function latestPurchase(purchases: NotionPurchase[], lines: VehicleConsumable[], after: IsoDate | null): Bought | null {
+export function latestPurchase(purchases: NotionPurchase[], lines: ItemSpec[], after: IsoDate | null): Bought | null {
   const articles = new Set(lines.map((l) => l.notionId));
   let best: NotionPurchase | null = null;
   for (const p of purchases) {
@@ -37,7 +37,7 @@ export function latestPurchase(purchases: NotionPurchase[], lines: VehicleConsum
  * For several Tasks the strictest date applies: the latest of the non-null last-done dates (null only when none has one).
  */
 export function buyStates(snapshot: Snapshot, vehicleId: string, tasks: { taskId: string; lastDone: IsoDate | null }[]): ConsumableBuyState[] {
-  const merged = new Map<string, { type: ConsumableType; rows: VehicleConsumable[]; after: IsoDate | null }>();
+  const merged = new Map<string, { type: ConsumableType; rows: ItemSpec[]; after: IsoDate | null }>();
   for (const { taskId, lastDone } of tasks) {
     for (const need of requiredConsumables(snapshot, vehicleId, taskId)) {
       const entry = merged.get(need.type.id);

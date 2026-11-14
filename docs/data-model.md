@@ -9,7 +9,7 @@ Read the section you need: use the table of contents below, not the whole file.
 | Section | Covers |
 | --- | --- |
 | [Overview](#overview) | The five parts, storage, conventions |
-| [1. Vehicle Profile](#1-vehicle-profile) | `garages`, `vehicles`, `spec_lines` |
+| [1. Vehicle Profile](#1-vehicle-profile) | `garages`, `vehicles`, `spec_lines` (legacy), `spec_line_moves` |
 | [2. Maintenance Plan](#2-maintenance-plan) | `maintenance_tasks`, templates, `catalogue_parts` |
 | [3. Service History Log](#3-service-history-log) | `services`, `service_tasks`, `service_items`, `vehicle_parts`, `purchases` (legacy), `documents` |
 | [4. Mileage Log and fuel](#4-mileage-log-and-fuel) | `odometer_readings`, `fuel_fillups` |
@@ -21,7 +21,7 @@ Read the section you need: use the table of contents below, not the whole file.
 
 Five parts:
 
-1. **Vehicle Profile**: the Vehicle (`vehicles`) and its factory specs (`spec_lines`).
+1. **Vehicle Profile**: the Vehicle (`vehicles`) and its specs: Item Specs and Component Specs, kept in Notion (`vehicle_consumables`, `component_specs`; see Notion referentials). The old Spec Lines (`spec_lines`) are frozen, read-only legacy (ADR 0009).
 2. **Maintenance Plan**: the Vehicle's own Tasks (`maintenance_tasks`). A new Vehicle starts from the Plan Templates that fit its Build; after that the plan is the owner's.
 3. **Service History Log**: Services (`services`) with Tasks done (`service_tasks`), components used (`service_items`, picked from the Vehicle's parts list `vehicle_parts`) and a receipt (`documents`).
 4. **Mileage Log**: dated odometer values (`odometer_readings`, plus the odometer of each Service and Fill-up). Fill-ups (`fuel_fillups`) are the fuel log.
@@ -30,7 +30,7 @@ Five parts:
 ```mermaid
 flowchart TD
   Garage --> Vehicle[1. Vehicle Profile]
-  Vehicle --> Spec[Spec Line]
+  Vehicle --> Spec[Item Spec / Component Spec, in Notion]
   Vehicle --> Task[2. Maintenance Task]
   Vehicle --> Service[3. Service]
   Vehicle --> Reading[4. Odometer Reading]
@@ -69,7 +69,9 @@ The built-in Plan Templates live in code, so a release can improve them. The pho
 ```mermaid
 erDiagram
   garages ||--o{ vehicles : has
-  vehicles ||--o{ spec_lines : describes
+  vehicles ||--o{ vehicle_consumables : takes
+  vehicles ||--o{ component_specs : has
+  vehicles ||--o{ spec_lines : legacy
 ```
 
 ### `garages`
@@ -110,7 +112,9 @@ Build columns decide which Plan Templates a new Vehicle gets:
 
 A new Vehicle must give its whole Build; the server refuses impossible combinations (a hybrid with a manual gearbox). Older Vehicles may have gaps; an empty fuel counts as combustion.
 
-### `spec_lines`
+### `spec_lines` (frozen legacy)
+
+**Frozen since ADR 0009**: no route adds, edits or deletes a Spec Line any more, and the usual-lines list (`spec-templates.ts`) is gone. The one-off move to Notion (`POST /api/notion/spec-migration`, dry run first) copies each line into an Item Spec or Component Spec page and records it in `spec_line_moves`. The snapshot's `specLines` carries only the lines **not moved** (or that cannot be, such as those of a sold Vehicle with no Notion page); the Specs page shows them read-only under "Old specs". Nothing is deleted. The rest of this section describes what the lines were.
 
 Factory reference values for the workshop ("Engine oil: 10W-40, 3.2 L", "Drain plug: 30 Nm"). Tasks do not link to them; a Task names what it needs in its Notes. No dates, history or unit: the value is free text.
 
@@ -122,13 +126,24 @@ Factory reference values for the workshop ("Engine oil: 10W-40, 3.2 L", "Drain p
 | `oem` | Optional, ≤ 80 chars. Manufacturer reference, shown under the value. |
 | `spec_group` | Required. `fluids`, `parts`, `torque` or `other`. |
 | `category` | Same seven values as Tasks. Empty counts as `other`. |
-| `template_code` | The usual line it came from (`src/shared/spec-templates.ts`), empty for the owner's own. Unique per Vehicle, so adding the usual lines again never doubles one, whatever it was renamed to. |
+| `template_code` | The usual line it came from (a list since removed), empty for the owner's own. Unique per Vehicle, so adding the usual lines again never doubles one, whatever it was renamed to. |
 | `sort` | Required. Order within its group; a new line goes last; changing group moves it to the end of the new one. |
 
-- **Add the usual specs** (Specs page) gives the Vehicle the usual lines for its Build, values empty: fluids, parts, torque, a few others. Every Standard Part of the plan templates has one (a test keeps the lists in step). Applicable lines follow the Build; labels follow the app language. A line already there (same code or same label, which is then tagged) is left alone, so it is safe to run again. The list is code, not editable in Settings.
-- The Specs page groups by **category** (Task order), then **group**, then `sort`.
-- Add, edit and delete need a connection; lines travel in the offline snapshot for reading. A sold Vehicle keeps its lines. "Copy tasks from…" copies Tasks only.
+- **Add the usual specs** is gone (ADR 0009): the lines are not added, edited or deleted any more.
+- Lines not moved travel in the offline snapshot for reading. A sold Vehicle keeps its lines. "Copy tasks from…" copies Tasks only.
 - Lines migrated from the earlier Part Specs and Vehicle Specs got a category by matching label words; unmatched and every torque line show under Other.
+
+### `spec_line_moves`
+
+Which Spec Line went to which Notion page in the one-off move, so it never makes a page twice and can be traced back. Added by the ADR 0009 migration (additive only: the previous release still runs on this schema).
+
+| Column | Meaning |
+| --- | --- |
+| `spec_line_id` | Primary key. → `spec_lines`. One move per line. |
+| `target` | `item_spec` (fluids and parts) or `component_spec` (torque and other). |
+| `notion_id` | The Notion page the line went to (or was linked to). |
+| `created_page` | 1 when the move made the page, 0 when it linked to a page that was already there. |
+| `moved_at` | When. |
 
 ## 2. Maintenance Plan
 
@@ -187,7 +202,7 @@ erDiagram
   vehicle_parts |o--o{ service_items : picked_into
   maintenance_tasks |o--o{ vehicle_parts : bought_for
   vehicle_parts ||--o{ purchases : legacy_log
-  spec_lines |o--o{ vehicle_parts : item_for
+  vehicle_consumables |o--o{ vehicle_parts : item_for
   services ||--o{ documents : receipt
   purchases ||--o{ documents : legacy_receipt
 ```
@@ -226,7 +241,7 @@ Components used. Key: `service_id` + `sort`.
 
 ### `vehicle_parts`
 
-The Vehicle's **parts list**: what is actually bought ("Motul 7100 10W-40"), unlike a Spec Line, the factory reference. The Service form picks from it and fills description, part number, unit, usual quantity and price.
+The Vehicle's **parts list**: what is actually bought ("Motul 7100 10W-40"), unlike an Item Spec, the factory reference. The Service form picks from it and fills description, part number, unit, usual quantity and price.
 
 | Column | Meaning |
 | --- | --- |
@@ -236,7 +251,8 @@ The Vehicle's **parts list**: what is actually bought ("Motul 7100 10W-40"), unl
 | `unit`, `quantity` | Required. `piece`/`litre`; the usual quantity per Service. |
 | `price` | Per piece or litre. Changed by hand only; a Service never changes it. |
 | `task_id` | → `maintenance_tasks`, the Task it is usually bought for (its parts are listed first when ticked). Emptied if the Task is deleted; moves to the kept Task on merge. |
-| `spec_line_id` | → `spec_lines` of the same Vehicle (else 422), the factory line it is for; shown as "Spec: …", nothing copied or synced. Loose: emptied if the line is deleted. On edit, omitted keeps it; null removes it. |
+| `item_spec_id` | → `vehicle_consumables` (the **Item Spec**) of the same Vehicle that Notion still has (else 422, `That item spec is not on this vehicle`); shown as "Spec: …", nothing copied or synced. Loose, a plain column. On edit, omitted keeps it; null removes it. Re-pointed by the one-off move for the items that had a Spec Line. |
+| `spec_line_id` | **Legacy**, read-only: the Spec Line it was for, shown only while that line is not moved. Never written any more; an old app's `specLineId` is stripped. |
 | `to_buy` | Legacy column, no longer read or written since 2026-11-10 ([ADR 0008](adr/0008-shopping-list-and-purchase-log-move-to-notion.md)); kept so a rollback works; may be dropped later (`ALTER TABLE vehicle_parts DROP COLUMN to_buy`). New rows get the default 0. |
 | `notes` | Free text; links are tappable. |
 
@@ -260,6 +276,8 @@ The Vehicle's **parts list**: what is actually bought ("Motul 7100 10W-40"), unl
 A legacy Purchase's receipt is a Document with `owner_kind` `purchase`; the `documents` check still allows it, and a new one is refused (422).
 
 ### `documents`
+
+**Receipts are added and removed on the desktop only (ADR 0009); the phone shows them read-only. They never go to Notion.** The server still accepts an upload from any client: the rule is in the screens.
 
 Belongs to one owner (`owner_kind` + `owner_id`). Shown only for a Service and a Vehicle. Documents of removed features (insurance, inspections, legacy purchase receipts) stay stored, unshown. The server checks the owner exists and removes a Service's Documents, files included, with it.
 
@@ -312,7 +330,7 @@ Always calculated, so they can't drift from the history. Code in [`src/shared`](
 
 ## Notion referentials
 
-Owned by Notion ([ADR 0007](adr/0007-two-way-notion-sync.md)): the server pulls them from the owner's hand-made databases and the app only reads them (the phone gets them in the snapshot, read-only). Every table has `garage_id` (→ `garages`), `notion_id` (the Notion page; unique per garage, or per Vehicle for the two per-vehicle tables) and `notion_removed` (1 once the page left Notion: the row is hidden from the snapshot, never deleted, and shown again if the page returns). Relations between them hold the app's ids as a JSON list or a plain id, loose, without cascading keys.
+Owned by Notion ([ADR 0007](adr/0007-two-way-notion-sync.md)): the server pulls them from the owner's hand-made databases and the app only reads them (the phone gets them in the snapshot, read-only). Two tables are also **written from the page Notion returns after a desktop edit** ([ADR 0009](adr/0009-specs-in-both-places-phone-for-logging.md)): `vehicle_consumables` and `component_specs`. The edit goes to Notion first, under the sync's lock, and the local row is saved only from Notion's answer; nothing is applied locally first, and there is no offline edit. Every table has `garage_id` (→ `garages`), `notion_id` (the Notion page; unique per garage, or per Vehicle for the two per-vehicle tables) and `notion_removed` (1 once the page left Notion: the row is hidden from the snapshot, never deleted, and shown again if the page returns). Relations between them hold the app's ids as a JSON list or a plain id, loose, without cascading keys.
 
 | Table | Holds |
 | --- | --- |
@@ -321,9 +339,9 @@ Owned by Notion ([ADR 0007](adr/0007-two-way-notion-sync.md)): the server pulls 
 | `consumable_types` | `name`, `category`, `family` (`fluid`/`part`), `notes`. |
 | `products` | `type_id`, `name`, `brand`, `reference`, `supplier`, `price` (a default, not a purchase), `notes`. |
 | `tools` | `name`, `kind`, `size`, `owned`, `price`, `notes`. |
-| `vehicle_consumables` | Per Vehicle (`vehicle_id`): `name`, `type_id`, `specification`, `oem_ref`, `capacity`, `quantity`, `compatible_product_ids`, `chosen_product_id`, `confirmation` (`confirmed`/`to_confirm`/null). |
-| `component_specs` | The **Component Specs**, per Vehicle: `label`, `component_type_id`, `category`, `value` (number or text), `unit`, `source`, `confirmation` (`confirmed`/`to_confirm`/null). Separate from `spec_lines` (Spec Lines), which stay the app's own; neither overrides the other. A Notion page pointing at several Vehicles gives one row each. |
-| `ref_purchases` | The owner's **Achats** database, read-only ([ADR 0008](adr/0008-shopping-list-and-purchase-log-move-to-notion.md)): `date`, `article_notion_id` (the Notion page id of a "Consommables par véhicule" line, matched to `vehicle_consumables.notion_id` when read, so the pull order does not matter), `product_id` (→ `products`, loose), `quantity`, `price`, `shop`. Never invoice files or notes. Not per Vehicle. Rows that left Notion are hidden. |
+| `vehicle_consumables` | The **Item Specs** (the table keeps its old name so a rollback works), per Vehicle (`vehicle_id`): `name`, `type_id`, `specification`, `oem_ref`, `capacity`, `quantity`, `compatible_product_ids`, `chosen_product_id`, `confirmation` (`confirmed`/`to_confirm`/null). |
+| `component_specs` | The **Component Specs**, per Vehicle: `label`, `component_type_id`, `category`, `value` (number or text), `unit`, `source`, `confirmation` (`confirmed`/`to_confirm`/null). Not the old `spec_lines`, which are frozen legacy. A Notion page pointing at several Vehicles gives one row each. |
+| `ref_purchases` | The owner's **Achats** database, read-only ([ADR 0008](adr/0008-shopping-list-and-purchase-log-move-to-notion.md)): `date`, `article_notion_id` (the Notion page id of an Item Spec line, "Spécifications d'articles" (formerly "Consommables par véhicule"), matched to `vehicle_consumables.notion_id` when read, so the pull order does not matter), `product_id` (→ `products`, loose), `quantity`, `price`, `shop`. Never invoice files or notes. Not per Vehicle. Rows that left Notion are hidden. |
 | `notion_state` | One row per garage: `last_sync_at`, `last_error`, `warnings` (JSON list), `paused_tasks`. Shown in Settings. |
 
 `service_items` also has `consumable_type_id` and `product_id` (loose, set when a Service sends them), and `vehicle_parts` has `product_id` (loose).
@@ -356,7 +374,8 @@ Foreign keys block deletion while rows still need it, except below; the server a
 | Maintenance Task | Refused if a Service used it; otherwise goes. Refused too (409 `notion_owned`) when it follows the Notion catalogue: it is paused or unlinked by the sync instead. |
 | Notion referential row | Never deleted by the app: hidden (`notion_removed`) when its page leaves Notion. |
 | Service | Its Task links, components and Documents go too. |
-| Spec Line | Goes; items for it keep everything, lose the link. |
+| Item Spec or Component Spec | Goes to the Notion trash, or this Vehicle is detached when the page covers several; the local row is hidden (`notion_removed`). Written to Notion first. |
+| Spec Line | No longer deletable (frozen legacy). |
 | Vehicle Part | Goes (with any legacy purchase rows; their receipt files stay stored, unreachable); past components keep their copy, lose the link. |
 | Fill-up | Goes; nothing depends on it, consumption is recalculated. |
 | Owner's Plan Template | Goes; Vehicles keep their Tasks. |
@@ -366,11 +385,12 @@ Foreign keys block deletion while rows still need it, except below; the server a
 
 The phone keeps one `Snapshot` ([`types.ts`](../src/shared/types.ts)) to work with no signal ([ADR 0001](adr/0001-offline-service-logging-via-send-queue.md)).
 
-- It holds Vehicles (with their equipment), Tasks, Services, readings, Fill-ups, Spec Lines, parts lists and Template changes; Document details but not files. It also holds the Notion referentials (catalogue, types, products, tools, per-Vehicle consumables and Component Specs (`componentSpecs`), and the Achats as `notionPurchases`) and the last sync status, **read-only**: they need no send queue.
+- It holds Vehicles (with their equipment), Tasks, Services, readings, Fill-ups, the Spec Lines not moved to Notion, parts lists and Template changes; Document details but not files. It also holds the Notion referentials (catalogue, types, products, tools, per-Vehicle Item Specs (`itemSpecs`) and Component Specs (`componentSpecs`), and the Achats as `notionPurchases`) and the last sync status, **read-only**: they need no send queue.
 - It is shaped for screens, not tables (a Service carries `taskIds` and `partsUsed`).
 - Services, Odometer Readings and Fill-ups can be logged offline: queued on the phone, sent on reconnect. Everything else needs a connection.
 - `normalizeSnapshot` in [`workshop.ts`](../src/shared/workshop.ts) fills what an older saved snapshot lacks (e.g. no Fill-ups) and drops removed fields.
 - **Old names**: the Component Specs used to be `vehicleSpecs` and `vehicles.ownership`, `vehicleConsumables[].confirmation` and `componentSpecs[].confirmation` were all `status`. `normalizeSnapshot` maps the old names to the new ones, so a phone that saved a snapshot (or an old server answer) before the rename still loads. Keep that mapping while phones may hold old snapshots. `API_VERSION` went to 2 with the rename.
+- **Item Specs** (ADR 0009): `itemSpecs` was `vehicleConsumables`; `normalizeSnapshot` maps the old key. `vehicleParts[].itemSpecId` is new, `specLines` holds only the lines not moved to Notion, and `API_VERSION` went to 3.
 - The previous table and column names (`vehicle_specs`, `status` on `vehicles`, `vehicle_consumables` and the specs) live on only in backups written before the rename migration (`garage-v<N>-*.sqlite`).
 
 ## History: the five-parts rework

@@ -3,7 +3,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { messagesFor } from '../shared/messages.ts';
 import { todayIso } from '../shared/dates.ts';
-import { NotionApi } from '../notion/api.ts';
+import { NotionApi, NotionError } from '../notion/api.ts';
 import { fetchReference, pushAll, type Counts, type NotionClient } from '../notion/engine.ts';
 import { REFERENCE_DBS } from '../notion/databases.ts';
 import type { ReferencePull } from '../notion/reference.ts';
@@ -28,6 +28,11 @@ export interface NotionSyncService {
   /** Starts the timer: a first run about a minute after, then every `intervalMs` (30 minutes). */
   start(intervalMs?: number): void;
   stop(): void;
+  /**
+   * Runs `fn` while no sync can start (a desktop spec edit, the one-off move); throws an Error named 'NotionSyncBusy' if one
+   * runs. The token is stripped from errors; a NotionError keeps its status.
+   */
+  exclusive<T>(fn: (api: NotionClient, parentPageId: string) => Promise<T>): Promise<T>;
 }
 
 export interface NotionSyncOptions {
@@ -83,12 +88,32 @@ export function createNotionSync({ db, garageId, token, parentPageId, apiFactory
     );
   }
 
-  async function run({ dryRun = false }: { dryRun?: boolean } = {}): Promise<SyncOutcome> {
-    if (busy) {
-      const error = new Error('A Notion sync is already running');
-      error.name = 'NotionSyncBusy';
+  function busyError(): Error {
+    const error = new Error('A Notion sync is already running');
+    error.name = 'NotionSyncBusy';
+    return error;
+  }
+
+  async function exclusive<T>(fn: (api: NotionClient, parentPageId: string) => Promise<T>): Promise<T> {
+    if (busy) throw busyError();
+    busy = true;
+    try {
+      return await fn(apiFactory ? apiFactory(token) : new NotionApi(token), parentPageId);
+    } catch (error) {
+      if (error instanceof NotionError) throw new NotionError(error.status, safe(error));
+      if (error instanceof Error && error.name !== 'NotionSyncBusy' && error.message.includes(token) && token) {
+        const cleaned = new Error(safe(error));
+        cleaned.name = error.name;
+        throw cleaned;
+      }
       throw error;
+    } finally {
+      busy = false;
     }
+  }
+
+  async function run({ dryRun = false }: { dryRun?: boolean } = {}): Promise<SyncOutcome> {
+    if (busy) throw busyError();
     busy = true;
     try {
       const api = apiFactory ? apiFactory(token) : new NotionApi(token);
@@ -136,13 +161,17 @@ export function createNotionSync({ db, garageId, token, parentPageId, apiFactory
   function tick(): void {
     run().then(
       (outcome) => console.log(`Notion sync: ${outcome.applied?.warnings.length ?? 0} warning(s)`),
-      (error: unknown) => console.error(`Notion sync failed: ${safe(error)}`),
+      (error: unknown) =>
+        error instanceof Error && error.name === 'NotionSyncBusy'
+          ? console.log('Notion sync skipped: another Notion operation is running')
+          : console.error(`Notion sync failed: ${safe(error)}`),
     );
   }
 
   return {
     run,
     running: () => busy,
+    exclusive,
     start(intervalMs = SYNC_INTERVAL_MS) {
       first = setTimeout(tick, FIRST_RUN_DELAY_MS);
       timer = setInterval(tick, intervalMs);

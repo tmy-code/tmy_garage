@@ -10,7 +10,6 @@ import type { ZodType } from 'zod';
 import {
   catalogueChangeInput,
   copyTasksInput,
-  addStandardSpecsInput,
   vehiclePartInput,
   mergeTaskInput,
   documentInput,
@@ -23,7 +22,8 @@ import {
   serviceInput,
   taskInput,
   vehicleInput,
-  specLineInput,
+  itemSpecInput,
+  componentSpecInput,
 } from '../shared/schemas.ts';
 import type {
   ComponentType,
@@ -38,7 +38,7 @@ import type {
   NotionPurchase,
   RefTask,
   Tool,
-  VehicleConsumable,
+  ItemSpec,
   VehiclePart,
   ComponentSpec,
   Service,
@@ -48,11 +48,13 @@ import type {
 } from '../shared/types.ts';
 import { BUILT_IN_CATALOGUE, Catalogue, tidyConditions, type Build, type Conditions } from '../shared/catalogue.ts';
 import { API_VERSION, API_VERSION_HEADER } from '../shared/api-version.ts';
-import { starterSpecs } from '../shared/spec-templates.ts';
 import { buildOfRow, catalogueEntries } from './catalogue-rows.ts';
 import type { VehicleInput, VehicleKind } from '../shared/schemas.ts';
 import { DEFAULT_GARAGE_ID } from './db.ts';
 import type { NotionSyncService } from './notion-sync.ts';
+import { SpecEditError, createSpecEditor } from './spec-edits.ts';
+import { migrateSpecLines } from './spec-migration.ts';
+import { SpecWriteError } from '../notion/spec-pages.ts';
 
 type ErrorStatus = 400 | 404 | 409 | 413 | 415 | 422 | 502 | 503;
 
@@ -172,7 +174,7 @@ const toTool = (r: Row): Tool => ({
   notionId: r.notion_id,
 });
 
-const toVehicleConsumable = (r: Row): VehicleConsumable => ({
+const toItemSpec = (r: Row): ItemSpec => ({
   id: r.id,
   vehicleId: r.vehicle_id,
   name: r.name,
@@ -276,6 +278,7 @@ const toVehiclePart = (r: Row): VehiclePart => ({
   quantity: r.quantity,
   price: r.price,
   taskId: r.task_id,
+  itemSpecId: r.item_spec_id,
   specLineId: r.spec_line_id,
   notes: r.notes,
 });
@@ -377,7 +380,8 @@ function garageReader(db: DatabaseSync, garageId: string) {
       services,
       readings,
       fillups: ownedRows('fuel_fillups').map(toFillup),
-      specLines: ownedRows('spec_lines').map(toSpecLine),
+      // The Spec Lines not moved to Notion yet (or that cannot be): read-only, legacy.
+      specLines: ownedRows('spec_lines', 'x.id NOT IN (SELECT spec_line_id FROM spec_line_moves)').map(toSpecLine),
       vehicleParts: ownedRows('vehicle_parts').map(toVehiclePart),
       documents: (db.prepare("SELECT * FROM documents WHERE garage_id = ? AND owner_kind IN ('vehicle', 'service') ORDER BY created_at").all(garageId) as Row[]).map(toDocument),
       catalogue: catalogueEntries(db, garageId),
@@ -387,7 +391,7 @@ function garageReader(db: DatabaseSync, garageId: string) {
       consumableTypes: byGarage('consumable_types').map(toConsumableType),
       products: byGarage('products').map(toProduct),
       tools: byGarage('tools').map(toTool),
-      vehicleConsumables: ownedRows('vehicle_consumables', 'x.notion_removed = 0').map(toVehicleConsumable),
+      itemSpecs: ownedRows('vehicle_consumables', 'x.notion_removed = 0').map(toItemSpec),
       componentSpecs: ownedRows('component_specs', 'x.notion_removed = 0').map(toComponentSpec),
       notionPurchases: byGarage('ref_purchases').map(toNotionPurchase),
       notion: notionState ? toNotionStatus(notionState) : null,
@@ -850,84 +854,74 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     return c.body(null, 204);
   });
 
-  // --- Spec lines of the Vehicle Profile (desk work, online only) ---
+  // --- Item Specs and Component Specs (desktop work: written to Notion first, under the sync's lock; ADR 0009) ---
 
-  function saveSpecLine(run: () => void) {
+  const specEditor = notionSync ? createSpecEditor({ db, garageId, notionSync, toItemSpec, toComponentSpec }) : null;
+
+  /** The spec editor, or 503 when the Notion sync is not set up on this server. */
+  function specs() {
+    if (!specEditor) throw new HttpError(503, 'The Notion sync is not set up on this server', 'notion_off');
+    return specEditor;
+  }
+
+  /** Runs a spec operation, turning its errors into the API's. */
+  async function specCall<T>(run: () => Promise<T>): Promise<T> {
     try {
-      run();
+      return await run();
     } catch (error) {
-      if ((error as Error).message?.includes('UNIQUE')) throw new HttpError(409, 'This label is already listed for this vehicle');
+      if (error instanceof SpecEditError) throw new HttpError(error.status, error.message, error.code);
+      if (error instanceof SpecWriteError) throw new HttpError(error.status, error.message, error.code);
+      if (error instanceof Error && error.name === 'NotionSyncBusy') throw new HttpError(409, error.message, 'notion_busy');
       throw error;
     }
   }
 
-  app.post('/api/vehicles/:id/specs', async (c) => {
+  app.post('/api/notion/vehicles/:id/item-specs', async (c) => {
+    const editor = specs();
     const vehicleId = c.req.param('id');
     vehicleOrThrow(vehicleId);
-    const s = await parse(c, specLineInput);
-    const id = randomUUID();
-    const next = (db.prepare('SELECT coalesce(max(sort), -1) + 1 AS n FROM spec_lines WHERE vehicle_id = ? AND spec_group = ?').get(vehicleId, s.group) as Row).n;
-    saveSpecLine(() => db.prepare('INSERT INTO spec_lines (id, vehicle_id, label, value, oem, spec_group, category, sort) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, vehicleId, s.label, s.value, s.oem, s.group, s.category, next));
-    return c.json(toSpecLine(ownedRowOrThrow('spec_lines', id, 'Spec line')), 201);
+    const input = await parse(c, itemSpecInput);
+    return c.json(await specCall(() => editor.createItemSpec(vehicleId, input)), 201);
   });
 
-  app.put('/api/specs/:id', async (c) => {
-    const id = c.req.param('id');
-    const row = ownedRowOrThrow('spec_lines', id, 'Spec line');
-    const s = await parse(c, specLineInput);
-    saveSpecLine(() => {
-      if (s.group === row.spec_group) db.prepare('UPDATE spec_lines SET label = ?, value = ?, oem = ?, category = ? WHERE id = ?').run(s.label, s.value, s.oem, s.category, id);
-      else {
-        const next = (db.prepare('SELECT coalesce(max(sort), -1) + 1 AS n FROM spec_lines WHERE vehicle_id = ? AND spec_group = ?').get(row.vehicle_id, s.group) as Row).n;
-        db.prepare('UPDATE spec_lines SET label = ?, value = ?, oem = ?, spec_group = ?, category = ?, sort = ? WHERE id = ?').run(s.label, s.value, s.oem, s.group, s.category, next, id);
-      }
-    });
-    return c.json(toSpecLine(ownedRowOrThrow('spec_lines', id, 'Spec line')));
+  app.put('/api/notion/item-specs/:id', async (c) => {
+    const editor = specs();
+    const input = await parse(c, itemSpecInput);
+    return c.json(await specCall(() => editor.updateItemSpec(c.req.param('id'), input)));
   });
 
-  /**
-   * Gives a Vehicle the usual spec lines for its Build, each with its value still empty, in the owner's language. A
-   * line already there is left alone: one carrying the template's code, or an untagged one labelled like it (which is
-   * then tagged), so running this again never doubles a line.
-   */
-  app.post('/api/vehicles/:id/add-standard-specs', async (c) => {
-    const vehicleId = c.req.param('id');
-    const build = buildOfRow(vehicleOrThrow(vehicleId));
-    const { lang } = await parse(c, addStandardSpecsInput);
-    // The Notion specs and catalogue replace the usual lines once they exist.
-    if (notionCatalogueActive()) return c.json({ added: 0, skipped: 'notion_catalogue', message: 'The specs come from Notion now' });
-    const added = transaction(() => {
-      const lines = db.prepare('SELECT id, label, template_code FROM spec_lines WHERE vehicle_id = ?').all(vehicleId) as Row[];
-      const tagged = new Set(lines.map((l) => l.template_code).filter((code) => code !== null));
-      const untagged = lines.filter((l) => l.template_code === null);
-      const labels = new Set(lines.map((l) => looseName(l.label)));
-      const nextSort = db.prepare('SELECT coalesce(max(sort), -1) + 1 AS n FROM spec_lines WHERE vehicle_id = ? AND spec_group = ?');
-      const insert = db.prepare("INSERT INTO spec_lines (id, vehicle_id, label, value, spec_group, category, sort, template_code) VALUES (?, ?, ?, '', ?, ?, ?, ?)");
-      let count = 0;
-      for (const s of starterSpecs(build)) {
-        if (tagged.has(s.code)) continue;
-        const known = new Set([s.label, s.labelFr].map(looseName));
-        const same = untagged.find((l) => known.has(looseName(l.label)));
-        if (same) {
-          db.prepare('UPDATE spec_lines SET template_code = ? WHERE id = ?').run(s.code, same.id);
-          untagged.splice(untagged.indexOf(same), 1);
-          continue;
-        }
-        const label = lang === 'fr' ? s.labelFr : s.label;
-        if (labels.has(looseName(label))) continue;
-        insert.run(randomUUID(), vehicleId, label, s.group, s.category === 'other' ? null : s.category, (nextSort.get(vehicleId, s.group) as Row).n, s.code);
-        count++;
-      }
-      return count;
-    });
-    return c.json({ added }, 201);
-  });
-
-  app.delete('/api/specs/:id', (c) => {
-    const id = c.req.param('id');
-    ownedRowOrThrow('spec_lines', id, 'Spec line');
-    db.prepare('DELETE FROM spec_lines WHERE id = ?').run(id);
+  app.delete('/api/notion/item-specs/:id', async (c) => {
+    const editor = specs();
+    await specCall(() => editor.deleteItemSpec(c.req.param('id')));
     return c.body(null, 204);
+  });
+
+  app.post('/api/notion/vehicles/:id/component-specs', async (c) => {
+    const editor = specs();
+    const vehicleId = c.req.param('id');
+    vehicleOrThrow(vehicleId);
+    const input = await parse(c, componentSpecInput);
+    return c.json(await specCall(() => editor.createComponentSpec(vehicleId, input)), 201);
+  });
+
+  app.put('/api/notion/component-specs/:id', async (c) => {
+    const editor = specs();
+    const input = await parse(c, componentSpecInput);
+    return c.json(await specCall(() => editor.updateComponentSpec(c.req.param('id'), input)));
+  });
+
+  app.delete('/api/notion/component-specs/:id', async (c) => {
+    const editor = specs();
+    await specCall(() => editor.deleteComponentSpec(c.req.param('id')));
+    return c.body(null, 204);
+  });
+
+  /** The one-off move of the Spec Lines into Notion; `?dryRun=1` reads Notion only and reports the plan. */
+  app.post('/api/notion/spec-migration', async (c) => {
+    specs();
+    // A real run writes to the owner's Notion: it needs an explicit `?dryRun=0`. Anything else is a dry run.
+    const dryRun = c.req.query('dryRun') !== '0';
+    return c.json(await specCall(() => migrateSpecLines({ db, garageId, notionSync: notionSync!, dryRun })));
   });
 
   // --- The parts list of a Vehicle (desk work, online only; Services read it from the snapshot) ---
@@ -944,11 +938,11 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     if (!task || task.vehicle_id !== vehicleId) throw new HttpError(422, 'That task is not on this vehicle');
   }
 
-  /** The Spec Line an item is for must be one of the same Vehicle. */
-  function checkPartSpecLine(vehicleId: string, specLineId: string | null | undefined) {
-    if (specLineId === null || specLineId === undefined) return;
-    const line = db.prepare('SELECT vehicle_id FROM spec_lines WHERE id = ?').get(specLineId) as Row | undefined;
-    if (!line || line.vehicle_id !== vehicleId) throw new HttpError(422, 'That spec line is not on this vehicle');
+  /** The Item Spec an item is for must be a row of the same Vehicle that Notion still has. */
+  function checkPartItemSpec(vehicleId: string, itemSpecId: string | null | undefined) {
+    if (itemSpecId === null || itemSpecId === undefined) return;
+    const spec = db.prepare('SELECT vehicle_id FROM vehicle_consumables WHERE id = ? AND garage_id = ? AND notion_removed = 0').get(itemSpecId, garageId) as Row | undefined;
+    if (!spec || spec.vehicle_id !== vehicleId) throw new HttpError(422, 'That item spec is not on this vehicle');
   }
 
   app.post('/api/vehicles/:id/parts', async (c) => {
@@ -956,11 +950,11 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     vehicleOrThrow(vehicleId);
     const p = await parse(c, vehiclePartInput);
     checkPartTask(vehicleId, p.taskId);
-    checkPartSpecLine(vehicleId, p.specLineId);
+    checkPartItemSpec(vehicleId, p.itemSpecId);
     if (samePart(vehicleId, p.name, p.partNumber)) throw new HttpError(409, 'This part is already on the list');
     const id = randomUUID();
-    db.prepare('INSERT INTO vehicle_parts (id, vehicle_id, name, part_number, unit, quantity, price, task_id, spec_line_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
-      id, vehicleId, p.name, p.partNumber, p.unit, p.quantity, p.price, p.taskId, p.specLineId ?? null, p.notes,
+    db.prepare('INSERT INTO vehicle_parts (id, vehicle_id, name, part_number, unit, quantity, price, task_id, item_spec_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+      id, vehicleId, p.name, p.partNumber, p.unit, p.quantity, p.price, p.taskId, p.itemSpecId ?? null, p.notes,
     );
     return c.json(toVehiclePart(ownedRowOrThrow('vehicle_parts', id, 'Part')), 201);
   });
@@ -970,11 +964,11 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     const row = ownedRowOrThrow('vehicle_parts', id, 'Part');
     const p = await parse(c, vehiclePartInput);
     checkPartTask(row.vehicle_id, p.taskId);
-    checkPartSpecLine(row.vehicle_id, p.specLineId);
+    checkPartItemSpec(row.vehicle_id, p.itemSpecId);
     if (samePart(row.vehicle_id, p.name, p.partNumber, id)) throw new HttpError(409, 'This part is already on the list');
-    const specLineId = p.specLineId === undefined ? row.spec_line_id : p.specLineId;
-    db.prepare('UPDATE vehicle_parts SET name = ?, part_number = ?, unit = ?, quantity = ?, price = ?, task_id = ?, spec_line_id = ?, notes = ? WHERE id = ?').run(
-      p.name, p.partNumber, p.unit, p.quantity, p.price, p.taskId, specLineId, p.notes, id,
+    const itemSpecId = p.itemSpecId === undefined ? row.item_spec_id : p.itemSpecId;
+    db.prepare('UPDATE vehicle_parts SET name = ?, part_number = ?, unit = ?, quantity = ?, price = ?, task_id = ?, item_spec_id = ?, notes = ? WHERE id = ?').run(
+      p.name, p.partNumber, p.unit, p.quantity, p.price, p.taskId, itemSpecId, p.notes, id,
     );
     return c.json(toVehiclePart(ownedRowOrThrow('vehicle_parts', id, 'Part')));
   });

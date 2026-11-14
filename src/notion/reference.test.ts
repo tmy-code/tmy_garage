@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseReference, vehiclePageMap } from './reference.ts';
+import { parseReference, parseSpecPage, vehiclePageMap } from './reference.ts';
 
 // Fake Notion property values and pages: no real ids, nothing from a real workspace.
 const text = (s: string) => [{ plain_text: s }];
@@ -71,7 +71,7 @@ describe('parseReference: values', () => {
           page('s1', { Élément: title('Couple'), Véhicule: rel('page-bike'), Valeur: num(25.5) }),
           page('s2', { Élément: title('Taille'), Véhicule: rel('page-bike'), Valeur: rich('120/70 R17') }),
         ],
-        vehicleConsumables: [
+        itemSpecs: [
           page('k1', { Désignation: title('Huile'), Véhicule: rel('page-bike'), Type: rel('ct-1'), Quantité: num(3.2) }),
           page('k2', { Désignation: title('Liquide'), Véhicule: rel('page-bike'), Type: rel('ct-2'), Quantité: rich('0,5 L') }),
           page('k3', { Désignation: title('Graisse'), Véhicule: rel('page-bike'), Type: rel('ct-3'), Quantité: rich('au besoin') }),
@@ -80,8 +80,8 @@ describe('parseReference: values', () => {
       vehicleMap,
     );
     expect(pull.componentSpecs.rows.map((r) => r.value)).toEqual(['25.5', '120/70 R17']);
-    expect(pull.vehicleConsumables.rows.map((r) => r.quantity)).toEqual([3.2, 0.5, null]);
-    expect(pull.vehicleConsumables.warnings.join('\n')).toContain('"Quantité" is not a number');
+    expect(pull.itemSpecs.rows.map((r) => r.quantity)).toEqual([3.2, 0.5, null]);
+    expect(pull.itemSpecs.warnings.join('\n')).toContain('"Quantité" is not a number');
   });
 
   it('keeps relations as Notion page ids', () => {
@@ -269,5 +269,33 @@ describe('parseReference: Achats', () => {
     const pull = parseReference({}, vehicleMap);
     expect(pull.purchases.complete).toBe(false);
     expect(pull.purchases.warnings.join('\n')).toContain('not found');
+  });
+});
+
+describe('the spec databases under their new or old title', () => {
+  const itemPage = page('k1', { Désignation: title('Huile'), Véhicule: rel('page-bike', 'page-car'), Type: rel('ct-1'), Spécification: rich('10W-40'), Quantité: num(3.2), Statut: sel('Confirmé') });
+  const componentPage = page('s1', { Élément: title('Bouchon'), Véhicule: rel('page-bike'), Valeur: num(25), Unité: sel('N·m'), Statut: sel('À confirmer') });
+
+  it('names the title the database was found under in its warnings', () => {
+    const noName = page('s9', { Élément: title('X'), Véhicule: rel('page-bike'), Valeur: rich('1') });
+    const pull = parseReference({ componentSpecs: [{ id: 'bad', properties: { Élément: title('X'), Véhicule: rel('page-bike') } }, noName] }, vehicleMap, { componentSpecs: 'Spécifications' });
+    expect(pull.componentSpecs.complete).toBe(false);
+    expect(pull.componentSpecs.warnings.join('\n')).toContain('Spécifications: the required column "Valeur" is missing');
+  });
+
+  it('reads one page like the whole pull would, one row per known vehicle', () => {
+    const whole = parseReference({ itemSpecs: [itemPage], componentSpecs: [componentPage] }, vehicleMap);
+    expect(parseSpecPage('itemSpecs', itemPage, vehicleMap).rows).toEqual(whole.itemSpecs.rows);
+    expect(parseSpecPage('componentSpecs', componentPage, vehicleMap).rows).toEqual(whole.componentSpecs.rows);
+    expect(whole.itemSpecs.rows.map((r) => r.vehicleAppId)).toEqual(['bike', 'car']);
+  });
+
+  it('gives no row, with the reason, for a page whose required column is missing or whose vehicle is unknown', () => {
+    const noValue = parseSpecPage('componentSpecs', page('s2', { Élément: title('X'), Véhicule: rel('page-bike') }), vehicleMap);
+    expect(noValue.rows).toEqual([]);
+    expect(noValue.warnings.join('\n')).toContain('"Valeur"');
+    const unknown = parseSpecPage('itemSpecs', page('k2', { ...itemPage.properties, Véhicule: rel('page-gone') }), vehicleMap);
+    expect(unknown.rows).toEqual([]);
+    expect(unknown.warnings.join('\n')).toContain('not in the app');
   });
 });

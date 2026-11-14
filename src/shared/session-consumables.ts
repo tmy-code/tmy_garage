@@ -2,7 +2,7 @@
 // required consumable type, and what picking one fills in. No React, nothing from the client: the server image can load it.
 import { requiredConsumables, torqueSpecs, type RequiredConsumable } from './applicability.ts';
 import type { PartUnit } from './schemas.ts';
-import type { ComponentType, ConsumableType, Product, Snapshot, VehicleConsumable, ComponentSpec } from './types.ts';
+import type { ComponentType, ConsumableType, Product, Snapshot, ItemSpec, ComponentSpec } from './types.ts';
 
 export type ProductGroup = 'chosen' | 'compatible' | 'other';
 
@@ -27,7 +27,7 @@ export function productChoices(need: RequiredConsumable): ProductChoice[] {
 }
 
 /** The quantity a vehicle takes of a type, when it is a plain number: the row's quantity, else a capacity written as a bare number. */
-export function usualQuantity(rows: VehicleConsumable[]): number | null {
+export function usualQuantity(rows: ItemSpec[]): number | null {
   for (const row of rows) {
     const quantity = parsePlainNumber(row.quantity);
     if (quantity !== null && quantity > 0) return quantity;
@@ -55,7 +55,7 @@ export interface Prefill {
  * only when the name is empty), its reference, the vehicle's usual quantity, the product's default price, the unit its
  * family implies (a fluid in litres, a part in pieces).
  */
-export function prefillFromProduct(product: Product, type: ConsumableType, rows: VehicleConsumable[]): Prefill {
+export function prefillFromProduct(product: Product, type: ConsumableType, rows: ItemSpec[]): Prefill {
   const quantity = usualQuantity(rows);
   return {
     description: product.name || [product.brand, product.reference].filter(Boolean).join(' '),
@@ -69,7 +69,7 @@ export function prefillFromProduct(product: Product, type: ConsumableType, rows:
 }
 
 /** The same for a part typed by hand for a required type: only the type and its unit and usual quantity are known. */
-export function prefillForType(type: ConsumableType, rows: VehicleConsumable[]): Omit<Prefill, 'description' | 'partNumber' | 'price' | 'productId'> & { productId: null } {
+export function prefillForType(type: ConsumableType, rows: ItemSpec[]): Omit<Prefill, 'description' | 'partNumber' | 'price' | 'productId'> & { productId: null } {
   const quantity = usualQuantity(rows);
   return {
     quantity: quantity === null ? '' : String(quantity),
@@ -84,7 +84,7 @@ export interface MergedNeed {
   type: ConsumableType;
   /** The ticked Tasks that need this type, in the order given. */
   taskIds: string[];
-  rows: VehicleConsumable[];
+  rows: ItemSpec[];
   choices: ProductChoice[];
   /** The torque values of the components of those Tasks, each once. */
   torque: { component: ComponentType; spec: ComponentSpec }[];

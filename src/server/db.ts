@@ -913,6 +913,19 @@ const MIGRATIONS: (string | ((db: DatabaseSync) => void))[] = [
   ALTER TABLE vehicle_consumables RENAME COLUMN status TO confirmation;
   ALTER TABLE vehicles RENAME COLUMN status TO ownership;
 `,
+  `
+  -- ADR 0009. A Vehicle Item points at the Item Spec it is for (vehicle_consumables.id, same Vehicle; loose, checked by the
+  -- server). spec_line_id stays for lines not moved to Notion. Additive only: the previous release still runs on this schema.
+  ALTER TABLE vehicle_parts ADD COLUMN item_spec_id TEXT;
+  -- Which Spec Line went to which Notion page, so the one-off move never makes a page twice and can be traced back.
+  CREATE TABLE spec_line_moves (
+    spec_line_id TEXT PRIMARY KEY REFERENCES spec_lines(id),
+    target TEXT NOT NULL CHECK (target IN ('item_spec', 'component_spec')),
+    notion_id TEXT NOT NULL,
+    created_page INTEGER NOT NULL CHECK (created_page IN (0, 1)),
+    moved_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`,
 ];
 
 /** Replaces what the owner changed on a template that was split by the same change on each of the new ones. */

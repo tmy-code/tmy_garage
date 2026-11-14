@@ -3,7 +3,8 @@ import { messagesFor } from '../shared/messages.ts';
 import type { Snapshot, Vehicle } from '../shared/types.ts';
 import { normalizeSnapshot } from '../shared/workshop.ts';
 import { INTERVENTIONS, REFERENCE_DBS, SESSIONS, USED, VEHICLES, notionType } from './databases.ts';
-import { ensureDatabases, fetchReference, pushAll, type NotionClient } from './engine.ts';
+import { ensureDatabases, fetchReference, findReferenceDatabase, pushAll, type NotionClient } from './engine.ts';
+import { titleKey } from './reference.ts';
 
 // A fake Notion workspace: databases with their columns and pages, and a record of every write. No network, no real ids.
 
@@ -134,6 +135,21 @@ describe('fetchReference', () => {
     expect(pull.products.complete).toBe(false);
     expect(pull.products.warnings.join()).toContain('not found');
     expect(pull.tools.complete).toBe(true);
+  });
+
+  it('reads a spec database under its old title, and warns, reads and writes nothing when both titles exist', async () => {
+    const renamed = handMade.map((d) => (d.id === 'db-itemSpecs' ? { ...d, title: 'Consommables par véhicule' } : d));
+    const old = fakeWorkspace(renamed);
+    const pull = await fetchReference(old.client, 'parent');
+    expect(pull.itemSpecs.complete).toBe(true);
+    expect(pull.itemSpecs.warnings).toEqual([]);
+
+    const both = fakeWorkspace([...handMade, { id: 'db-old', title: 'Consommables par véhicule', properties: {}, pages: [] }]);
+    const ambiguous = await fetchReference(both.client, 'parent');
+    expect(ambiguous.itemSpecs.complete).toBe(false);
+    expect(ambiguous.itemSpecs.rows).toEqual([]);
+    expect(ambiguous.itemSpecs.warnings.join('\n')).toContain('both "Spécifications d\'articles" and "Consommables par véhicule" exist');
+    expect(both.writes).toEqual([]);
   });
 
   it('matches database titles with a typographic apostrophe', async () => {
@@ -570,5 +586,20 @@ describe('plans, "Dernier fait" and the journal', () => {
       // No column is ever created, renamed or removed in a hand-made database.
       expect(writes.filter((w) => w.path.startsWith('/data_sources/ds-db-') && handMadeSources.has(w.path.replace('/data_sources/', '')))).toEqual([]);
     }
+  });
+});
+
+describe('findReferenceDatabase', () => {
+  const db = REFERENCE_DBS.find((d) => d.key === 'componentSpecs')!;
+  const existing = (...titles: string[]) => new Map(titles.map((title, i) => [titleKey(title), `id-${i}`]));
+
+  it('finds the new title, or an old one, and says which', () => {
+    expect(findReferenceDatabase(existing('Spécifications de composants'), db)).toEqual({ databaseId: 'id-0', title: 'Spécifications de composants' });
+    expect(findReferenceDatabase(existing('Spécifications'), db)).toEqual({ databaseId: 'id-0', title: 'Spécifications' });
+    expect(findReferenceDatabase(existing('Autre'), db)).toBeNull();
+  });
+
+  it('is ambiguous when both exist', () => {
+    expect(findReferenceDatabase(existing('Spécifications', 'Spécifications de composants'), db)).toEqual({ ambiguous: ['Spécifications de composants', 'Spécifications'] });
   });
 });
