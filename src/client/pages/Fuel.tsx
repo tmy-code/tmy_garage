@@ -22,7 +22,7 @@ const FUEL_SEARCH_FROM = 8;
 /** A Vehicle's fuel log: average consumption, then the fill-ups newest first. */
 export function FuelSection({ vehicle, snapshot, pending }: { vehicle: Vehicle; snapshot: Snapshot; pending: Set<string> }) {
   const t = useT();
-  const owned = vehicle.status === 'owned';
+  const owned = vehicle.ownership === 'owned';
   const [all, setAll] = useState(false);
   const [query, setQuery] = useState('');
   const fillups = useMemo(() => snapshot.fillups.filter((f) => f.vehicleId === vehicle.id), [snapshot.fillups, vehicle.id]);

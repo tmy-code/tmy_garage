@@ -40,7 +40,7 @@ import type {
   Tool,
   VehicleConsumable,
   VehiclePart,
-  VehicleSpec,
+  ComponentSpec,
   Service,
   Snapshot,
   Vehicle,
@@ -93,7 +93,7 @@ const toVehicle = (r: Row): Vehicle => ({
   firstRegistrationDate: r.first_registration_date,
   purchaseDate: r.purchase_date,
   ...buildOfRow(r),
-  status: r.status,
+  ownership: r.ownership,
   onGaragePage: r.on_garage_page === 1,
   soldDate: r.sold_date,
   soldOdometer: r.sold_odometer,
@@ -183,11 +183,11 @@ const toVehicleConsumable = (r: Row): VehicleConsumable => ({
   quantity: r.quantity,
   compatibleProductIds: parseJsonList(r.compatible_product_ids),
   chosenProductId: r.chosen_product_id,
-  status: r.status,
+  confirmation: r.confirmation,
   notionId: r.notion_id,
 });
 
-const toVehicleSpec = (r: Row): VehicleSpec => ({
+const toComponentSpec = (r: Row): ComponentSpec => ({
   id: r.id,
   vehicleId: r.vehicle_id,
   label: r.label,
@@ -196,7 +196,7 @@ const toVehicleSpec = (r: Row): VehicleSpec => ({
   value: r.value,
   unit: r.unit,
   source: r.source,
-  status: r.status,
+  confirmation: r.confirmation,
   notionId: r.notion_id,
 });
 
@@ -388,7 +388,7 @@ function garageReader(db: DatabaseSync, garageId: string) {
       products: byGarage('products').map(toProduct),
       tools: byGarage('tools').map(toTool),
       vehicleConsumables: ownedRows('vehicle_consumables', 'x.notion_removed = 0').map(toVehicleConsumable),
-      vehicleSpecs: ownedRows('vehicle_specs', 'x.notion_removed = 0').map(toVehicleSpec),
+      componentSpecs: ownedRows('component_specs', 'x.notion_removed = 0').map(toComponentSpec),
       notionPurchases: byGarage('ref_purchases').map(toNotionPurchase),
       notion: notionState ? toNotionStatus(notionState) : null,
     };
@@ -622,7 +622,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     vehicleOrThrow(id);
     const s = await parse(c, sellInput);
     // A sold Vehicle leaves the garage page, unless the user puts it back there.
-    db.prepare(`UPDATE vehicles SET status = 'sold', on_garage_page = 0, sold_date = ?, sold_odometer = ?, sold_price = ? WHERE id = ?`).run(
+    db.prepare(`UPDATE vehicles SET ownership = 'sold', on_garage_page = 0, sold_date = ?, sold_odometer = ?, sold_price = ? WHERE id = ?`).run(
       s.date,
       s.odometer,
       s.price,
@@ -636,7 +636,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     vehicleOrThrow(id);
     transaction(() => {
       db.prepare(
-        `UPDATE vehicles SET status = 'owned', on_garage_page = 1, sold_date = NULL, sold_odometer = NULL, sold_price = NULL WHERE id = ?`,
+        `UPDATE vehicles SET ownership = 'owned', on_garage_page = 1, sold_date = NULL, sold_odometer = NULL, sold_price = NULL WHERE id = ?`,
       ).run(id);
     });
     return c.json(toVehicle(vehicleOrThrow(id)));

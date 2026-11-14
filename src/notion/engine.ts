@@ -265,7 +265,7 @@ async function syncPlans(
   warnings: string[],
   onCreated?: (taskId: string, pageId: string) => void,
 ): Promise<{ counts: Counts; created: { taskId: string; pageId: string }[] } | null> {
-  const owned = new Map(snapshot.vehicles.filter((v) => v.status === 'owned').map((v) => [v.id, v]));
+  const owned = new Map(snapshot.vehicles.filter((v) => v.ownership === 'owned').map((v) => [v.id, v]));
   const refs = new Map(snapshot.refTasks.map((r) => [r.id, r]));
   const linked = snapshot.tasks.filter((task) => task.refTaskId && owned.has(task.vehicleId) && refs.has(task.refTaskId));
   const lastDone = new Map(buildLastDone(snapshot, today).map((l) => [l.taskId, l]));

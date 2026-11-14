@@ -3,6 +3,6 @@
  * header; when the two differ, the app stops sending its queue until one side is updated (ADR 0003).
  * Bump it whenever a change to `/api` would break an older Android app.
  */
-export const API_VERSION = 1;
+export const API_VERSION = 2;
 
 export const API_VERSION_HEADER = 'x-api-version';

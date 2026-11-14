@@ -89,10 +89,10 @@ export interface VehicleConsumableRow {
   quantity: number | null;
   compatibleProductNotionIds: string[];
   chosenProductNotionId: string | null;
-  status: 'confirmed' | 'to_confirm' | null;
+  confirmation: 'confirmed' | 'to_confirm' | null;
 }
 
-export interface VehicleSpecRow {
+export interface ComponentSpecRow {
   notionId: string;
   vehicleAppId: string;
   label: string;
@@ -102,7 +102,7 @@ export interface VehicleSpecRow {
   value: string;
   unit: string | null;
   source: string | null;
-  status: 'confirmed' | 'to_confirm' | null;
+  confirmation: 'confirmed' | 'to_confirm' | null;
 }
 
 /** One line of the owner's Achats database; no invoice files and no notes are read. */
@@ -126,7 +126,7 @@ export interface ReferencePull {
   tools: DbPull<ToolRow>;
   plans: DbPull<PlanRow>;
   vehicleConsumables: DbPull<VehicleConsumableRow>;
-  vehicleSpecs: DbPull<VehicleSpecRow>;
+  componentSpecs: DbPull<ComponentSpecRow>;
   purchases: DbPull<PurchaseRow>;
   /** Plan pages that exist in Notion but could not be used (unknown vehicle or task): they are not "vanished". */
   skippedPlanNotionIds: string[];
@@ -295,7 +295,7 @@ class RowReader {
     return found;
   }
 
-  status(page: any): 'confirmed' | 'to_confirm' | null {
+  confirmation(page: any): 'confirmed' | 'to_confirm' | null {
     const value = this.select(page, 'Statut');
     if (value === null) return null;
     const key = refKey(value);
@@ -357,7 +357,7 @@ export function parseReference(pages: Record<string, any[]>, vehiclePageToAppId:
     tools: empty(),
     plans: empty(),
     vehicleConsumables: empty(),
-    vehicleSpecs: empty(),
+    componentSpecs: empty(),
     purchases: empty(),
     skippedPlanNotionIds: [],
     equipment: {},
@@ -469,11 +469,11 @@ export function parseReference(pages: Record<string, any[]>, vehiclePageToAppId:
               quantity: reader.num(page, 'Quantité'),
               compatibleProductNotionIds: reader.rel(page, 'Produits compatibles'),
               chosenProductNotionId: reader.rel(page, 'Produit retenu')[0] ?? null,
-              status: reader.status(page),
+              confirmation: reader.confirmation(page),
             } satisfies VehicleConsumableRow);
           }
           break;
-        case 'vehicleSpecs': {
+        case 'componentSpecs': {
           const p = page.properties?.['Valeur'];
           const value = p?.type === 'number' ? (p.number === null ? '' : String(p.number)) : (reader.text(page, 'Valeur') ?? '');
           for (const vehicleAppId of reader.vehicles(page, name, vehiclePageToAppId)) {
@@ -486,8 +486,8 @@ export function parseReference(pages: Record<string, any[]>, vehiclePageToAppId:
               value,
               unit: reader.select(page, 'Unité'),
               source: reader.text(page, 'Source'),
-              status: reader.status(page),
-            } satisfies VehicleSpecRow);
+              confirmation: reader.confirmation(page),
+            } satisfies ComponentSpecRow);
           }
           break;
         }

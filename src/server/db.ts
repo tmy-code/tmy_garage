@@ -901,6 +901,18 @@ const MIGRATIONS: (string | ((db: DatabaseSync) => void))[] = [
   );
   CREATE INDEX ref_purchases_article ON ref_purchases (article_notion_id);
 `,
+  `
+  -- Rename to the glossary terms, data kept as is: vehicle_specs becomes component_specs, and the three "status"
+  -- columns get the name of what they say (vehicles.ownership, vehicle_consumables.confirmation, component_specs.confirmation).
+  -- The previous release cannot open this schema: the garage-v<N>-*.sqlite copy written just before this migration is
+  -- the way back. No view or partial index refers to the old names.
+  ALTER TABLE vehicle_specs RENAME TO component_specs;
+  ALTER TABLE component_specs RENAME COLUMN status TO confirmation;
+  DROP INDEX vehicle_specs_vehicle;
+  CREATE INDEX component_specs_vehicle ON component_specs (vehicle_id);
+  ALTER TABLE vehicle_consumables RENAME COLUMN status TO confirmation;
+  ALTER TABLE vehicles RENAME COLUMN status TO ownership;
+`,
 ];
 
 /** Replaces what the owner changed on a template that was split by the same change on each of the new ones. */

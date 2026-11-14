@@ -32,7 +32,7 @@ function vehicle(overrides: Partial<Vehicle> = {}): Vehicle {
     hasAdblue: false,
     hasAc: false,
     hasAirSuspension: false,
-    status: 'owned',
+    ownership: 'owned',
     onGaragePage: true,
     soldDate: null,
     soldOdometer: null,
@@ -93,7 +93,7 @@ describe('wantedTasks', () => {
   });
 
   it('ignores sold Vehicles and starts a new key once the job is done', () => {
-    const sold = snapshot({ vehicles: [vehicle({ status: 'sold' })], tasks: [task({ baselineDate: '2025-01-01' })] });
+    const sold = snapshot({ vehicles: [vehicle({ ownership: 'sold' })], tasks: [task({ baselineDate: '2025-01-01' })] });
     expect(wantedTasks(sold, TODAY)).toEqual([]);
     const before = wantedTasks(snapshot({ tasks: [task({ baselineDate: '2025-01-01' })] }), TODAY)[0]!;
     const after = wantedTasks(

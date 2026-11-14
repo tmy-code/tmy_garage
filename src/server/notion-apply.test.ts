@@ -26,7 +26,7 @@ function emptyPull(overrides: Partial<ReferencePull> = {}): ReferencePull {
     tools: empty(),
     plans: empty(),
     vehicleConsumables: empty(),
-    vehicleSpecs: empty(),
+    componentSpecs: empty(),
     purchases: empty(),
     skippedPlanNotionIds: [],
     equipment: { bike: [], car: [] },

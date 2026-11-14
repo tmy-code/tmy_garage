@@ -71,7 +71,7 @@ export interface LastDone {
 }
 
 export function buildJournal(snapshot: Snapshot, t: Messages): NotionJournal {
-  const owned = new Map(snapshot.vehicles.filter((v) => v.status === 'owned').map((v) => [v.id, v]));
+  const owned = new Map(snapshot.vehicles.filter((v) => v.ownership === 'owned').map((v) => [v.id, v]));
   const tasks = new Map(snapshot.tasks.map((task) => [task.id, task]));
   const refTasks = new Map(snapshot.refTasks.map((r) => [r.id, r]));
   const journal: NotionJournal = { sessions: [], interventions: [], used: [] };
@@ -127,7 +127,7 @@ export function buildLastDone(snapshot: Snapshot, today: IsoDate): LastDone[] {
   const tasks = new Map(snapshot.tasks.map((task) => [task.id, task]));
   const result: LastDone[] = [];
   for (const vehicle of snapshot.vehicles) {
-    if (vehicle.status !== 'owned') continue;
+    if (vehicle.ownership !== 'owned') continue;
     for (const due of vehicleDue(snapshot, vehicle.id, today).due) {
       const task = tasks.get(due.taskId);
       if (!task?.refTaskId || !due.lastDone) continue;

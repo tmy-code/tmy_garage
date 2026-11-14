@@ -1,6 +1,6 @@
 // Which Catalogue Tasks apply to a Vehicle, and what a task needs: pure, shared by the server (which derives plans) and
 // the screens (which show the needs offline).
-import type { ComponentType, ConsumableType, Product, RefTask, Snapshot, VehicleConsumable, VehicleSpec } from './types.ts';
+import type { ComponentType, ConsumableType, Product, RefTask, Snapshot, VehicleConsumable, ComponentSpec } from './types.ts';
 import { refKey } from './workshop.ts';
 
 /** The Catalogue Tasks whose every "Applicable si" tag is among the equipment; a task with no tag applies to all. */
@@ -56,22 +56,22 @@ export function requiredConsumables(snapshot: Snapshot, vehicleId: string, taskI
 }
 
 /** Whether a Spec is a torque value, by its unit (N·m) or its category. */
-export function isTorqueSpec(spec: Pick<VehicleSpec, 'unit' | 'category'>): boolean {
+export function isTorqueSpec(spec: Pick<ComponentSpec, 'unit' | 'category'>): boolean {
   const text = `${refKey(spec.unit)} ${refKey(spec.category)}`;
   return /\bn[^a-z0-9]?m\b/.test(text) || /couple|torque/.test(text);
 }
 
 /** The torque values of the Components a Task works on, for this Vehicle. */
-export function torqueSpecs(snapshot: Snapshot, vehicleId: string, taskId: string): { component: ComponentType; spec: VehicleSpec }[] {
+export function torqueSpecs(snapshot: Snapshot, vehicleId: string, taskId: string): { component: ComponentType; spec: ComponentSpec }[] {
   const task = snapshot.tasks.find((t) => t.id === taskId);
   if (!task?.refTaskId) return [];
   const ref = snapshot.refTasks.find((r) => r.id === task.refTaskId);
   if (!ref) return [];
-  const result: { component: ComponentType; spec: VehicleSpec }[] = [];
+  const result: { component: ComponentType; spec: ComponentSpec }[] = [];
   for (const componentId of ref.componentTypeIds) {
     const component = snapshot.componentTypes.find((c) => c.id === componentId);
     if (!component) continue;
-    for (const spec of snapshot.vehicleSpecs) {
+    for (const spec of snapshot.componentSpecs) {
       if (spec.vehicleId === vehicleId && spec.componentTypeId === componentId && isTorqueSpec(spec)) result.push({ component, spec });
     }
   }

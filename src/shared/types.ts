@@ -1,6 +1,9 @@
 import type { IsoDate } from './dates.ts';
 import type { CatalogueEntry, PartCategory, VehicleSpecs } from './catalogue.ts';
 import type { DocumentOwnerKind, DocumentType, PartUnit, PerformedBy, ServiceKind, SpecGroup, TaskAction, VehicleKind } from './schemas.ts';
+export type Ownership = 'owned' | 'sold';
+export type Confirmation = 'confirmed' | 'to_confirm' | null;
+
 /** A car or motorcycle; what it is built with (its Build) comes from VehicleSpecs. */
 export interface Vehicle extends VehicleSpecs {
   id: string;
@@ -15,8 +18,8 @@ export interface Vehicle extends VehicleSpecs {
   firstRegistrationDate: IsoDate | null;
   /** When the owner bought it. */
   purchaseDate: IsoDate | null;
-  status: 'owned' | 'sold';
-  /** Whether it has a card on the garage page, whatever its status; selling it hides it, and the user can change either. */
+  ownership: Ownership;
+  /** Whether it has a card on the garage page, whatever its ownership; selling it hides it, and the user can change either. */
   onGaragePage: boolean;
   soldDate: IsoDate | null;
   soldOdometer: number | null;
@@ -135,12 +138,12 @@ export interface VehicleConsumable {
   quantity: number | null;
   compatibleProductIds: string[];
   chosenProductId: string | null;
-  status: 'confirmed' | 'to_confirm' | null;
+  confirmation: Confirmation;
   notionId: string;
 }
 
 /** One spec of a Vehicle from Notion (a torque, a size, a capacity). Read-only. */
-export interface VehicleSpec {
+export interface ComponentSpec {
   id: string;
   vehicleId: string;
   label: string;
@@ -150,7 +153,7 @@ export interface VehicleSpec {
   value: string;
   unit: string | null;
   source: string | null;
-  status: 'confirmed' | 'to_confirm' | null;
+  confirmation: Confirmation;
   notionId: string;
 }
 
@@ -308,7 +311,7 @@ export interface Snapshot {
   products: Product[];
   tools: Tool[];
   vehicleConsumables: VehicleConsumable[];
-  vehicleSpecs: VehicleSpec[];
+  componentSpecs: ComponentSpec[];
   /** Bought items read from Notion. */
   notionPurchases: NotionPurchase[];
   /** Null when the Notion sync is not set up on the server. */

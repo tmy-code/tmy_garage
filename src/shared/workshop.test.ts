@@ -47,7 +47,7 @@ const base: Snapshot = {
       hasAdblue: false,
       hasAc: false,
       hasAirSuspension: false,
-      status: 'owned',
+      ownership: 'owned',
       onGaragePage: true,
       soldDate: null,
       soldOdometer: null,
@@ -63,7 +63,7 @@ const base: Snapshot = {
   fillups: [],
   documents: [],
   catalogue: [],
-  refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], vehicleSpecs: [], notionPurchases: [], notion: null,
+  refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], componentSpecs: [], notionPurchases: [], notion: null,
 };
 
 describe('groupByCategory', () => {
@@ -108,12 +108,46 @@ describe('normalizeSnapshot', () => {
   });
 
   it('fills in the Notion referentials, equipment and status that an offline copy saved before the Notion sync lacks', () => {
-    const old = { vehicles: [{ id: 'v', status: 'owned' }], tasks: [{ id: 't' }], services: [], readings: [] } as unknown as Snapshot;
+    const old = { vehicles: [{ id: 'v', ownership: 'owned' }], tasks: [{ id: 't' }], services: [], readings: [] } as unknown as Snapshot;
     const s = normalizeSnapshot(old);
     expect(s.vehicles[0]!.equipment).toEqual([]);
     expect(s.tasks[0]).toMatchObject({ refTaskId: null, notionPlanId: null });
-    for (const key of ['refTasks', 'componentTypes', 'consumableTypes', 'products', 'tools', 'vehicleConsumables', 'vehicleSpecs', 'notionPurchases'] as const) expect(s[key]).toEqual([]);
+    for (const key of ['refTasks', 'componentTypes', 'consumableTypes', 'products', 'tools', 'vehicleConsumables', 'componentSpecs', 'notionPurchases'] as const) expect(s[key]).toEqual([]);
     expect(s.notion).toBeNull();
+  });
+
+  it('reads the old names of an older snapshot as the glossary terms', () => {
+    const old = {
+      vehicles: [{ id: 'v', status: 'sold' }],
+      vehicleConsumables: [{ id: 'c', status: 'to_confirm' }],
+      vehicleSpecs: [{ id: 's', status: 'confirmed' }, { id: 's2', status: null }],
+      tasks: [],
+      services: [],
+      readings: [],
+    } as unknown as Snapshot;
+    const s = normalizeSnapshot(old) as unknown as Record<string, any>;
+    expect(s.vehicles[0]).toMatchObject({ ownership: 'sold', onGaragePage: false });
+    expect(s.vehicles[0]).not.toHaveProperty('status');
+    expect(s.vehicleConsumables[0]).toMatchObject({ confirmation: 'to_confirm' });
+    expect(s.vehicleConsumables[0]).not.toHaveProperty('status');
+    expect(s.componentSpecs).toMatchObject([{ id: 's', confirmation: 'confirmed' }, { id: 's2', confirmation: null }]);
+    expect(s.componentSpecs[0]).not.toHaveProperty('status');
+    expect(s).not.toHaveProperty('vehicleSpecs');
+  });
+
+  it('lets a snapshot with the new names pass through', () => {
+    const fresh = {
+      vehicles: [{ id: 'v', ownership: 'sold', onGaragePage: true }],
+      vehicleConsumables: [{ id: 'c', confirmation: 'confirmed' }],
+      componentSpecs: [{ id: 's', confirmation: 'to_confirm' }],
+      tasks: [],
+      services: [],
+      readings: [],
+    } as unknown as Snapshot;
+    const s = normalizeSnapshot(fresh);
+    expect(s.vehicles[0]).toMatchObject({ ownership: 'sold', onGaragePage: true });
+    expect(s.vehicleConsumables[0]).toMatchObject({ confirmation: 'confirmed' });
+    expect(s.componentSpecs).toMatchObject([{ id: 's', confirmation: 'to_confirm' }]);
   });
 
   it('keeps the consumable type and product of a part used when they are there', () => {

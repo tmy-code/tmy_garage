@@ -4,7 +4,7 @@ import { todayIso } from '../../shared/dates.ts';
 import { requiredConsumables, torqueSpecs } from '../../shared/applicability.ts';
 import { vehicleDue } from '../../shared/due.ts';
 import type { PartUnit, SpecGroup } from '../../shared/schemas.ts';
-import type { MaintenanceTask, PartUsed, Snapshot, SpecLine, Vehicle, VehiclePart, VehicleSpec } from '../../shared/types.ts';
+import type { MaintenanceTask, PartUsed, Snapshot, SpecLine, Vehicle, VehiclePart, ComponentSpec } from '../../shared/types.ts';
 import { confirmDelete, Field, FormError, Layout, NeedsConnection, segmentedKeys, StatusChip } from '../components.tsx';
 import { describeDue, describeInterval, formatDate, formatKm, formatMoney, localizeNumber, matchesQuery, parseNumber, taskName } from '../format.ts';
 import { VehicleIcon } from '../brands.tsx';
@@ -205,7 +205,7 @@ function SpecText({ spec }: { spec: SpecLine }) {
 }
 
 /** A spec from Notion: read-only, with where it comes from and whether it is confirmed. */
-function NotionSpecRow({ spec }: { spec: VehicleSpec }) {
+function NotionSpecRow({ spec }: { spec: ComponentSpec }) {
   const t = useT();
   return (
     <li>
@@ -214,7 +214,7 @@ function NotionSpecRow({ spec }: { spec: VehicleSpec }) {
           <strong>{spec.label}</strong>
           <span className="spec-badges">
             <span className="chip chip-neutral">{t.notion.badge}</span>
-            {spec.status ? <span className={`chip ${spec.status === 'confirmed' ? 'chip-ok' : 'chip-dueSoon'}`}>{spec.status === 'confirmed' ? t.notion.confirmed : t.notion.toConfirm}</span> : null}
+            {spec.confirmation ? <span className={`chip ${spec.confirmation === 'confirmed' ? 'chip-ok' : 'chip-dueSoon'}`}>{spec.confirmation === 'confirmed' ? t.notion.confirmed : t.notion.toConfirm}</span> : null}
           </span>
         </span>
         <span>
@@ -227,8 +227,8 @@ function NotionSpecRow({ spec }: { spec: VehicleSpec }) {
 }
 
 /** The specs Notion keeps for a Vehicle, by category (what has none is last), in the order Notion gave them. */
-function notionSpecGroups(snapshot: Snapshot, vehicleId: string): [string | null, VehicleSpec[]][] {
-  const specs = snapshot.vehicleSpecs.filter((s) => s.vehicleId === vehicleId);
+function notionSpecGroups(snapshot: Snapshot, vehicleId: string): [string | null, ComponentSpec[]][] {
+  const specs = snapshot.componentSpecs.filter((s) => s.vehicleId === vehicleId);
   const categories = [...new Set(specs.map((s) => s.category))].sort((a, b) => (a === null ? 1 : b === null ? -1 : a.localeCompare(b)));
   return categories.map((c) => [c, specs.filter((s) => s.category === c)]);
 }
@@ -350,7 +350,7 @@ function TaskNeeds({ task, vehicle, snapshot }: { task: MaintenanceTask; vehicle
                   {need.rows.map((row) => (
                     <span key={row.id}>
                       {[row.specification, row.capacity ? localizeNumber(row.capacity, t) : null, row.quantity !== null ? `×${localizeNumber(row.quantity, t)}` : null, row.oemRef ? t.workshop.specOemShown(row.oemRef) : null].filter(Boolean).join(' · ') || row.name}
-                      {row.status ? <span className={`chip ${row.status === 'confirmed' ? 'chip-ok' : 'chip-dueSoon'}`}>{row.status === 'confirmed' ? t.notion.confirmed : t.notion.toConfirm}</span> : null}
+                      {row.confirmation ? <span className={`chip ${row.confirmation === 'confirmed' ? 'chip-ok' : 'chip-dueSoon'}`}>{row.confirmation === 'confirmed' ? t.notion.confirmed : t.notion.toConfirm}</span> : null}
                     </span>
                   ))}
                   {need.products.length > 0 ? (
@@ -381,7 +381,7 @@ function TaskNeeds({ task, vehicle, snapshot }: { task: MaintenanceTask; vehicle
                     .map(({ spec }) => (
                       <span key={spec.id}>
                         {t.notion.torqueLine([localizeNumber(spec.value, t), spec.unit].filter(Boolean).join(' '))}
-                        {spec.status === 'to_confirm' ? <span className="chip chip-dueSoon">{t.notion.toConfirm}</span> : null}
+                        {spec.confirmation === 'to_confirm' ? <span className="chip chip-dueSoon">{t.notion.toConfirm}</span> : null}
                       </span>
                     ))}
                 </div>
@@ -419,7 +419,7 @@ export function TaskPage({ task, vehicle, snapshot }: { task: MaintenanceTask; v
     () => vehicleDue(snapshot, vehicle.id, today).due.find((d) => d.taskId === task.id),
     [snapshot, vehicle.id, today, task.id],
   );
-  const owned = vehicle.status === 'owned';
+  const owned = vehicle.ownership === 'owned';
   const history = snapshot.services
     .filter((s) => s.taskIds.includes(task.id))
     .sort((a, b) => (a.date === b.date ? (b.odometer ?? 0) - (a.odometer ?? 0) : a.date < b.date ? 1 : -1));

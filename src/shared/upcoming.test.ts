@@ -29,7 +29,7 @@ function vehicle(id: string, overrides: Partial<Vehicle> = {}): Vehicle {
     hasAdblue: false,
     hasAc: false,
     hasAirSuspension: false,
-    status: 'owned',
+    ownership: 'owned',
     onGaragePage: true,
     soldDate: null,
     soldOdometer: null,
@@ -72,7 +72,7 @@ function snapshot(vehicles: Vehicle[], tasks: MaintenanceTask[], readings: Odome
     fillups: [],
     documents: [],
     catalogue: [],
-    refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], vehicleSpecs: [], notionPurchases: [], notion: null,
+    refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], componentSpecs: [], notionPurchases: [], notion: null,
   };
 }
 
@@ -98,7 +98,7 @@ describe('upcoming', () => {
 
   it('leaves out Tasks due more than a year away, never recorded, or on a sold Vehicle', () => {
     const s = snapshot(
-      [vehicle('car'), vehicle('old', { status: 'sold' })],
+      [vehicle('car'), vehicle('old', { ownership: 'sold' })],
       [task('far', 'car', '2026-01-01', 48), task('never', 'car', null), task('sold-overdue', 'old', '2024-01-01')],
       [reading('car')],
     );

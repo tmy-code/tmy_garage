@@ -71,7 +71,7 @@ export function PartsPage({ snapshot, vehicleId }: { snapshot: Snapshot; vehicle
 /** Add a part, or edit one. */
 export function VehiclePartForm({ snapshot, existing, vehicleId }: { snapshot: Snapshot; existing?: VehiclePart; vehicleId?: string }) {
   const t = useT();
-  const owned = snapshot.vehicles.filter((v) => v.status === 'owned');
+  const owned = snapshot.vehicles.filter((v) => v.ownership === 'owned');
   const [vehicle, setVehicle] = useState(existing?.vehicleId ?? (owned.some((v) => v.id === vehicleId) ? vehicleId! : (owned[0]?.id ?? '')));
   const [name, setName] = useState(existing?.name ?? '');
   const [partNumber, setPartNumber] = useState(existing?.partNumber ?? '');

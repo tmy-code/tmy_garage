@@ -31,7 +31,7 @@ function vehicle(id: string, overrides: Partial<Vehicle> = {}): Vehicle {
     hasAdblue: false,
     hasAc: false,
     hasAirSuspension: false,
-    status: 'owned',
+    ownership: 'owned',
     onGaragePage: true,
     soldDate: null,
     soldOdometer: null,
@@ -78,7 +78,7 @@ const oilChange: MaintenanceTask = {
 
 function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
   return {
-    vehicles: [vehicle('v1'), vehicle('v2', { status: 'sold' })],
+    vehicles: [vehicle('v1'), vehicle('v2', { ownership: 'sold' })],
     tasks: [oilChange],
     services: [],
     readings: [
@@ -90,7 +90,7 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     fillups: [],
     documents: [],
     catalogue: [],
-    refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], vehicleSpecs: [], notionPurchases: [], notion: null,
+    refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], componentSpecs: [], notionPurchases: [], notion: null,
     ...overrides,
   };
 }

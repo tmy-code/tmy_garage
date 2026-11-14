@@ -18,7 +18,7 @@ export interface DbCounts {
   removed: number;
 }
 
-export const COUNT_KEYS = ['tasks', 'componentTypes', 'consumableTypes', 'products', 'tools', 'vehicleConsumables', 'vehicleSpecs', 'purchases', 'maintenanceTasks'] as const;
+export const COUNT_KEYS = ['tasks', 'componentTypes', 'consumableTypes', 'products', 'tools', 'vehicleConsumables', 'componentSpecs', 'purchases', 'maintenanceTasks'] as const;
 export type CountKey = (typeof COUNT_KEYS)[number];
 
 export interface ApplyReport {
@@ -130,7 +130,7 @@ export function applyPull(db: DatabaseSync, garageId: string, pull: ReferencePul
 
   db.exec('BEGIN');
   try {
-    for (const key of ['tasks', 'componentTypes', 'consumableTypes', 'products', 'tools', 'vehicleConsumables', 'vehicleSpecs', 'purchases', 'plans'] as const) {
+    for (const key of ['tasks', 'componentTypes', 'consumableTypes', 'products', 'tools', 'vehicleConsumables', 'componentSpecs', 'purchases', 'plans'] as const) {
       for (const w of pull[key].warnings) warn(w);
     }
     for (const w of pull.vehicleWarnings) warn(w);
@@ -220,7 +220,7 @@ export function applyPull(db: DatabaseSync, garageId: string, pull: ReferencePul
           quantity: r.quantity,
           compatible_product_ids: resolve(productIds, r.compatibleProductNotionIds, `Consommable "${r.name}"`),
           chosen_product_id: r.chosenProductNotionId ? (productIds.get(r.chosenProductNotionId) ?? null) : null,
-          status: r.status,
+          confirmation: r.confirmation,
         },
       })),
       pull.vehicleConsumables.complete,
@@ -228,9 +228,9 @@ export function applyPull(db: DatabaseSync, garageId: string, pull: ReferencePul
       true,
     );
     syncRows(
-      'vehicle_specs',
+      'component_specs',
       'Spécifications',
-      pull.vehicleSpecs.rows.filter(knownVehicle).map((r) => ({
+      pull.componentSpecs.rows.filter(knownVehicle).map((r) => ({
         notionId: r.notionId,
         vehicleId: r.vehicleAppId,
         values: {
@@ -240,11 +240,11 @@ export function applyPull(db: DatabaseSync, garageId: string, pull: ReferencePul
           value: r.value,
           unit: r.unit,
           source: r.source,
-          status: r.status,
+          confirmation: r.confirmation,
         },
       })),
-      pull.vehicleSpecs.complete,
-      counts.vehicleSpecs,
+      pull.componentSpecs.complete,
+      counts.componentSpecs,
       true,
     );
     // The owner's Achats, read-only: matched to a vehicle's consumable line by the line's Notion page id when read.
@@ -278,7 +278,7 @@ export function applyPull(db: DatabaseSync, garageId: string, pull: ReferencePul
       }
       equipmentOf.set(v.id, tags);
       if (JSON.stringify(tags) !== JSON.stringify(v.equipment)) db.prepare('UPDATE vehicles SET equipment = ? WHERE id = ? AND garage_id = ?').run(JSON.stringify(tags), v.id, garageId);
-      if (tags.length === 0 && v.status === 'owned') warn(`Vehicle "${v.name}" has no equipment in Notion: only the tasks with no condition apply to it`);
+      if (tags.length === 0 && v.ownership === 'owned') warn(`Vehicle "${v.name}" has no equipment in Notion: only the tasks with no condition apply to it`);
     }
 
     // --- Each owned Vehicle's plan ---
@@ -312,7 +312,7 @@ export function applyPull(db: DatabaseSync, garageId: string, pull: ReferencePul
       const livePlanIds = new Set([...pull.plans.rows.map((p) => p.notionId), ...pull.skippedPlanNotionIds]);
 
       for (const v of snapshot.vehicles) {
-        if (v.status !== 'owned') continue;
+        if (v.ownership !== 'owned') continue;
         const equipment = equipmentOf.get(v.id) ?? [];
         const applicable = applicableRefTasks(refs, equipment) as (RefTask & { notionId: string; category: PartCategory | null })[];
         const applicableIds = new Set(applicable.map((r) => r.id));

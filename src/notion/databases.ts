@@ -92,7 +92,7 @@ export interface ReferenceColumn {
   types: string[];
 }
 
-export type ReferenceKey = 'tasks' | 'componentTypes' | 'consumableTypes' | 'products' | 'tools' | 'plans' | 'vehicleConsumables' | 'vehicleSpecs' | 'purchases';
+export type ReferenceKey = 'tasks' | 'componentTypes' | 'consumableTypes' | 'products' | 'tools' | 'plans' | 'vehicleConsumables' | 'componentSpecs' | 'purchases';
 
 /**
  * A database the owner makes and keeps by hand, matched by its title under the parent page. The app only reads it:
@@ -160,7 +160,7 @@ export const REFERENCE_DBS: ReferenceDb[] = [
     ],
   },
   {
-    key: 'vehicleSpecs',
+    key: 'componentSpecs',
     title: 'Spécifications',
     required: [col('Élément', 'title'), col('Véhicule', 'relation'), col('Valeur', 'number', 'rich_text')],
     optional: [col('Composant', 'relation'), col('Catégorie', 'select'), col('Unité', 'select'), col('Source', 'rich_text'), col('Statut', 'select')],

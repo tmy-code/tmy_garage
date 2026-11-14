@@ -43,7 +43,7 @@ describe('parseReference: vocabulary', () => {
           page('c1', { Nom: title('Huile'), Catégorie: sel('Moteur'), Famille: sel('Fluide'), Notes: rich('') }),
           page('c2', { Nom: title('Filtre'), Catégorie: sel('Moteur'), Famille: sel('Pièce'), Notes: rich('') }),
         ],
-        vehicleSpecs: [
+        componentSpecs: [
           page('s1', { Élément: title('A'), Véhicule: rel('page-bike'), Valeur: num(1), Statut: sel('À confirmer') }),
           page('s2', { Élément: title('B'), Véhicule: rel('page-bike'), Valeur: num(2), Statut: sel('Confirmé') }),
         ],
@@ -52,7 +52,7 @@ describe('parseReference: vocabulary', () => {
     );
     expect(pull.tasks.rows.map((r) => r.action)).toEqual(['replace', 'inspect', 'clean', 'adjust']);
     expect(pull.consumableTypes.rows.map((r) => r.family)).toEqual(['fluid', 'part']);
-    expect(pull.vehicleSpecs.rows.map((r) => r.status)).toEqual(['to_confirm', 'confirmed']);
+    expect(pull.componentSpecs.rows.map((r) => r.confirmation)).toEqual(['to_confirm', 'confirmed']);
   });
 
   it('maps unknown vocabulary to null with a warning, and lists the vocabularies found', () => {
@@ -67,7 +67,7 @@ describe('parseReference: values', () => {
   it('reads Valeur and Quantité as a number or as text', () => {
     const pull = parseReference(
       {
-        vehicleSpecs: [
+        componentSpecs: [
           page('s1', { Élément: title('Couple'), Véhicule: rel('page-bike'), Valeur: num(25.5) }),
           page('s2', { Élément: title('Taille'), Véhicule: rel('page-bike'), Valeur: rich('120/70 R17') }),
         ],
@@ -79,7 +79,7 @@ describe('parseReference: values', () => {
       },
       vehicleMap,
     );
-    expect(pull.vehicleSpecs.rows.map((r) => r.value)).toEqual(['25.5', '120/70 R17']);
+    expect(pull.componentSpecs.rows.map((r) => r.value)).toEqual(['25.5', '120/70 R17']);
     expect(pull.vehicleConsumables.rows.map((r) => r.quantity)).toEqual([3.2, 0.5, null]);
     expect(pull.vehicleConsumables.warnings.join('\n')).toContain('"Quantité" is not a number');
   });
@@ -147,15 +147,15 @@ describe('parseReference: vehicles', () => {
   const spec = (id: string, vehicles: string[]) => page(id, { Élément: title('Couple bouchon'), Véhicule: rel(...vehicles), Valeur: num(25) });
 
   it('expands a page pointing at several vehicles into one row per vehicle', () => {
-    const pull = parseReference({ vehicleSpecs: [spec('s1', ['page-bike', 'page-car'])] }, vehicleMap);
-    expect(pull.vehicleSpecs.rows.map((r) => [r.notionId, r.vehicleAppId])).toEqual([['s1', 'bike'], ['s1', 'car']]);
+    const pull = parseReference({ componentSpecs: [spec('s1', ['page-bike', 'page-car'])] }, vehicleMap);
+    expect(pull.componentSpecs.rows.map((r) => [r.notionId, r.vehicleAppId])).toEqual([['s1', 'bike'], ['s1', 'car']]);
   });
 
   it('skips a row whose vehicle is unknown or removed, with a warning', () => {
-    const pull = parseReference({ vehicleSpecs: [spec('s1', ['page-gone']), spec('s2', []), spec('s3', ['page-bike', 'page-gone'])] }, vehicleMap);
-    expect(pull.vehicleSpecs.rows.map((r) => [r.notionId, r.vehicleAppId])).toEqual([['s3', 'bike']]);
-    expect(pull.vehicleSpecs.warnings.join('\n')).toContain('is not in the app or was removed, skipped');
-    expect(pull.vehicleSpecs.warnings.join('\n')).toContain('has no vehicle, skipped');
+    const pull = parseReference({ componentSpecs: [spec('s1', ['page-gone']), spec('s2', []), spec('s3', ['page-bike', 'page-gone'])] }, vehicleMap);
+    expect(pull.componentSpecs.rows.map((r) => [r.notionId, r.vehicleAppId])).toEqual([['s3', 'bike']]);
+    expect(pull.componentSpecs.warnings.join('\n')).toContain('is not in the app or was removed, skipped');
+    expect(pull.componentSpecs.warnings.join('\n')).toContain('has no vehicle, skipped');
   });
 
   it('does not count a plan skipped for its vehicle as vanished', () => {
