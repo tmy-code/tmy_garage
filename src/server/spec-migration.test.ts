@@ -33,6 +33,20 @@ function seedNotion() {
     id: 'page-type-oil',
     properties: { Nom: titleValue('Huile moteur'), Catégorie: selectValue('Moteur'), Famille: selectValue('Fluide'), Notes: richValue('') },
   });
+  dbOf('db-consumableTypes').pages.push({
+    id: 'page-type-wipers',
+    properties: { Nom: titleValue("Balais d'essuie-glace"), Catégorie: selectValue('Moteur'), Famille: selectValue('Pièce'), Notes: richValue('') },
+  });
+  const carLine = (id: string, name: string, typeId: string) =>
+    dbOf('db-itemSpecs').pages.push({
+      id,
+      in_trash: false,
+      properties: { Désignation: titleValue(name), Véhicule: relationValue('page-car'), Type: relationValue(typeId), Spécification: richValue('Texte du propriétaire'), 'Réf. OEM': richValue(''), Capacité: richValue(''), Quantité: numberValue(null), 'Produit retenu': relationValue(), 'Produits compatibles': relationValue(), Statut: selectValue('Confirmé') },
+    });
+  // The owner's lines are in French and prefixed with the vehicle; the Spec Lines are in English.
+  carLine('page-car-oil', 'Voiture test – Huile moteur', 'page-type-oil');
+  carLine('page-car-wiper-front', "Voiture test – Balais d'essuie-glace avant", 'page-type-wipers');
+  carLine('page-car-wiper-rear', "Voiture test – Balai d'essuie-glace arrière", 'page-type-wipers');
   // An Item Spec the owner already made for the bike: a line with the same name is linked, not created again.
   dbOf('db-itemSpecs').pages.push({
     id: 'page-brake',
@@ -65,7 +79,9 @@ beforeEach(() => {
       ('l-drain', 'bike', 'Bouchon de vidange', '25 N·m', NULL, 'torque', 'engine', 0),
       ('l-tyre', 'bike', 'Pneu avant', '120/70 ZR17', 'OEM-9', 'other', 'chassis', 0),
       ('l-empty', 'bike', 'Filtre à huile', '', NULL, 'parts', 'engine', 1),
-      ('l-sold', 'sold', 'Huile moteur', '5W-30', NULL, 'fluids', NULL, 0);
+      ('l-sold', 'sold', 'Huile moteur', '5W-30', NULL, 'fluids', NULL, 0),
+      ('l-eoil', 'car', 'Engine oil', '5W-40', NULL, 'fluids', 'engine', 0),
+      ('l-wipers', 'car', 'Wiper blades', '600 mm', NULL, 'parts', 'chassis', 1);
     INSERT INTO vehicle_parts (id, vehicle_id, name, unit, quantity, spec_line_id) VALUES
       ('part-oil', 'bike', 'Motul 7100 10W-40', 'litre', 3.2, 'l-oil'),
       ('part-oil-2', 'bike', 'Autre huile', 'litre', 3.2, 'l-oil'),
@@ -84,23 +100,29 @@ describe('migrateSpecLines', () => {
     expect(count('spec_line_moves')).toBe(0);
     expect(count('vehicle_consumables')).toBe(0);
     expect(db.prepare("SELECT item_spec_id FROM vehicle_parts WHERE id = 'part-oil'").get()).toEqual({ item_spec_id: null });
-    expect(report).toMatchObject({ dryRun: true, created: 4, linked: 1, skipped: 2, itemsRepointed: 1, itemsUnlinked: 1 });
+    expect(report).toMatchObject({ dryRun: true, created: 3, linked: 2, skipped: 4, itemsRepointed: 1, itemsUnlinked: 1 });
     const move = (id: string) => report.moves.find((m) => m.specLineId === id)!;
     expect(move('l-oil')).toMatchObject({ target: 'item_spec', action: 'create', items: 2, preview: { Désignation: 'Huile moteur', Type: 'Huile moteur', Spécification: '10W-40', Capacité: '3,2 L', 'Réf. OEM': 'OEM-1', Statut: 'À confirmer' } });
     expect(move('l-brake')).toMatchObject({ action: 'link' });
-    expect(move('l-plug')).toMatchObject({ target: 'item_spec', action: 'create', reason: 'type_not_found', preview: { Type: null, Spécification: 'NGK CR8E', Capacité: null } });
+    // The English label goes through the name map and links to the owner's French line; Notion's text is kept.
+    expect(move('l-eoil')).toMatchObject({ action: 'link', preview: { Désignation: 'Voiture test – Huile moteur' } });
+    // No type of that name in Notion: left as an old line, with a warning.
+    expect(move('l-plug')).toMatchObject({ target: 'item_spec', action: 'skip', reason: 'type_not_found' });
+    // Two lines of that type on the vehicle: ambiguous, left alone.
+    expect(move('l-wipers')).toMatchObject({ action: 'skip', reason: 'ambiguous' });
     expect(move('l-drain')).toMatchObject({ target: 'component_spec', action: 'create', preview: { Valeur: 25, Unité: 'N·m', Statut: 'À confirmer' } });
     expect(move('l-tyre')).toMatchObject({ target: 'component_spec', preview: { Valeur: null, Source: 'Appli : 120/70 ZR17 · OEM OEM-9' } });
     expect(move('l-empty')).toMatchObject({ action: 'skip', reason: 'empty' });
     expect(move('l-sold')).toMatchObject({ action: 'skip', reason: 'vehicle_not_in_notion' });
     expect(report.warnings.join('\n')).toContain('"Bougie"');
+    expect(report.warnings.join(' ')).toContain('"Wiper blades"');
   });
 
   it('moves the lines, marks every page À confirmer, links instead of creating, and re-points the items', async () => {
     const report = await run(false);
-    expect(report).toMatchObject({ dryRun: false, created: 4, linked: 1, skipped: 2, itemsRepointed: 1, itemsUnlinked: 1 });
+    expect(report).toMatchObject({ dryRun: false, created: 3, linked: 2, skipped: 4, itemsRepointed: 1, itemsUnlinked: 1 });
     const creates = workspace.writes.filter((w) => w.method === 'POST' && w.path === '/pages');
-    expect(creates).toHaveLength(4);
+    expect(creates).toHaveLength(3);
     for (const w of creates) expect(w.body.properties['Statut']).toEqual({ select: { name: 'À confirmer' } });
     const drain = creates.find((w) => w.body.properties['Élément']?.title[0].text.content === 'Bouchon de vidange')!.body.properties;
     expect(drain['Valeur']).toEqual({ number: 25 });
@@ -109,6 +131,7 @@ describe('migrateSpecLines', () => {
     expect(workspace.writes.some((w) => w.method === 'PATCH')).toBe(false);
 
     expect(count('spec_line_moves')).toBe(5);
+    expect(db.prepare("SELECT notion_id FROM spec_line_moves WHERE spec_line_id = 'l-eoil'").get()).toEqual({ notion_id: 'page-car-oil' });
     expect(db.prepare("SELECT target, created_page FROM spec_line_moves WHERE spec_line_id = 'l-brake'").get()).toEqual({ target: 'item_spec', created_page: 0 });
     expect(db.prepare("SELECT created_page FROM spec_line_moves WHERE spec_line_id = 'l-oil'").get()).toEqual({ created_page: 1 });
     // The new pages are in the app already, and the items point at them (only where they pointed at nothing).
@@ -118,7 +141,7 @@ describe('migrateSpecLines', () => {
     expect(db.prepare("SELECT item_spec_id FROM vehicle_parts WHERE id = 'part-drain'").get()).toEqual({ item_spec_id: null });
     expect(db.prepare("SELECT confirmation FROM vehicle_consumables WHERE id = ?").get(oil.id)).toEqual({ confirmation: 'to_confirm' });
     // Nothing is deleted: the lines stay, and only the unmoved ones remain in the snapshot.
-    expect(count('spec_lines')).toBe(7);
+    expect(count('spec_lines')).toBe(9);
   });
 
   it('is idempotent: a second run moves nothing and writes nothing', async () => {
@@ -128,7 +151,7 @@ describe('migrateSpecLines', () => {
     expect(workspace.writes).toHaveLength(written);
     expect(again).toMatchObject({ created: 0, linked: 0, itemsRepointed: 0 });
     expect(again.moves.every((m) => m.action === 'skip')).toBe(true);
-    expect(again.moves.map((m) => m.specLineId).sort()).toEqual(['l-empty', 'l-sold']);
+    expect(again.moves.map((m) => m.specLineId).sort()).toEqual(['l-empty', 'l-plug', 'l-sold', 'l-wipers']);
     expect(count('spec_line_moves')).toBe(5);
   });
 

@@ -31,7 +31,7 @@ export interface SpecMove {
   group: SpecGroup;
   target: 'item_spec' | 'component_spec';
   action: 'create' | 'link' | 'skip';
-  reason?: 'vehicle_not_in_notion' | 'empty' | 'already_moved' | 'type_not_found';
+  reason?: 'vehicle_not_in_notion' | 'empty' | 'already_moved' | 'type_not_found' | 'ambiguous';
   preview?: Record<string, string | number | null>;
   /** Vehicle Items pointing at this line. */
   items: number;
@@ -47,6 +47,37 @@ export interface SpecMigrationReport {
   itemsUnlinked: number;
   warnings: string[];
 }
+
+/**
+ * The Spec Lines were typed in English; the Notion catalogue is in French. This maps a Spec Line label to the Consumable
+ * Type it is about (keys and values compared with refKey). A label that is already a type name needs no entry.
+ */
+const TYPE_NAMES: Record<string, string> = {
+  'engine oil': 'Huile moteur',
+  'gearbox oil': 'Huile de boîte de vitesse',
+  coolant: 'Liquide de refroidissement',
+  'brake fluid': 'Liquide de frein',
+  'oil filter': 'Filtre à huile',
+  'air filter': 'Filtre à air',
+  'cabin filter': "Filtre d'habitacle",
+  'spark plug': 'Bougies',
+  'spark plugs': 'Bougies',
+  'front brake pads': 'Plaquettes de frein avant',
+  'rear brake pads': 'Plaquettes de frein arrière',
+  'front brake discs': 'Disques de frein avant',
+  'rear brake discs': 'Disques de frein arrière',
+  'accessory belt': "Courroie d'accessoires",
+  'accessory belt and tensioner': "Courroie d'accessoires",
+  'front tyre': 'Pneu avant',
+  'front tyres': 'Pneu avant',
+  'rear tyre': 'Pneu arrière',
+  'rear tyres': 'Pneu arrière',
+  'wiper blades': "Balais d'essuie-glace",
+  'drain washer': 'Joint de vidange',
+  chain: 'Chaîne',
+  'front sprocket': 'Pignon de sortie de boîte (PSB)',
+  'rear sprocket': 'Couronne',
+};
 
 /** "10W-40, 3,2 L" gives the grade and the capacity. */
 const CAPACITY = /^(.*?)(?:[,;·]\s*|\s+)?(\d+(?:[.,]\d+)?\s?(?:l|litres?|ml|cl))\s*$/i;
@@ -170,25 +201,37 @@ export async function migrateSpecLines(opts: { db: DatabaseSync; garageId: strin
       }
 
       if (target === 'item_spec') {
-        const type = pull.consumableTypes.rows.find((t) => refKey(t.name) === refKey(label)) ?? null;
+        const wanted = TYPE_NAMES[refKey(label)] ?? label;
+        const type = pull.consumableTypes.rows.find((t) => refKey(t.name) === refKey(wanted)) ?? null;
         const here = pull.itemSpecs.rows.filter((r: ItemSpecRow) => r.vehicleAppId === line.vehicle_id);
-        const existing =
-          here.find((r) => refKey(r.name) === refKey(label)) ?? (type ? (here.filter((r) => r.typeNotionId === type.notionId).length === 1 ? here.find((r) => r.typeNotionId === type.notionId) : undefined) : undefined);
+        const ofType = type ? here.filter((r) => r.typeNotionId === type.notionId) : [];
+        if (type && ofType.length > 1) {
+          // Several lines of that type on the vehicle (front and rear wipers): which one is meant is the owner's call.
+          move.action = 'skip';
+          move.reason = 'ambiguous';
+          warn(`"${label}" (${line.vehicle_name}): Notion has ${ofType.length} lines of type "${type.name}"; left as it is, link it in Notion if needed`);
+          continue;
+        }
+        const existing = here.find((r) => refKey(r.name) === refKey(label)) ?? ofType[0];
         if (existing) {
+          // Already in Notion, and richer than the old line: Notion's text wins, nothing is written to it.
           move.action = 'link';
           entry.linkNotionId = existing.notionId;
           move.preview = { Désignation: existing.name };
           continue;
         }
+        if (!type) {
+          // No Consumable Type to put it under, and the app never creates types: it stays an old line.
+          move.action = 'skip';
+          move.reason = 'type_not_found';
+          warn(`"${label}" (${line.vehicle_name}): no consumable type of that name in Notion; left as it is, add the type in Notion if you want it there`);
+          continue;
+        }
         // 3. Item preview.
         const { specification, capacity } = splitItemValue(value);
-        if (!type) {
-          move.reason = 'type_not_found';
-          warn(`"${label}" (${line.vehicle_name}): no consumable type of that name in Notion, so Type stays empty; set it in Notion`);
-        }
         const input: ItemSpecInput = { name: label, typeId: null, specification, oemRef: oem, capacity, quantity: null, chosenProductId: null, confirmation: 'to_confirm' };
-        entry.properties = build(label, () => itemSpecProperties(input, targetOf('itemSpecs'), { vehiclePageIds: [vehiclePageId], typeNotionId: type?.notionId ?? null, chosenProductNotionId: null }));
-        move.preview = { Désignation: label, Type: type?.name ?? null, Spécification: specification, Capacité: capacity, 'Réf. OEM': oem, Statut: 'À confirmer' };
+        entry.properties = build(label, () => itemSpecProperties(input, targetOf('itemSpecs'), { vehiclePageIds: [vehiclePageId], typeNotionId: type.notionId, chosenProductNotionId: null }));
+        move.preview = { Désignation: label, Type: type.name, Spécification: specification, Capacité: capacity, 'Réf. OEM': oem, Statut: 'À confirmer' };
         continue;
       }
 
