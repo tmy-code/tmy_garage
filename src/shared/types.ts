@@ -123,14 +123,12 @@ export interface Tool {
   notionId: string;
 }
 
-/** What one Vehicle takes of a Consumable Type: specification, OEM reference, capacity, quantity, products. */
-export interface VehicleConsumable {
+/** What one Vehicle takes of a fluid or part (Item Spec), kept in Notion; stored in table vehicle_consumables. */
+export interface ItemSpec {
   id: string;
   vehicleId: string;
   name: string;
   typeId: string | null;
-  /** Extension point: a link to a spec, unused for now. */
-  specId?: string | null;
   /** The specification as written in Notion (grade, norm, size). */
   specification: string | null;
   oemRef: string | null;
@@ -142,7 +140,7 @@ export interface VehicleConsumable {
   notionId: string;
 }
 
-/** One spec of a Vehicle from Notion (a torque, a size, a capacity). Read-only. */
+/** One spec of a Vehicle (a torque, a size, a capacity). Kept in Notion, editable on the desktop. */
 export interface ComponentSpec {
   id: string;
   vehicleId: string;
@@ -211,18 +209,20 @@ export interface VehiclePart {
   price: number | null;
   /** The Task it is usually bought for; its parts are suggested first when that Task is ticked. */
   taskId: string | null;
-  /** The Spec Line it is for, shown next to it; nothing is copied from it. */
+  /** The Item Spec it is for, shown next to it; nothing is copied from it. */
+  itemSpecId: string | null;
+  /** Legacy: the Spec Line it was for; read-only, shown only while that line is not moved. */
   specLineId: string | null;
   /** Shop, link, comparison. */
   notes: string | null;
 }
 
-/** One line of the owner's Notion "Achats" database: what was bought, for which article (a vehicle's consumable line). Read only. */
+/** One line of the owner's Notion "Achats" database: what was bought, for which article (a vehicle's Item Spec). Read only. */
 export interface NotionPurchase {
   id: string;
   notionId: string;
   date: IsoDate;
-  /** The Notion page id of the "Consommables par véhicule" line; matches VehicleConsumable.notionId. */
+  /** The Notion page id of the "Spécifications d'articles" line; matches ItemSpec.notionId. */
   articleNotionId: string;
   productId: string | null;
   quantity: number | null;
@@ -275,7 +275,7 @@ export interface Fillup {
   notes: string | null;
 }
 
-/** A stored file (PDF or photo), attached to one Vehicle or Service; on a Service it is the receipt. */
+/** A stored file (PDF or photo), attached to one Vehicle or Service; on a Service it is the receipt (added and removed on the desktop only, never sent to Notion). */
 export interface GarageDocument {
   id: string;
   vehicleId: string | null;
@@ -298,6 +298,7 @@ export interface Snapshot {
   readings: OdometerReading[];
   /** The fuel log of every Vehicle. */
   fillups: Fillup[];
+  /** Spec Lines not moved to Notion yet (or that cannot be, e.g. sold vehicles). Read-only, legacy. */
   specLines: SpecLine[];
   vehicleParts: VehiclePart[];
   /** Document details only; the files are fetched on demand. */
@@ -310,7 +311,7 @@ export interface Snapshot {
   consumableTypes: ConsumableType[];
   products: Product[];
   tools: Tool[];
-  vehicleConsumables: VehicleConsumable[];
+  itemSpecs: ItemSpec[];
   componentSpecs: ComponentSpec[];
   /** Bought items read from Notion. */
   notionPurchases: NotionPurchase[];

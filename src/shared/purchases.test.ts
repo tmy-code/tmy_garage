@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { buyStates, latestPurchase } from './purchases.ts';
-import type { ConsumableType, MaintenanceTask, NotionPurchase, RefTask, Snapshot, VehicleConsumable } from './types.ts';
+import type { ConsumableType, MaintenanceTask, NotionPurchase, RefTask, Snapshot, ItemSpec } from './types.ts';
 
 const oil: ConsumableType = { id: 'ct-oil', name: 'Huile moteur', category: null, family: 'fluid', notes: null, notionId: 'n-ct-oil' };
 const filter: ConsumableType = { id: 'ct-filter', name: 'Filtre', category: null, family: 'part', notes: null, notionId: 'n-ct-filter' };
 
-const line = (id: string, overrides: Partial<VehicleConsumable> = {}): VehicleConsumable => ({
+const line = (id: string, overrides: Partial<ItemSpec> = {}): ItemSpec => ({
   id,
   vehicleId: 'v1',
   name: id,
@@ -80,7 +80,7 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     consumableTypes: [oil, filter],
     products: [],
     tools: [],
-    vehicleConsumables: [line('vc-oil'), line('vc-filter', { typeId: 'ct-filter' })],
+    itemSpecs: [line('vc-oil'), line('vc-filter', { typeId: 'ct-filter' })],
     componentSpecs: [],
     notionPurchases: [],
     notion: null,
@@ -136,13 +136,13 @@ describe('buyStates', () => {
   });
 
   it('is not tracked for a type the vehicle has no line for', () => {
-    const s = snapshot({ vehicleConsumables: [line('vc-oil')] });
+    const s = snapshot({ itemSpecs: [line('vc-oil')] });
     const states = buyStates(s, 'v1', [{ taskId: 't-oil', lastDone: null }]);
     expect(states.find((x) => x.type.id === 'ct-filter')).toMatchObject({ tracked: false, bought: null });
   });
 
   it('keeps the lines of another vehicle apart', () => {
-    const s = snapshot({ vehicleConsumables: [line('vc-oil', { vehicleId: 'v2' })], notionPurchases: [achat('a1', 'vc-oil', '2026-06-01')] });
+    const s = snapshot({ itemSpecs: [line('vc-oil', { vehicleId: 'v2' })], notionPurchases: [achat('a1', 'vc-oil', '2026-06-01')] });
     expect(buyStates(s, 'v1', [{ taskId: 't-oil-b', lastDone: null }])).toMatchObject([{ type: { id: 'ct-oil' }, tracked: false, bought: null }]);
   });
 

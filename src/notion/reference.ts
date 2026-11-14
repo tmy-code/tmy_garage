@@ -1,5 +1,5 @@
-// Reads the owner's hand-made Notion databases (task catalogue, plans, types, products, tools, per-vehicle consumables
-// and specs) into typed rows. Pure: it takes the pages Notion returned and knows nothing of the API or the database.
+// Reads the owner's hand-made Notion databases (task catalogue, plans, types, products, tools, per-vehicle Item Specs
+// and Component Specs) into typed rows. Pure: it takes the pages Notion returned and knows nothing of the API or the database.
 // Relations keep Notion page ids; the apply step turns them into the app's ids.
 import type { PartCategory } from '../shared/catalogue.ts';
 import type { IsoDate } from '../shared/dates.ts';
@@ -78,7 +78,8 @@ export interface PlanRow {
   notes: string | null;
 }
 
-export interface VehicleConsumableRow {
+/** An Item Spec page, one row per vehicle it points at. */
+export interface ItemSpecRow {
   notionId: string;
   vehicleAppId: string;
   name: string;
@@ -110,7 +111,7 @@ export interface PurchaseRow {
   notionId: string;
   name: string;
   date: IsoDate;
-  /** The Notion page of the "Consommables par véhicule" line that was bought. */
+  /** The Notion page of the Item Spec ("Spécifications d'articles" line) that was bought. */
   articleNotionId: string;
   productNotionId: string | null;
   quantity: number | null;
@@ -125,7 +126,7 @@ export interface ReferencePull {
   products: DbPull<ProductRow>;
   tools: DbPull<ToolRow>;
   plans: DbPull<PlanRow>;
-  vehicleConsumables: DbPull<VehicleConsumableRow>;
+  itemSpecs: DbPull<ItemSpecRow>;
   componentSpecs: DbPull<ComponentSpecRow>;
   purchases: DbPull<PurchaseRow>;
   /** Plan pages that exist in Notion but could not be used (unknown vehicle or task): they are not "vanished". */
@@ -342,11 +343,60 @@ function usableColumns(db: ReferenceDb, pages: any[], pull: DbPull<unknown>): Se
   return usable;
 }
 
+/** One row per vehicle when an Item Spec page points at several. */
+function itemSpecRows(reader: RowReader, page: any, name: string, vehicleOf: Map<string, string>): ItemSpecRow[] {
+  return reader.vehicles(page, name, vehicleOf).map((vehicleAppId) => ({
+    notionId: page.id,
+    vehicleAppId,
+    name,
+    typeNotionId: reader.rel(page, 'Type')[0] ?? null,
+    specification: reader.text(page, 'Spécification'),
+    oemRef: reader.text(page, 'Réf. OEM'),
+    capacity: reader.text(page, 'Capacité'),
+    quantity: reader.num(page, 'Quantité'),
+    compatibleProductNotionIds: reader.rel(page, 'Produits compatibles'),
+    chosenProductNotionId: reader.rel(page, 'Produit retenu')[0] ?? null,
+    confirmation: reader.confirmation(page),
+  }));
+}
+
+/** One row per vehicle when a Component Spec page points at several. */
+function componentSpecRows(reader: RowReader, page: any, name: string, vehicleOf: Map<string, string>): ComponentSpecRow[] {
+  const p = page.properties?.['Valeur'];
+  const value = p?.type === 'number' ? (p.number === null ? '' : String(p.number)) : (reader.text(page, 'Valeur') ?? '');
+  return reader.vehicles(page, name, vehicleOf).map((vehicleAppId) => ({
+    notionId: page.id,
+    vehicleAppId,
+    label: name,
+    componentTypeNotionId: reader.rel(page, 'Composant')[0] ?? null,
+    category: reader.select(page, 'Catégorie'),
+    value,
+    unit: reader.select(page, 'Unité'),
+    source: reader.text(page, 'Source'),
+    confirmation: reader.confirmation(page),
+  }));
+}
+
+/** One spec page as the pull would read it (one row per known vehicle); columns judged from this page. */
+export function parseSpecPage(key: 'itemSpecs', page: any, vehiclePageToAppId: Map<string, string>): { rows: ItemSpecRow[]; warnings: string[] };
+export function parseSpecPage(key: 'componentSpecs', page: any, vehiclePageToAppId: Map<string, string>): { rows: ComponentSpecRow[]; warnings: string[] };
+export function parseSpecPage(key: 'itemSpecs' | 'componentSpecs', page: any, vehiclePageToAppId: Map<string, string>): { rows: (ItemSpecRow | ComponentSpecRow)[]; warnings: string[] } {
+  const db = REFERENCE_DBS.find((d) => d.key === key)!;
+  const pull: DbPull<unknown> = { rows: [], complete: true, warnings: [] };
+  const reader = new RowReader(db, usableColumns(db, [page], pull), pull.warnings, new Map());
+  if (!pull.complete) return { rows: [], warnings: pull.warnings };
+  const name = reader.title(page);
+  if (!name) return { rows: [], warnings: pull.warnings };
+  const rows = key === 'itemSpecs' ? itemSpecRows(reader, page, name, vehiclePageToAppId) : componentSpecRows(reader, page, name, vehiclePageToAppId);
+  return { rows, warnings: pull.warnings };
+}
+
 /**
  * Turns the pages of each database (by ReferenceKey, plus `vehicles` for the app's Véhicules database) into typed rows.
- * `vehiclePageToAppId` says which Notion page is which of the app's vehicles (see vehiclePageMap).
+ * `vehiclePageToAppId` says which Notion page is which of the app's vehicles (see vehiclePageMap). `titles` gives the title
+ * a database was actually found under (it may be an earlier one), for the warnings.
  */
-export function parseReference(pages: Record<string, any[]>, vehiclePageToAppId: Map<string, string>): ReferencePull {
+export function parseReference(pages: Record<string, any[]>, vehiclePageToAppId: Map<string, string>, titles: Partial<Record<ReferenceKey, string>> = {}): ReferencePull {
   const vocab = new Map<string, Set<string>>();
   const empty = <Row>(): DbPull<Row> => ({ rows: [], complete: true, warnings: [] });
   const result: ReferencePull = {
@@ -356,7 +406,7 @@ export function parseReference(pages: Record<string, any[]>, vehiclePageToAppId:
     products: empty(),
     tools: empty(),
     plans: empty(),
-    vehicleConsumables: empty(),
+    itemSpecs: empty(),
     componentSpecs: empty(),
     purchases: empty(),
     skippedPlanNotionIds: [],
@@ -374,7 +424,8 @@ export function parseReference(pages: Record<string, any[]>, vehiclePageToAppId:
       pull.warnings.push(`${db.title}: the database was not found under the parent page`);
       continue;
     }
-    const reader = new RowReader(db, usableColumns(db, list, pull), pull.warnings, vocab);
+    const named: ReferenceDb = { ...db, title: titles[db.key] ?? db.title };
+    const reader = new RowReader(named, usableColumns(named, list, pull), pull.warnings, vocab);
     if (!pull.complete) continue;
     const rows = pull.rows as unknown[];
 
@@ -455,42 +506,12 @@ export function parseReference(pages: Record<string, any[]>, vehiclePageToAppId:
           } satisfies PlanRow);
           break;
         }
-        case 'vehicleConsumables':
-          // One row per vehicle when the page points at several.
-          for (const vehicleAppId of reader.vehicles(page, name, vehiclePageToAppId)) {
-            rows.push({
-              notionId: page.id,
-              vehicleAppId,
-              name,
-              typeNotionId: reader.rel(page, 'Type')[0] ?? null,
-              specification: reader.text(page, 'Spécification'),
-              oemRef: reader.text(page, 'Réf. OEM'),
-              capacity: reader.text(page, 'Capacité'),
-              quantity: reader.num(page, 'Quantité'),
-              compatibleProductNotionIds: reader.rel(page, 'Produits compatibles'),
-              chosenProductNotionId: reader.rel(page, 'Produit retenu')[0] ?? null,
-              confirmation: reader.confirmation(page),
-            } satisfies VehicleConsumableRow);
-          }
+        case 'itemSpecs':
+          rows.push(...itemSpecRows(reader, page, name, vehiclePageToAppId));
           break;
-        case 'componentSpecs': {
-          const p = page.properties?.['Valeur'];
-          const value = p?.type === 'number' ? (p.number === null ? '' : String(p.number)) : (reader.text(page, 'Valeur') ?? '');
-          for (const vehicleAppId of reader.vehicles(page, name, vehiclePageToAppId)) {
-            rows.push({
-              notionId: page.id,
-              vehicleAppId,
-              label: name,
-              componentTypeNotionId: reader.rel(page, 'Composant')[0] ?? null,
-              category: reader.select(page, 'Catégorie'),
-              value,
-              unit: reader.select(page, 'Unité'),
-              source: reader.text(page, 'Source'),
-              confirmation: reader.confirmation(page),
-            } satisfies ComponentSpecRow);
-          }
+        case 'componentSpecs':
+          rows.push(...componentSpecRows(reader, page, name, vehiclePageToAppId));
           break;
-        }
         case 'purchases': {
           const date = reader.date(page, 'Date');
           if (date === null) {

@@ -88,7 +88,7 @@ _Avoid_: Offer, quote, bargain
 The garage-wide place in the app that lists the Vehicle Items of every Vehicle together, filterable by Vehicle. Each part still belongs to exactly one Vehicle.
 
 **Receipt**:
-The photo or PDF of the invoice attached to a Service.
+The photo or PDF of the invoice attached to a Service. Added on the desktop only; the phone shows it. It stays in the app and never goes to Notion.
 _Avoid_: Invoice (as a record), paper
 
 **Fill-up**:
@@ -178,7 +178,7 @@ A Component Used as it appears in the Notion journal, linked to the Intervention
 ## Other
 
 **Phone**:
-The Android app. It records Services, Odometer Readings and Fill-ups, and shows everything else read-only.
+The Android app. It records Services, Odometer Readings and Fill-ups, and shows everything else read-only. Receipts are added on the desktop.
 
 **Desktop**:
 The web app in a browser, plus Notion. It edits everything else (Vehicle Profile, Plan, Item Specs, Component Specs, Vehicle Items, Templates, Settings) and can still log Services, Odometer Readings and Fill-ups. The split follows the platform, not the screen width.

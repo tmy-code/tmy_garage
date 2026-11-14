@@ -1,5 +1,5 @@
 ---
-status: proposed (2026-11-14)
+status: accepted (2026-11-14)
 ---
 
 # Specs are editable in the app and in Notion; the phone only logs
@@ -13,9 +13,13 @@ The owner uses the phone in the garage to record Services, Odometer Readings and
 - **Notion is the master copy.** A desktop edit is written to Notion first and shown once Notion accepts it; the desktop cannot edit specs offline. No conflict rule is needed. This reverses ADR 0007's "the app never writes the owner's hand-made databases" for these two databases only.
 - **Migration.** A one-off script, dry run first, creates the Notion pages for the existing Spec Lines and re-points each Vehicle Item's spec link. It runs against the NAS snapshot, never a database copy. The frozen *Caractéristiques* database is archived by the owner, not deleted.
 - **Notion names.** *Consommables par véhicule* becomes *Spécifications d'articles* and *Spécifications* becomes *Spécifications de composants*. The app finds databases by title, so it accepts both the old and the new title during the changeover; the Notion rename is the last step, done after the release and with the owner's go-ahead.
+- **Receipts are desktop-only.** A Service's Receipts (Documents) are added and removed on the desktop; the phone shows them read-only. They stay in the app and never go to Notion.
 - **Vehicle Part becomes Vehicle Item** (the word the screens already use). The code rename is a separate task.
 
 ## Consequences
 
 - Rejected: keeping both lists and syncing each two-way (two places for one figure, no rule for which wins); last-write-wins (needs timestamps and offline merging for little gain with one editor).
-- Phones only read specs, so the offline snapshot is unchanged and no `API_VERSION` bump is needed for the phone/desktop split. Moving the spec link from a Spec Line to an Item Spec changes `/api`: bump `API_VERSION` then.
+- Phones only read specs, so the offline snapshot is unchanged and no `API_VERSION` bump is needed for the phone/desktop split. Moving the spec link from a Spec Line to an Item Spec changes `/api`: `API_VERSION` is 3.
+- The SQL table keeps the name `vehicle_consumables` for the Item Specs (the API and the snapshot say Item Specs, `itemSpecs`), so a rollback to the previous image still works on the additive schema.
+- The spec endpoints live under `/api/notion/` (they wait for Notion, up to 120 s on the client, and pass a 502 or 503 through as an answer, not as "offline").
+- The Spec Lines not moved to Notion (a sold Vehicle has no Notion page, an empty line has nothing to move) stay visible, read-only, under "Old specs"; nothing is deleted.

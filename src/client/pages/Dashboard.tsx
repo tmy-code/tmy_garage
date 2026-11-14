@@ -5,11 +5,12 @@ import { buyStates } from '../../shared/purchases.ts';
 import { averageConsumption, consumptionOf } from '../../shared/fuel.ts';
 import type { Snapshot, Vehicle } from '../../shared/types.ts';
 import { upcoming, type Upcoming } from '../../shared/upcoming.ts';
-import { BuyChips, FormError, Layout, NeedsConnection } from '../components.tsx';
+import { BuyChips, DesktopOnlyNote, FormError, Layout, NeedsConnection } from '../components.tsx';
 import { formatDate, formatDueIn, formatDecimal, formatKm, parseNumber, taskName } from '../format.ts';
 import { useT, type Messages } from '../i18n.ts';
 import { VehicleIcon } from '../brands.tsx';
 import { Icon } from '../icons.tsx';
+import { isDesktop } from '../native.ts';
 import { newId } from '../api.ts';
 import { enqueue, online } from '../store.ts';
 import { useSubmit } from './SetupForms.tsx';
@@ -30,16 +31,24 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
       {snapshot.vehicles.length === 0 ? (
         <div className="empty">
           <p>{t.dashboard.noVehicles}</p>
-          <a className="button" href="#/vehicles/new">
-            {t.dashboard.addFirst}
-          </a>
+          {isDesktop ? (
+            <a className="button" href="#/vehicles/new">
+              {t.dashboard.addFirst}
+            </a>
+          ) : (
+            <DesktopOnlyNote />
+          )}
         </div>
       ) : shown.length === 0 ? (
         <div className="empty">
           <p>{t.dashboard.noneShown}</p>
-          <a className="button" href="#/vehicles/manage">
-            {t.dashboard.manage}
-          </a>
+          {isDesktop ? (
+            <a className="button" href="#/vehicles/manage">
+              {t.dashboard.manage}
+            </a>
+          ) : (
+            <DesktopOnlyNote />
+          )}
         </div>
       ) : (
         <div className="card-grid">
@@ -54,7 +63,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
           ))}
         </div>
       )}
-      {snapshot.vehicles.length > 0 ? (
+      {snapshot.vehicles.length > 0 && isDesktop ? (
         <div className="actions page-buttons">
           <a className="button" href="#/vehicles/manage">
             {t.dashboard.manage}
@@ -198,6 +207,8 @@ function VehicleCard({ vehicle, items, snapshot, today }: { vehicle: Vehicle; it
 /** Tasks never done have no due date and cannot remind: a full-height row that opens the vehicle's set-up block. */
 function SetupLink({ vehicle, text }: { vehicle: Vehicle; text: string }) {
   const t = useT();
+  // Setting a task's starting point is done on the computer: the phone only says how many are missing.
+  if (!isDesktop) return <p className="muted">{text}</p>;
   return (
     <a className="setup-link" href={`#/vehicles/${vehicle.id}/setup`}>
       <span>{text}</span>

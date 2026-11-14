@@ -1431,6 +1431,8 @@ body > .banner {
   .side-editor {
     position: sticky;
     top: 72px;
+    max-height: calc(100vh - 88px);
+    overflow-y: auto;
   }
 
   .columns,
@@ -1646,4 +1648,11 @@ body > .banner {
 
 .history-head .edit-hint {
   margin-left: auto;
+}
+
+/* The delete button of an inline editor sits apart from Cancel and Save, so it is not hit by mistake. */
+.inline-editor-danger {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
 }

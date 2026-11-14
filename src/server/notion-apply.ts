@@ -8,7 +8,7 @@ import { applicableRefTasks, resolveInterval } from '../shared/applicability.ts'
 import type { PartCategory } from '../shared/catalogue.ts';
 import type { RefTask, Snapshot } from '../shared/types.ts';
 import { refKey } from '../shared/workshop.ts';
-import type { ReferencePull } from '../notion/reference.ts';
+import type { ComponentSpecRow, ItemSpecRow, ReferencePull } from '../notion/reference.ts';
 
 type Row = Record<string, any>;
 
@@ -18,7 +18,7 @@ export interface DbCounts {
   removed: number;
 }
 
-export const COUNT_KEYS = ['tasks', 'componentTypes', 'consumableTypes', 'products', 'tools', 'vehicleConsumables', 'componentSpecs', 'purchases', 'maintenanceTasks'] as const;
+export const COUNT_KEYS = ['tasks', 'componentTypes', 'consumableTypes', 'products', 'tools', 'itemSpecs', 'componentSpecs', 'purchases', 'maintenanceTasks'] as const;
 export type CountKey = (typeof COUNT_KEYS)[number];
 
 export interface ApplyReport {
@@ -51,6 +51,105 @@ const parseList = (value: unknown): string[] => {
     return [];
   }
 };
+
+/** The app's id of each Notion referential page (Notion page id to the app's row id), for the rows Notion still has. */
+export interface NotionIdMaps {
+  consumableTypes: Map<string, string>;
+  products: Map<string, string>;
+  componentTypes: Map<string, string>;
+}
+
+export function notionIdMaps(db: DatabaseSync, garageId: string): NotionIdMaps {
+  const of = (table: string) =>
+    new Map((db.prepare(`SELECT id, notion_id FROM ${table} WHERE garage_id = ? AND notion_removed = 0`).all(garageId) as Row[]).map((r) => [r.notion_id as string, r.id as string]));
+  return { consumableTypes: of('consumable_types'), products: of('products'), componentTypes: of('ref_component_types') };
+}
+
+/** The columns of a vehicle_consumables row (an Item Spec) for one pulled row. */
+export function itemSpecValues(r: ItemSpecRow, maps: NotionIdMaps, warn?: (message: string) => void): Record<string, unknown> {
+  const compatible = r.compatibleProductNotionIds.flatMap((id) => (maps.products.has(id) ? [maps.products.get(id)!] : []));
+  if (warn && compatible.length < new Set(r.compatibleProductNotionIds).size) warn(`Item Spec "${r.name}": a linked item is not in Notion's lists and was ignored`);
+  return {
+    name: r.name,
+    type_id: r.typeNotionId ? (maps.consumableTypes.get(r.typeNotionId) ?? null) : null,
+    specification: r.specification,
+    oem_ref: r.oemRef,
+    capacity: r.capacity,
+    quantity: r.quantity,
+    compatible_product_ids: [...new Set(compatible)],
+    chosen_product_id: r.chosenProductNotionId ? (maps.products.get(r.chosenProductNotionId) ?? null) : null,
+    confirmation: r.confirmation,
+  };
+}
+
+/** The columns of a component_specs row (a Component Spec) for one pulled row. */
+export function componentSpecValues(r: ComponentSpecRow, maps: NotionIdMaps): Record<string, unknown> {
+  return {
+    label: r.label,
+    component_type_id: r.componentTypeNotionId ? (maps.componentTypes.get(r.componentTypeNotionId) ?? null) : null,
+    category: r.category,
+    value: r.value,
+    unit: r.unit,
+    source: r.source,
+    confirmation: r.confirmation,
+  };
+}
+
+const SPEC_TABLE = { itemSpecs: 'vehicle_consumables', componentSpecs: 'component_specs' } as const;
+
+/**
+ * Stores one spec page as Notion returned it: upserts (vehicle_id, notion_id) per row (notion_removed = 0), and marks
+ * the owned Vehicles of this garage that are no longer on the page (notion_removed = 1). One transaction (or the
+ * caller's, when one is open). Returns the row's app id by vehicle id.
+ */
+export function storeSpecPage(
+  db: DatabaseSync,
+  garageId: string,
+  kind: 'itemSpecs' | 'componentSpecs',
+  notionId: string,
+  rows: (ItemSpecRow | ComponentSpecRow)[],
+): Map<string, string> {
+  const table = SPEC_TABLE[kind];
+  const maps = notionIdMaps(db, garageId);
+  const ids = new Map<string, string>();
+  const own = !db.isTransaction;
+  if (own) db.exec('BEGIN');
+  try {
+    for (const row of rows) {
+      const values = kind === 'itemSpecs' ? itemSpecValues(row as ItemSpecRow, maps) : componentSpecValues(row as ComponentSpecRow, maps);
+      const columns = Object.keys(values);
+      const storedValues = columns.map((c) => stored(values[c]));
+      const found = db.prepare(`SELECT id FROM ${table} WHERE vehicle_id = ? AND notion_id = ? AND garage_id = ?`).get(row.vehicleAppId, notionId, garageId) as Row | undefined;
+      if (found) {
+        db.prepare(`UPDATE ${table} SET ${columns.map((c) => `${c} = ?`).join(', ')}, notion_removed = 0 WHERE id = ?`).run(...storedValues, found.id);
+        ids.set(row.vehicleAppId, found.id);
+      } else {
+        const id = randomUUID();
+        const all = ['id', 'garage_id', 'notion_id', 'vehicle_id', ...columns];
+        db.prepare(`INSERT INTO ${table} (${all.join(', ')}) VALUES (${all.map(() => '?').join(', ')})`).run(id, garageId, notionId, row.vehicleAppId, ...storedValues);
+        ids.set(row.vehicleAppId, id);
+      }
+    }
+    // Owned vehicles that had this page and are no longer on it.
+    const present = rows.map((r) => r.vehicleAppId);
+    const stale = db
+      .prepare(`SELECT x.id, x.vehicle_id FROM ${table} x JOIN vehicles v ON v.id = x.vehicle_id WHERE x.garage_id = ? AND x.notion_id = ? AND x.notion_removed = 0 AND v.ownership = 'owned'`)
+      .all(garageId, notionId) as Row[];
+    for (const s of stale) if (!present.includes(s.vehicle_id)) db.prepare(`UPDATE ${table} SET notion_removed = 1 WHERE id = ?`).run(s.id);
+    if (own) db.exec('COMMIT');
+  } catch (error) {
+    if (own) db.exec('ROLLBACK');
+    throw error;
+  }
+  return ids;
+}
+
+/** Hides the rows of a spec page the app trashed (all of them, or just this Vehicle's when the page stays for others). */
+export function markSpecPageRemoved(db: DatabaseSync, garageId: string, kind: 'itemSpecs' | 'componentSpecs', notionId: string, vehicleId?: string): void {
+  const table = SPEC_TABLE[kind];
+  if (vehicleId) db.prepare(`UPDATE ${table} SET notion_removed = 1 WHERE garage_id = ? AND notion_id = ? AND vehicle_id = ?`).run(garageId, notionId, vehicleId);
+  else db.prepare(`UPDATE ${table} SET notion_removed = 1 WHERE garage_id = ? AND notion_id = ?`).run(garageId, notionId);
+}
 
 /** Brings the Notion referentials and the Vehicles' plans up to date with one pull. `snapshot` supplies the Vehicles. */
 export function applyPull(db: DatabaseSync, garageId: string, pull: ReferencePull, snapshot: Pick<Snapshot, 'vehicles'>): ApplyReport {
@@ -130,7 +229,7 @@ export function applyPull(db: DatabaseSync, garageId: string, pull: ReferencePul
 
   db.exec('BEGIN');
   try {
-    for (const key of ['tasks', 'componentTypes', 'consumableTypes', 'products', 'tools', 'vehicleConsumables', 'componentSpecs', 'purchases', 'plans'] as const) {
+    for (const key of ['tasks', 'componentTypes', 'consumableTypes', 'products', 'tools', 'itemSpecs', 'componentSpecs', 'purchases', 'plans'] as const) {
       for (const w of pull[key].warnings) warn(w);
     }
     for (const w of pull.vehicleWarnings) warn(w);
@@ -205,44 +304,19 @@ export function applyPull(db: DatabaseSync, garageId: string, pull: ReferencePul
       warn(`"${r.name ?? r.label}" is for a vehicle that is not in the app, skipped`);
       return false;
     };
+    const maps: NotionIdMaps = { consumableTypes: consumableIds, products: productIds, componentTypes: componentIds };
     syncRows(
       'vehicle_consumables',
-      'Consommables par véhicule',
-      pull.vehicleConsumables.rows.filter(knownVehicle).map((r) => ({
-        notionId: r.notionId,
-        vehicleId: r.vehicleAppId,
-        values: {
-          name: r.name,
-          type_id: r.typeNotionId ? (consumableIds.get(r.typeNotionId) ?? null) : null,
-          specification: r.specification,
-          oem_ref: r.oemRef,
-          capacity: r.capacity,
-          quantity: r.quantity,
-          compatible_product_ids: resolve(productIds, r.compatibleProductNotionIds, `Consommable "${r.name}"`),
-          chosen_product_id: r.chosenProductNotionId ? (productIds.get(r.chosenProductNotionId) ?? null) : null,
-          confirmation: r.confirmation,
-        },
-      })),
-      pull.vehicleConsumables.complete,
-      counts.vehicleConsumables,
+      "Spécifications d'articles",
+      pull.itemSpecs.rows.filter(knownVehicle).map((r) => ({ notionId: r.notionId, vehicleId: r.vehicleAppId, values: itemSpecValues(r, maps, warn) })),
+      pull.itemSpecs.complete,
+      counts.itemSpecs,
       true,
     );
     syncRows(
       'component_specs',
-      'Spécifications',
-      pull.componentSpecs.rows.filter(knownVehicle).map((r) => ({
-        notionId: r.notionId,
-        vehicleId: r.vehicleAppId,
-        values: {
-          label: r.label,
-          component_type_id: r.componentTypeNotionId ? (componentIds.get(r.componentTypeNotionId) ?? null) : null,
-          category: r.category,
-          value: r.value,
-          unit: r.unit,
-          source: r.source,
-          confirmation: r.confirmation,
-        },
-      })),
+      'Spécifications de composants',
+      pull.componentSpecs.rows.filter(knownVehicle).map((r) => ({ notionId: r.notionId, vehicleId: r.vehicleAppId, values: componentSpecValues(r, maps) })),
       pull.componentSpecs.complete,
       counts.componentSpecs,
       true,

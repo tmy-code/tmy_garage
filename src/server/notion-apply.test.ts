@@ -25,7 +25,7 @@ function emptyPull(overrides: Partial<ReferencePull> = {}): ReferencePull {
     products: empty(),
     tools: empty(),
     plans: empty(),
-    vehicleConsumables: empty(),
+    itemSpecs: empty(),
     componentSpecs: empty(),
     purchases: empty(),
     skippedPlanNotionIds: [],
@@ -316,8 +316,6 @@ describe('the built-in templates once the catalogue is active', () => {
     const res = await app.request(`/api/vehicles/${after.id}/add-from-templates`, json('POST'));
     expect(await res.json()).toMatchObject({ added: 0, skipped: 'notion_catalogue' });
     expect(tasksOf(after.id)).toEqual([]);
-    const specs = await app.request(`/api/vehicles/${after.id}/add-standard-specs`, json('POST', { lang: 'en' }));
-    expect(await specs.json()).toMatchObject({ added: 0, skipped: 'notion_catalogue' });
   });
 });
 

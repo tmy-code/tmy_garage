@@ -13,7 +13,7 @@
 | [docs/deploy.md](docs/deploy.md) | Installing or updating on the NAS |
 | `docs/ux-review-2026-11*.md` | Only when working through those reviews' recommended changes |
 
-Naming: the project, package, container and NAS folder are snake_case (`tmy_garage`); files are kebab-case (`spec-templates.ts`), except React component files in PascalCase (`Vehicle.tsx`) and upper-case docs (`CONTEXT.md`).
+Naming: the project, package, container and NAS folder are snake_case (`tmy_garage`); files are kebab-case (`session-consumables.ts`), except React component files in PascalCase (`Vehicle.tsx`) and upper-case docs (`CONTEXT.md`).
 
 ## Screen layout conventions
 

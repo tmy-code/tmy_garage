@@ -7,6 +7,7 @@ import { confirmAction, dismissToast, useFeedback } from './feedback.ts';
 import { formatDate, formatKm } from './format.ts';
 import { LANGS, messages, setLang, useT } from './i18n.ts';
 import { Icon } from './icons.tsx';
+import { isAndroidApp } from './native.ts';
 import { useRoute } from './router.ts';
 import { dismissRejected, needsServerAddress, sync, useStore } from './store.ts';
 
@@ -52,6 +53,22 @@ export function segmentedKeys(event: KeyboardEvent<HTMLElement>): void {
   const next = buttons[(at + step + buttons.length) % buttons.length]!;
   next.focus();
   next.click();
+}
+
+/** On the phone, says that what is shown is edited on the computer; nothing on the desktop. */
+export function DesktopOnlyNote() {
+  const t = useT();
+  return isAndroidApp ? <p className="muted">{t.desktop.note}</p> : null;
+}
+
+/** What a setup screen shows on the phone instead of its form (ADR 0009). */
+export function DesktopOnlyPage() {
+  const t = useT();
+  return (
+    <Layout title={t.desktop.pageTitle} back="/">
+      <p className="empty">{t.desktop.pageBody}</p>
+    </Layout>
+  );
 }
 
 export function Layout({

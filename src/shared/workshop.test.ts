@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MaintenanceTask, Snapshot } from './types.ts';
 import type { DueInfo } from './due.ts';
-import { groupByCategory, normalizeSnapshot, refKey } from './workshop.ts';
+import { groupByCategory, itemSpecText, normalizeSnapshot, refKey } from './workshop.ts';
 
 function task(overrides: Partial<MaintenanceTask>): MaintenanceTask {
   return {
@@ -63,7 +63,7 @@ const base: Snapshot = {
   fillups: [],
   documents: [],
   catalogue: [],
-  refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], componentSpecs: [], notionPurchases: [], notion: null,
+  refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], itemSpecs: [], componentSpecs: [], notionPurchases: [], notion: null,
 };
 
 describe('groupByCategory', () => {
@@ -112,7 +112,7 @@ describe('normalizeSnapshot', () => {
     const s = normalizeSnapshot(old);
     expect(s.vehicles[0]!.equipment).toEqual([]);
     expect(s.tasks[0]).toMatchObject({ refTaskId: null, notionPlanId: null });
-    for (const key of ['refTasks', 'componentTypes', 'consumableTypes', 'products', 'tools', 'vehicleConsumables', 'componentSpecs', 'notionPurchases'] as const) expect(s[key]).toEqual([]);
+    for (const key of ['refTasks', 'componentTypes', 'consumableTypes', 'products', 'tools', 'itemSpecs', 'componentSpecs', 'notionPurchases'] as const) expect(s[key]).toEqual([]);
     expect(s.notion).toBeNull();
   });
 
@@ -128,17 +128,23 @@ describe('normalizeSnapshot', () => {
     const s = normalizeSnapshot(old) as unknown as Record<string, any>;
     expect(s.vehicles[0]).toMatchObject({ ownership: 'sold', onGaragePage: false });
     expect(s.vehicles[0]).not.toHaveProperty('status');
-    expect(s.vehicleConsumables[0]).toMatchObject({ confirmation: 'to_confirm' });
-    expect(s.vehicleConsumables[0]).not.toHaveProperty('status');
+    expect(s.itemSpecs[0]).toMatchObject({ confirmation: 'to_confirm' });
+    expect(s.itemSpecs[0]).not.toHaveProperty('status');
     expect(s.componentSpecs).toMatchObject([{ id: 's', confirmation: 'confirmed' }, { id: 's2', confirmation: null }]);
     expect(s.componentSpecs[0]).not.toHaveProperty('status');
     expect(s).not.toHaveProperty('vehicleSpecs');
+    expect(s).not.toHaveProperty('vehicleConsumables');
+  });
+
+  it('gives a Vehicle Item no Item Spec when an older copy has none, and keeps the one it has', () => {
+    const old = { vehicles: [], tasks: [], services: [], readings: [], vehicleParts: [{ id: 'p1', name: 'Huile' }, { id: 'p2', name: 'Filtre', itemSpecId: 'spec-1' }] } as unknown as Snapshot;
+    expect(normalizeSnapshot(old).vehicleParts.map((p) => p.itemSpecId)).toEqual([null, 'spec-1']);
   });
 
   it('lets a snapshot with the new names pass through', () => {
     const fresh = {
       vehicles: [{ id: 'v', ownership: 'sold', onGaragePage: true }],
-      vehicleConsumables: [{ id: 'c', confirmation: 'confirmed' }],
+      itemSpecs: [{ id: 'c', confirmation: 'confirmed' }],
       componentSpecs: [{ id: 's', confirmation: 'to_confirm' }],
       tasks: [],
       services: [],
@@ -146,13 +152,21 @@ describe('normalizeSnapshot', () => {
     } as unknown as Snapshot;
     const s = normalizeSnapshot(fresh);
     expect(s.vehicles[0]).toMatchObject({ ownership: 'sold', onGaragePage: true });
-    expect(s.vehicleConsumables[0]).toMatchObject({ confirmation: 'confirmed' });
+    expect(s.itemSpecs[0]).toMatchObject({ confirmation: 'confirmed' });
     expect(s.componentSpecs).toMatchObject([{ id: 's', confirmation: 'to_confirm' }]);
   });
 
   it('keeps the consumable type and product of a part used when they are there', () => {
     const queued = { vehicles: [], tasks: [], services: [{ id: 's', partsUsed: [{ description: 'Oil', quantity: 1, unit: 'litre', consumableTypeId: 'c1', productId: 'p1' }] }], readings: [] } as unknown as Snapshot;
     expect(normalizeSnapshot(queued).services[0]!.partsUsed[0]).toMatchObject({ consumableTypeId: 'c1', productId: 'p1' });
+  });
+});
+
+describe('itemSpecText', () => {
+  it('says the name with its specification and capacity, or the name alone', () => {
+    expect(itemSpecText({ name: 'Huile moteur', specification: '10W-40', capacity: '3,2 L' })).toBe('Huile moteur: 10W-40, 3,2 L');
+    expect(itemSpecText({ name: 'Huile moteur', specification: null, capacity: '3,2 L' })).toBe('Huile moteur: 3,2 L');
+    expect(itemSpecText({ name: 'Huile moteur', specification: ' ', capacity: null })).toBe('Huile moteur');
   });
 });
 

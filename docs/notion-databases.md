@@ -6,17 +6,18 @@ How the sync uses them is in [notion-copy.md](notion-copy.md); why, in [ADR 0007
 **Who writes each column:**
 - **Owner**: typed in Notion; the app only reads it.
 - **App**: rewritten by every push, so edits in Notion are lost.
+- **Owner + App**: typed in Notion, or written by a desktop edit in the app (ADR 0009). The app writes only the values of these pages, never the columns.
 - **Notion**: the back-link of a two-way relation, kept by Notion itself.
 
-The app finds a database by its title and a column by its name, so renaming either breaks the sync. Extra columns are
+The app finds a database by its title and a column by its name, so renaming either breaks the sync. The two spec databases were renamed (see below): the app accepts the new title or the old one, and if both exist it reads and writes neither (a warning is shown in Settings). Extra columns are
 ignored. Every relation is two-way: the column named in **Back-link** is the same link seen from the other database.
 
 ## How they link
 
 ```mermaid
 erDiagram
-    VEHICULES ||--o{ SPECIFICATIONS : "Véhicule"
-    VEHICULES ||--o{ CONSOMMABLES_PAR_VEHICULE : "Véhicule"
+    VEHICULES ||--o{ SPECIFICATIONS_DE_COMPOSANTS : "Véhicule"
+    VEHICULES ||--o{ SPECIFICATIONS_D_ARTICLES : "Véhicule"
     VEHICULES ||--o{ PLANS_D_ENTRETIEN : "Véhicule"
     VEHICULES ||--o{ SEANCES : "Véhicule"
     VEHICULES ||--o{ CARACTERISTIQUES : "Véhicule"
@@ -24,17 +25,17 @@ erDiagram
     TACHES_D_ENTRETIEN }o--o{ TYPES_DE_CONSOMMABLES : "Types de consommables requis"
     TACHES_D_ENTRETIEN }o--o{ TYPES_DE_COMPOSANTS : "Composants"
     TACHES_D_ENTRETIEN }o--o{ OUTILS : "Outils"
-    TYPES_DE_COMPOSANTS ||--o{ SPECIFICATIONS : "Composant"
+    TYPES_DE_COMPOSANTS ||--o{ SPECIFICATIONS_DE_COMPOSANTS : "Composant"
     TYPES_DE_CONSOMMABLES ||--o{ PRODUITS : "Type de consommable"
-    TYPES_DE_CONSOMMABLES ||--o{ CONSOMMABLES_PAR_VEHICULE : "Type"
-    PRODUITS }o--o{ CONSOMMABLES_PAR_VEHICULE : "Produits compatibles, Produit retenu"
+    TYPES_DE_CONSOMMABLES ||--o{ SPECIFICATIONS_D_ARTICLES : "Type"
+    PRODUITS }o--o{ SPECIFICATIONS_D_ARTICLES : "Produits compatibles, Produit retenu"
     SEANCES ||--o{ INTERVENTIONS : "Séance"
     TACHES_D_ENTRETIEN ||--o{ INTERVENTIONS : "Tâche"
     PLANS_D_ENTRETIEN ||--o{ INTERVENTIONS : "Plan"
     INTERVENTIONS ||--o{ CONSOMMABLES_UTILISES : "Intervention"
     TYPES_DE_CONSOMMABLES ||--o{ CONSOMMABLES_UTILISES : "Type de consommable"
     PRODUITS ||--o{ CONSOMMABLES_UTILISES : "Produit utilisé"
-    ACHATS }o--|| CONSOMMABLES_PAR_VEHICULE : "Article"
+    ACHATS }o--|| SPECIFICATIONS_D_ARTICLES : "Article"
     PRODUITS ||--o{ ACHATS : "Produit"
 ```
 
@@ -43,16 +44,16 @@ The databases fall into five groups:
 | Group | Databases | Made by |
 | --- | --- | --- |
 | Catalogue | Tâches d'entretien, Types de composants, Types de consommables, Produits, Outils | Owner |
-| Per vehicle | Spécifications, Consommables par véhicule, Plans d'entretien | Owner (the app creates plan pages) |
+| Per vehicle | Spécifications de composants, Spécifications d'articles, Plans d'entretien | Owner (the app creates plan pages, and writes spec pages on a desktop edit) |
 | Purchases | Achats | Owner, read-only |
 | Copied from the app | Véhicules, Séances, Interventions, Consommables utilisés | App |
-| Frozen | Caractéristiques | Neither: no longer written, kept for history |
+| Frozen | Caractéristiques | Neither: no longer written; archived by the owner after the move (ADR 0009) |
 
 ## The category labels
 
 The app files tasks and specs under seven categories. In Notion, the **Catégorie** of *Tâches d'entretien* uses the app's
 French labels: Moteur, Transmission, Freinage, Châssis, Électricité, Refroidissement et climatisation, Autre. The app also
-accepts Freins (Freinage), Roues (Châssis) and Électrique (Électricité), which *Spécifications* and *Types de composants*
+accepts Freins (Freinage), Roues (Châssis) and Électrique (Électricité), which *Spécifications de composants* and *Types de composants*
 still use. *Types de consommables* has its own list on purpose, grouped by kind of product (Lubrifiants, Fluides, Freinage,
 Filtres, Allumage, Transmission, Pneus).
 
@@ -87,7 +88,7 @@ A kind of part that has specs, such as torque values.
 | Catégorie | select | Owner | Moteur, Freins, Roues, Châssis, Transmission, Électrique, Refroidissement et climatisation, Autre. |
 | Notes | text | Owner | |
 | Tâches | relation ← Tâches d'entretien | Notion | Back-link of Composants. |
-| Spécifications | relation ← Spécifications | Notion | Back-link of Composant. |
+| Spécifications de composants | relation ← Spécifications de composants | Notion | Back-link of Composant. |
 
 ### Types de consommables
 
@@ -101,7 +102,7 @@ A kind of consumable shared by every vehicle (engine oil, front brake pads…).
 | Notes | text | Owner | |
 | Tâches | relation ← Tâches d'entretien | Notion | Back-link of Types de consommables requis. |
 | Produits | relation ← Produits | Notion | Back-link of Type de consommable. |
-| Consommables par véhicule | relation ← Consommables par véhicule | Notion | Back-link of Type. |
+| Spécifications d'articles | relation ← Spécifications d'articles | Notion | Back-link of Type. |
 | Consommables utilisés | relation ← Consommables utilisés | Notion | Back-link of Type de consommable. |
 
 ### Produits
@@ -115,8 +116,8 @@ A product sold, which can be picked when logging a session.
 | Marque, Référence, Fournisseur | text | Owner | The maker's reference lives here, not on the vehicle. |
 | Prix | number (€) | Owner | A default; the price paid is logged per session. |
 | Notes | text | Owner | |
-| Compatible avec | relation ← Consommables par véhicule | Notion | Back-link of Produits compatibles. |
-| Retenu pour | relation ← Consommables par véhicule | Notion | Back-link of Produit retenu. |
+| Compatible avec | relation ← Spécifications d'articles | Notion | Back-link of Produits compatibles. |
+| Retenu pour | relation ← Spécifications d'articles | Notion | Back-link of Produit retenu. |
 | Utilisé dans | relation ← Consommables utilisés | Notion | Back-link of Produit utilisé. |
 
 ### Outils
@@ -133,37 +134,37 @@ A product sold, which can be picked when logging a session.
 
 ## Per vehicle
 
-### Spécifications
+### Spécifications de composants
 
-A vehicle's own values: torques, capacities, pressures, sizes.
-
-| Column | Type | Written by | Notes |
-| --- | --- | --- | --- |
-| Élément | title | Owner | Required. |
-| Véhicule | relation → Véhicules | Owner | Required. Back-link: Spécifications. A page linked to several vehicles counts for each. |
-| Valeur | number | Owner | Required. Text is accepted too. |
-| Unité | select | Owner | N·m, L, mm, bar. |
-| Composant | relation → Types de composants | Owner | Back-link: Spécifications. |
-| Catégorie | select | Owner | Same labels as Types de composants. |
-| Source | text | Owner | Where the value comes from. |
-| Statut | select | Owner | Confirmé or À confirmer. |
-
-### Consommables par véhicule
-
-Which consumable of each type a vehicle takes, and how much.
+(Formerly *Spécifications*; both titles are accepted, and if both exist neither is read.) The **Component Specs**: a vehicle's own values for a component: torques, capacities, pressures, sizes. Written by the owner, and by the app on a desktop edit (Notion first) and by the one-off move of the old Spec Lines.
 
 | Column | Type | Written by | Notes |
 | --- | --- | --- | --- |
-| Désignation | title | Owner | Required. |
-| Véhicule | relation → Véhicules | Owner | Required. Back-link: Consommables. |
-| Type | relation → Types de consommables | Owner | Required. Back-link: Consommables par véhicule. |
-| Spécification | text | Owner | Grade or standard (e.g. 10W-30). |
-| Réf. OEM | text | Owner | The maker's part number. |
-| Capacité | text | Owner | |
-| Quantité | text | Owner | A leading number is read (e.g. "0,5 L"). |
+| Élément | title | Owner + App | Required. |
+| Véhicule | relation → Véhicules | Owner + App | Required. Back-link: Spécifications. A page linked to several vehicles counts for each. |
+| Valeur | number | Owner + App | Required. Text is accepted too. |
+| Unité | select | Owner + App | N·m, L, mm, bar. |
+| Composant | relation → Types de composants | Owner + App | Back-link: Spécifications. |
+| Catégorie | select | Owner + App | Same labels as Types de composants. |
+| Source | text | Owner + App | Where the value comes from. |
+| Statut | select | Owner + App | Confirmé or À confirmer. |
+
+### Spécifications d'articles
+
+(Formerly *Consommables par véhicule*; both titles are accepted, and if both exist neither is read.) The **Item Specs**: which consumable of each type a vehicle takes, and how much. Written by the owner, and by the app on a desktop edit (Notion first) and by the one-off move of the old Spec Lines. The app never writes *Produits compatibles*.
+
+| Column | Type | Written by | Notes |
+| --- | --- | --- | --- |
+| Désignation | title | Owner + App | Required. |
+| Véhicule | relation → Véhicules | Owner + App | Required. Back-link: Consommables. |
+| Type | relation → Types de consommables | Owner + App | Required. Back-link: Consommables par véhicule. |
+| Spécification | text | Owner + App | Grade or standard (e.g. 10W-30). |
+| Réf. OEM | text | Owner + App | The maker's part number. |
+| Capacité | text | Owner + App | |
+| Quantité | text | Owner + App | A leading number is read (e.g. "0,5 L"). |
 | Produits compatibles | relation → Produits | Owner | Back-link: Compatible avec. |
-| Produit retenu | relation → Produits | Owner | Back-link: Retenu pour. |
-| Statut | select | Owner | Confirmé or À confirmer. |
+| Produit retenu | relation → Produits | Owner + App | Back-link: Retenu pour. |
+| Statut | select | Owner + App | Confirmé or À confirmer. |
 
 ### Plans d'entretien
 
@@ -183,14 +184,14 @@ One page per vehicle and task. The app creates a page when a catalogue task appl
 
 ### Achats
 
-What the owner bought, by hand, for a consumable line of a vehicle. Read-only for the app ([ADR 0008](adr/0008-shopping-list-and-purchase-log-move-to-notion.md)):
+What the owner bought, by hand, for an Item Spec of a vehicle. Read-only for the app ([ADR 0008](adr/0008-shopping-list-and-purchase-log-move-to-notion.md)):
 a required consumable shows as Bought when an Achat of its line is dated after the task was last done, otherwise To buy.
 
 | Column | Type | Written by | Notes |
 | --- | --- | --- | --- |
 | Achat | title | Owner | Required. |
 | Date | date | Owner | Required. An Achat with no date is skipped, with a warning. |
-| Article | relation → Consommables par véhicule | Owner | Required. The line that was bought. An Achat with no article is skipped; with several, the first is used (warning). |
+| Article | relation → Spécifications d'articles | Owner | Required. The Item Spec that was bought. An Achat with no article is skipped; with several, the first is used (warning). |
 | Produit | relation → Produits | Owner | Optional. |
 | Quantité | number | Owner | Optional. Text is accepted too (a leading number is read). |
 | Prix payé | number (€) | Owner | Optional. |
@@ -217,7 +218,7 @@ Each of these databases has **ID app** (text, the app's id, which links a page t
 | Relevé le, Copié le | date | App | |
 | Équipements | multi-select | Owner | Moto, Transmission chaîne, Refroidissement liquide, Frein avant disque, Frein arrière disque, ABS. Decides which catalogue tasks apply. |
 | JDex | text | Owner | Filing reference. |
-| Spécifications, Consommables, Plans d'entretien, Séances | relations | Notion | Back-links. |
+| Spécifications de composants, Spécifications d'articles, Plans d'entretien, Séances | relations | Notion | Back-links. |
 
 Articles: no longer written by the app since 2026-11-10; leave or archive it in Notion.
 
@@ -266,8 +267,8 @@ One per part or fluid line of a session.
 
 ### Caractéristiques
 
-The earlier per-vehicle specs, replaced by *Spécifications* and *Consommables par véhicule*. Nothing writes it any more
-and nothing is deleted. Columns: Caractéristique (title), Véhicule (relation, one-way), Catégorie, Groupe (Fluides /
+The earlier per-vehicle specs, replaced by *Spécifications de composants* and *Spécifications d'articles*. Nothing writes it any more
+and nothing is deleted; the owner archives it once the Spec Lines are moved (ADR 0009). Columns: Caractéristique (title), Véhicule (relation, one-way), Catégorie, Groupe (Fluides /
 Pièces), Valeur, Réf. OEM, ID app, Supprimé de l’app.
 
 ## If a relation is recreated

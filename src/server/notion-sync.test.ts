@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { NotionError } from '../notion/api.ts';
 import { REFERENCE_DBS } from '../notion/databases.ts';
 import type { NotionClient } from '../notion/engine.ts';
 import { createApp } from './app.ts';
@@ -56,6 +57,39 @@ describe('createNotionSync', () => {
     release();
     await first;
     expect(sync.running()).toBe(false);
+  });
+
+  describe('exclusive', () => {
+    const idle = () => createNotionSync({ db, garageId: 'default', token: TOKEN, parentPageId: 'parent', apiFactory: emptyWorkspace });
+
+    it('runs the function with the client and the parent page, and frees the lock afterwards', async () => {
+      const sync = idle();
+      const seen = await sync.exclusive(async (api, parent) => {
+        expect(sync.running()).toBe(true);
+        expect(typeof api.call).toBe('function');
+        return parent;
+      });
+      expect(seen).toBe('parent');
+      expect(sync.running()).toBe(false);
+    });
+
+    it('refuses while another one or a sync runs, and a sync is refused while it runs', async () => {
+      const sync = idle();
+      let release!: () => void;
+      const first = sync.exclusive(() => new Promise<void>((resolve) => (release = resolve)));
+      await expect(sync.exclusive(async () => 1)).rejects.toMatchObject({ name: 'NotionSyncBusy' });
+      await expect(sync.run({ dryRun: true })).rejects.toThrow('already running');
+      release();
+      await first;
+      await expect(sync.run({ dryRun: true })).resolves.toMatchObject({ dryRun: true });
+    });
+
+    it('frees the lock when the function fails, strips the token, and keeps the status of a Notion error', async () => {
+      const sync = idle();
+      await expect(sync.exclusive(async () => { throw new NotionError(409, `conflict for ${TOKEN}`); })).rejects.toMatchObject({ status: 409, message: 'conflict for ***' });
+      await expect(sync.exclusive(async () => { throw new Error(`broken ${TOKEN}`); })).rejects.toThrow('broken ***');
+      expect(sync.running()).toBe(false);
+    });
   });
 
   it('applies the pull, then pushes, and records the status for the snapshot', async () => {

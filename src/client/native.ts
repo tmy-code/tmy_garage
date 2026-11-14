@@ -8,6 +8,12 @@ import { StatusBar, Style } from '@capacitor/status-bar';
 
 export const isAndroidApp = Capacitor.isNativePlatform();
 
+/**
+ * Desktop edits everything; the phone logs Services, Odometer Readings and Fill-ups (ADR 0009). The split follows the
+ * platform, not the screen width, and is a UI rule only: the server still accepts writes from any client.
+ */
+export const isDesktop = !isAndroidApp;
+
 /** Android's back button goes back one screen, and leaves the app from the home screen. */
 export function initAndroidApp(): void {
   if (!isAndroidApp) return;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { requiredConsumables } from './applicability.ts';
 import { formFigure, markAdded, mergeNeeds, parsePlainNumber, prefillForType, prefillFromProduct, productChoices, usualQuantity } from './session-consumables.ts';
-import type { ConsumableType, MaintenanceTask, Product, RefTask, Snapshot, VehicleConsumable } from './types.ts';
+import type { ConsumableType, MaintenanceTask, Product, RefTask, Snapshot, ItemSpec } from './types.ts';
 
 const product = (id: string, overrides: Partial<Product> = {}): Product => ({
   id,
@@ -19,7 +19,7 @@ const product = (id: string, overrides: Partial<Product> = {}): Product => ({
 const oil: ConsumableType = { id: 'ct-oil', name: 'Huile moteur', category: null, family: 'fluid', notes: null, notionId: 'n-ct' };
 const filter: ConsumableType = { id: 'ct-filter', name: 'Filtre', category: null, family: 'part', notes: null, notionId: 'n-cf' };
 
-const row = (overrides: Partial<VehicleConsumable> = {}): VehicleConsumable => ({
+const row = (overrides: Partial<ItemSpec> = {}): ItemSpec => ({
   id: 'vc1',
   vehicleId: 'v1',
   name: 'Huile moteur',
@@ -83,7 +83,7 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     consumableTypes: [oil, filter],
     products: [product('p-a'), product('p-b'), product('p-c'), product('p-f', { typeId: 'ct-filter' })],
     tools: [],
-    vehicleConsumables: [row({ chosenProductId: 'p-c', compatibleProductIds: ['p-b', 'p-c'] })],
+    itemSpecs: [row({ chosenProductId: 'p-c', compatibleProductIds: ['p-b', 'p-c'] })],
     componentSpecs: [],
     notionPurchases: [],
     notion: null,

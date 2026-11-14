@@ -1,5 +1,5 @@
 import { useLayoutEffect } from 'react';
-import { LanguageSwitch, Layout, NotFound } from './components.tsx';
+import { DesktopOnlyPage, LanguageSwitch, Layout, NotFound } from './components.tsx';
 import { useT } from './i18n.ts';
 import { Dashboard, ManageGaragePage } from './pages/Dashboard.tsx';
 import { CataloguePage, PartForm } from './pages/Catalogue.tsx';
@@ -11,7 +11,8 @@ import { FillupForm } from './pages/Fuel.tsx';
 import { VehiclePage } from './pages/Vehicle.tsx';
 import { PartsPage, VehiclePartForm } from './pages/Parts.tsx';
 import { SpecsPage, TaskPage, ToolsPage, WorkshopPage } from './pages/Workshop.tsx';
-import { scrollForNewRoute, useRoute } from './router.ts';
+import { desktopOnlyRoute, scrollForNewRoute, useRoute } from './router.ts';
+import { isAndroidApp } from './native.ts';
 import { ServerAddress } from './pages/Server.tsx';
 import { needsServerAddress, sync, useStore } from './store.ts';
 
@@ -66,6 +67,9 @@ export function App() {
       </Layout>
     );
   }
+
+  // On the phone, screens that only change the garage's setup give way to a note (ADR 0009).
+  if (isAndroidApp && desktopOnlyRoute(route)) return <DesktopOnlyPage />;
 
   const [section, id, sub, subId] = route;
   const vehicle = section === 'vehicles' && id ? snapshot.vehicles.find((v) => v.id === id) : undefined;

@@ -143,8 +143,6 @@ export const taskInput = z
 
 export const copyTasksInput = z.object({ fromVehicleId: z.string().min(1) });
 
-export const addStandardSpecsInput = z.object({ lang: z.enum(['en', 'fr']).default('en') });
-
 export const mergeTaskInput = z.object({ intoTaskId: z.string().min(1) });
 
 /** For each detail a part depends on, the values it needs; at least one, or no Vehicle could ever have the part. */
@@ -202,17 +200,27 @@ export const ownPartInput = z
     path: ['intervalKm'],
   });
 
-export const specLineInput = z.object({
-  label: z.string().trim().min(1).max(80),
-  value: z.string().trim().min(1).max(200),
-  /** The manufacturer's (OEM) reference. */
-  oem: optionalText(80),
-  group: specGroup,
-  /** Empty is 'other'. */
-  category: z
-    .enum(PART_CATEGORIES)
-    .nullish()
-    .transform((v) => v ?? null),
+/** An Item Spec: what one Vehicle takes of a fluid or part. Written to Notion first (desktop only). */
+export const itemSpecInput = z.object({
+  name: z.string().trim().min(1).max(200),
+  typeId: z.string().min(1).nullish().transform((v) => v ?? null),
+  specification: optionalText(200),
+  oemRef: optionalText(120),
+  capacity: optionalText(80),
+  quantity: z.number().positive().max(10_000).nullish().transform((v) => v ?? null),
+  chosenProductId: z.string().min(1).nullish().transform((v) => v ?? null),
+  confirmation: z.enum(['confirmed', 'to_confirm']).nullish().transform((v) => v ?? null),
+});
+
+/** A Component Spec: a figure for a component of one Vehicle. Written to Notion first (desktop only). */
+export const componentSpecInput = z.object({
+  label: z.string().trim().min(1).max(200),
+  componentTypeId: z.string().min(1).nullish().transform((v) => v ?? null),
+  category: z.enum(PART_CATEGORIES).nullish().transform((v) => v ?? null),
+  value: z.string().trim().max(200).default(''),
+  unit: optionalText(20),
+  source: optionalText(500),
+  confirmation: z.enum(['confirmed', 'to_confirm']).nullish().transform((v) => v ?? null),
 });
 
 /** A component used in a Service, with its brand and variant in the description. Older phones also send a price, a supplier and a link to a Part Spec: those are ignored. */
@@ -238,8 +246,8 @@ export const vehiclePartInput = z.object({
   quantity,
   price: unitPrice,
   taskId: z.string().min(1).nullish().transform((v) => v ?? null),
-  /** The Spec Line (of the same Vehicle) it is for. Left out when editing, the link is kept; null removes it. */
-  specLineId: z.string().min(1).nullish(),
+  /** The Item Spec (of the same Vehicle) it is for. Left out when editing, the link is kept; null removes it. An old client's specLineId is stripped. */
+  itemSpecId: z.string().min(1).nullish(),
   notes: optionalText(2000),
 });
 
@@ -328,6 +336,8 @@ export type FinalDrive = z.infer<typeof finalDrive>;
 export type Cooling = z.infer<typeof cooling>;
 export type DocumentOwnerKind = z.infer<typeof documentOwnerKind>;
 export type DocumentType = z.infer<typeof documentType>;
+export type ItemSpecInput = z.infer<typeof itemSpecInput>;
+export type ComponentSpecInput = z.infer<typeof componentSpecInput>;
 export type SpecGroup = z.infer<typeof specGroup>;
 export type PartUnit = z.infer<typeof partUnit>;
 export type TaskAction = z.infer<typeof taskAction>;

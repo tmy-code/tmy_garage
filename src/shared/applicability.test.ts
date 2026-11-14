@@ -55,7 +55,7 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     consumableTypes: [],
     products: [],
     tools: [],
-    vehicleConsumables: [],
+    itemSpecs: [],
     componentSpecs: [],
     notionPurchases: [],
     notion: null,
@@ -110,7 +110,7 @@ describe('requiredConsumables', () => {
       { id: 'p-c', typeId: 'c-oil', name: 'Huile C', brand: null, reference: null, supplier: null, price: null, notes: null, notionId: 'np-c' },
       { id: 'p-z', typeId: 'c-other', name: 'Autre', brand: null, reference: null, supplier: null, price: null, notes: null, notionId: 'np-z' },
     ],
-    vehicleConsumables: [
+    itemSpecs: [
       {
         id: 'vc1',
         vehicleId: 'v1',
