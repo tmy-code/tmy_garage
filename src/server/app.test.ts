@@ -9,7 +9,7 @@ import type {
   MaintenanceTask,
   Snapshot,
   SpecLine,
-  VehiclePart,
+  VehicleItem,
   Vehicle,
 } from '../shared/types.ts';
 import { BUILT_IN_CATALOGUE, type Build } from '../shared/catalogue.ts';
@@ -515,23 +515,23 @@ describe('spec lines and the plan templates', () => {
       date: '2026-10-01',
       odometer: 18000,
       taskIds: [task.id],
-      partsUsed: [{ partSpecId: 'gone', partId: 'gone-part-id', description: 'Motul 7100 10W-40', quantity: 3, unit: 'litre', price: 40, supplier: 'Shop' }],
+      partsUsed: [{ partSpecId: 'gone', itemId: 'gone-part-id', description: 'Motul 7100 10W-40', quantity: 3, unit: 'litre', price: 40, supplier: 'Shop' }],
     });
     expect(res.status).toBe(200);
-    expect((await snapshot()).services[0]!.partsUsed).toEqual([{ description: 'Motul 7100 10W-40', partNumber: null, quantity: 3, unit: 'litre', price: 40, partId: null }]);
+    expect((await snapshot()).services[0]!.partsUsed).toEqual([{ description: 'Motul 7100 10W-40', partNumber: null, quantity: 3, unit: 'litre', price: 40, itemId: null }]);
   });
 
   it('keeps a Vehicle’s parts list: add, edit, refuse a twin, delete', async () => {
     const bike = await createVehicle();
     const task = await createTask(bike.id);
-    const part = (await (await call('POST', `/api/vehicles/${bike.id}/parts`, { name: 'Motul 7100 10W-40', unit: 'litre', quantity: 3.2, price: 12.5, taskId: task.id })).json()) as VehiclePart;
+    const part = (await (await call('POST', `/api/vehicles/${bike.id}/items`, { name: 'Motul 7100 10W-40', unit: 'litre', quantity: 3.2, price: 12.5, taskId: task.id })).json()) as VehicleItem;
     expect(part).toMatchObject({ name: 'Motul 7100 10W-40', unit: 'litre', quantity: 3.2, price: 12.5, taskId: task.id, partNumber: null });
-    expect((await call('POST', `/api/vehicles/${bike.id}/parts`, { name: 'motul 7100 10w-40', unit: 'litre', quantity: 1 })).status).toBe(409);
-    expect((await call('POST', `/api/vehicles/${bike.id}/parts`, { name: 'x', unit: 'litre', quantity: 1, taskId: 'nope' })).status).toBe(422);
-    await call('PUT', `/api/parts/${part.id}`, { name: 'Motul 7100 10W-40', partNumber: 'REF-1', unit: 'litre', quantity: 3.5, price: null });
-    expect((await snapshot()).vehicleParts).toEqual([{ ...part, partNumber: 'REF-1', quantity: 3.5, price: null, taskId: null }]);
-    expect((await call('DELETE', `/api/parts/${part.id}`)).status).toBe(204);
-    expect((await snapshot()).vehicleParts).toEqual([]);
+    expect((await call('POST', `/api/vehicles/${bike.id}/items`, { name: 'motul 7100 10w-40', unit: 'litre', quantity: 1 })).status).toBe(409);
+    expect((await call('POST', `/api/vehicles/${bike.id}/items`, { name: 'x', unit: 'litre', quantity: 1, taskId: 'nope' })).status).toBe(422);
+    await call('PUT', `/api/items/${part.id}`, { name: 'Motul 7100 10W-40', partNumber: 'REF-1', unit: 'litre', quantity: 3.5, price: null });
+    expect((await snapshot()).vehicleItems).toEqual([{ ...part, partNumber: 'REF-1', quantity: 3.5, price: null, taskId: null }]);
+    expect((await call('DELETE', `/api/items/${part.id}`)).status).toBe(204);
+    expect((await snapshot()).vehicleItems).toEqual([]);
   });
 
   it('puts a part to remember on the list once, ties it to a single Task, and keeps old Services when it is deleted', async () => {
@@ -543,20 +543,37 @@ describe('spec lines and the plan templates', () => {
       date: '2026-10-01',
       odometer: 18000,
       taskIds: [task.id],
-      partsUsed: [{ description: 'Mann HU 7008 z', partNumber: 'HU 7008 z', quantity: 1, unit: 'piece', price: 9.9, partId: 'part-0000001', remember: true }],
+      partsUsed: [{ description: 'Mann HU 7008 z', partNumber: 'HU 7008 z', quantity: 1, unit: 'piece', price: 9.9, itemId: 'part-0000001', remember: true }],
     };
     expect((await call('PUT', '/api/services/svc-00010', body)).status).toBe(200);
     expect((await call('PUT', '/api/services/svc-00010', body)).status).toBe(200);
-    const parts = (await snapshot()).vehicleParts;
+    const parts = (await snapshot()).vehicleItems;
     expect(parts).toEqual([{ id: 'part-0000001', vehicleId: bike.id, name: 'Mann HU 7008 z', partNumber: 'HU 7008 z', unit: 'piece', quantity: 1, price: 9.9, taskId: task.id, itemSpecId: null, specLineId: null, notes: null }]);
-    expect((await snapshot()).services[0]!.partsUsed[0]).toMatchObject({ partId: 'part-0000001', price: 9.9 });
+    expect((await snapshot()).services[0]!.partsUsed[0]).toMatchObject({ itemId: 'part-0000001', price: 9.9 });
     // The same part typed again in another Service links to the list instead of doubling it.
-    await call('PUT', '/api/services/svc-00011', { ...body, id: 'svc-00011', partsUsed: [{ ...body.partsUsed[0], partId: 'part-0000002' }] });
-    expect((await snapshot()).vehicleParts).toHaveLength(1);
-    expect((await snapshot()).services.find((x) => x.id === 'svc-00011')!.partsUsed[0]!.partId).toBe('part-0000001');
-    await call('DELETE', '/api/parts/part-0000001');
+    await call('PUT', '/api/services/svc-00011', { ...body, id: 'svc-00011', partsUsed: [{ ...body.partsUsed[0], itemId: 'part-0000002' }] });
+    expect((await snapshot()).vehicleItems).toHaveLength(1);
+    expect((await snapshot()).services.find((x) => x.id === 'svc-00011')!.partsUsed[0]!.itemId).toBe('part-0000001');
+    await call('DELETE', '/api/items/part-0000001');
     const kept = (await snapshot()).services.find((x) => x.id === 'svc-00010')!.partsUsed[0]!;
-    expect(kept).toMatchObject({ description: 'Mann HU 7008 z', partId: null, price: 9.9 });
+    expect(kept).toMatchObject({ description: 'Mann HU 7008 z', itemId: null, price: 9.9 });
+  });
+
+  it('still reads the partId of a Service queued on a phone before the rename', async () => {
+    const bike = await createVehicle();
+    const task = await createTask(bike.id);
+    const res = await call('PUT', '/api/services/svc-00020', {
+      id: 'svc-00020',
+      vehicleId: bike.id,
+      date: '2026-10-01',
+      odometer: 18000,
+      taskIds: [task.id],
+      partsUsed: [{ description: 'Mann HU 7008 z', quantity: 1, unit: 'piece', partId: 'part-0000009', remember: true }],
+    });
+    expect(res.status).toBe(200);
+    const snap = await snapshot();
+    expect(snap.vehicleItems.map((i) => i.id)).toEqual(['part-0000009']);
+    expect(snap.services[0]!.partsUsed[0]).toMatchObject({ itemId: 'part-0000009' });
   });
 });
 
@@ -568,23 +585,23 @@ describe('the Parts section', () => {
   });
   afterEach(() => rmSync(uploads, { recursive: true, force: true }));
 
-  async function createPart(vehicleId: string, body: object = {}): Promise<VehiclePart> {
-    const res = await call('POST', `/api/vehicles/${vehicleId}/parts`, { name: 'Motul 7100 10W-40', unit: 'litre', quantity: 5, ...body });
+  async function createPart(vehicleId: string, body: object = {}): Promise<VehicleItem> {
+    const res = await call('POST', `/api/vehicles/${vehicleId}/items`, { name: 'Motul 7100 10W-40', unit: 'litre', quantity: 5, ...body });
     expect(res.status).toBe(201);
     return res.json();
   }
 
   it('keeps notes, and accepts and ignores a "toBuy" sent by an old app', async () => {
     const bike = await createVehicle();
-    const res = await call('POST', `/api/vehicles/${bike.id}/parts`, { name: 'Motul 7100 10W-40', unit: 'litre', quantity: 5, toBuy: true, notes: 'See https://example.test/oil' });
+    const res = await call('POST', `/api/vehicles/${bike.id}/items`, { name: 'Motul 7100 10W-40', unit: 'litre', quantity: 5, toBuy: true, notes: 'See https://example.test/oil' });
     expect(res.status).toBe(201);
-    const part = (await res.json()) as VehiclePart;
+    const part = (await res.json()) as VehicleItem;
     expect(part).toMatchObject({ notes: 'See https://example.test/oil' });
     expect(part).not.toHaveProperty('toBuy');
-    expect(db.prepare('SELECT to_buy FROM vehicle_parts WHERE id = ?').get(part.id)).toEqual({ to_buy: 0 });
-    const put = await call('PUT', `/api/parts/${part.id}`, { name: 'Motul 7100 10W-40', unit: 'litre', quantity: 5, toBuy: true, notes: 'Cheaper elsewhere' });
+    expect(db.prepare('SELECT to_buy FROM vehicle_items WHERE id = ?').get(part.id)).toEqual({ to_buy: 0 });
+    const put = await call('PUT', `/api/items/${part.id}`, { name: 'Motul 7100 10W-40', unit: 'litre', quantity: 5, toBuy: true, notes: 'Cheaper elsewhere' });
     expect(put.status).toBe(200);
-    const stored = (await snapshot()).vehicleParts[0]!;
+    const stored = (await snapshot()).vehicleItems[0]!;
     expect(stored).toMatchObject({ notes: 'Cheaper elsewhere' });
     expect(stored).not.toHaveProperty('toBuy');
   });
@@ -601,19 +618,19 @@ describe('the Parts section', () => {
     itemSpec(other.id, 'spec-foreign');
     itemSpec(bike.id, 'spec-hidden', 'Gone', 1);
     const body = { name: 'x', unit: 'litre', quantity: 1 };
-    expect((await call('POST', `/api/vehicles/${bike.id}/parts`, { ...body, itemSpecId: 'spec-foreign' })).status).toBe(422);
-    expect((await call('POST', `/api/vehicles/${bike.id}/parts`, { ...body, itemSpecId: 'nope' })).status).toBe(422);
-    expect((await call('POST', `/api/vehicles/${bike.id}/parts`, { ...body, itemSpecId: 'spec-hidden' })).status).toBe(422);
+    expect((await call('POST', `/api/vehicles/${bike.id}/items`, { ...body, itemSpecId: 'spec-foreign' })).status).toBe(422);
+    expect((await call('POST', `/api/vehicles/${bike.id}/items`, { ...body, itemSpecId: 'nope' })).status).toBe(422);
+    expect((await call('POST', `/api/vehicles/${bike.id}/items`, { ...body, itemSpecId: 'spec-hidden' })).status).toBe(422);
     const part = await createPart(bike.id, { itemSpecId: 'spec-own' });
     expect(part.itemSpecId).toBe('spec-own');
     // Editing without the field keeps the link; null removes it.
-    await call('PUT', `/api/parts/${part.id}`, { name: part.name, unit: 'litre', quantity: 5 });
-    expect((await snapshot()).vehicleParts[0]!.itemSpecId).toBe('spec-own');
-    await call('PUT', `/api/parts/${part.id}`, { name: part.name, unit: 'litre', quantity: 5, itemSpecId: null });
-    expect((await snapshot()).vehicleParts[0]!.itemSpecId).toBeNull();
+    await call('PUT', `/api/items/${part.id}`, { name: part.name, unit: 'litre', quantity: 5 });
+    expect((await snapshot()).vehicleItems[0]!.itemSpecId).toBe('spec-own');
+    await call('PUT', `/api/items/${part.id}`, { name: part.name, unit: 'litre', quantity: 5, itemSpecId: null });
+    expect((await snapshot()).vehicleItems[0]!.itemSpecId).toBeNull();
     // An old app's specLineId is stripped, never written.
-    await call('PUT', `/api/parts/${part.id}`, { name: part.name, unit: 'litre', quantity: 5, specLineId: 'line-1' });
-    expect(db.prepare('SELECT spec_line_id FROM vehicle_parts WHERE id = ?').get(part.id)).toEqual({ spec_line_id: null });
+    await call('PUT', `/api/items/${part.id}`, { name: part.name, unit: 'litre', quantity: 5, specLineId: 'line-1' });
+    expect(db.prepare('SELECT spec_line_id FROM vehicle_items WHERE id = ?').get(part.id)).toEqual({ spec_line_id: null });
   });
 
   it('puts the Item Specs in the snapshot under itemSpecs, hiding the ones Notion no longer has', async () => {
@@ -652,7 +669,7 @@ describe('the Parts section', () => {
     db.exec(`INSERT INTO documents (id, garage_id, vehicle_id, owner_kind, owner_id, type, file_name, content_type, size)
              VALUES ('legacy-doc-1', 'default', '${bike.id}', 'purchase', 'legacy-p1', 'invoice', 'receipt.pdf', 'application/pdf', 13)`);
     writeFileSync(join(uploads, 'legacy-doc-1'), '%PDF-1.4 test');
-    expect((await call('DELETE', `/api/parts/${part.id}`)).status).toBe(204);
+    expect((await call('DELETE', `/api/items/${part.id}`)).status).toBe(204);
     expect(db.prepare('SELECT count(*) AS n FROM purchases').get()).toEqual({ n: 0 });
     expect(existsSync(join(uploads, 'legacy-doc-1'))).toBe(true);
     // The receipt is not in the snapshot: nothing in the app can reach it.
@@ -670,12 +687,12 @@ describe('the Parts section', () => {
       date: '2026-11-04',
       odometer: 18500,
       taskIds: [task.id],
-      partsUsed: [{ description: part.name, quantity: 5, unit: 'litre', partId: part.id }],
+      partsUsed: [{ description: part.name, quantity: 5, unit: 'litre', itemId: part.id }],
     };
     expect((await call('PUT', '/api/services/svc-00020', body)).status).toBe(200);
     const after = await snapshot();
-    expect(after.vehicleParts[0]).not.toHaveProperty('toBuy');
-    expect(after.services[0]!.partsUsed[0]).toMatchObject({ partId: part.id });
+    expect(after.vehicleItems[0]).not.toHaveProperty('toBuy');
+    expect(after.services[0]!.partsUsed[0]).toMatchObject({ itemId: part.id });
   });
 });
 
@@ -1104,7 +1121,7 @@ describe('migrations', () => {
               VALUES ('d1', 'default', 'v1', 'vehicle', 'v1', 'manual', 'manual.pdf', 'application/pdf', 10)`);
     old.close();
     const migrated = openDatabase(path);
-    expect(migrated.prepare('SELECT id, name, to_buy, notes FROM vehicle_parts').all()).toEqual([{ id: 'p1', name: 'Motul 7100 10W-40', to_buy: 0, notes: null }]);
+    expect(migrated.prepare('SELECT id, name, to_buy, notes FROM vehicle_items').all()).toEqual([{ id: 'p1', name: 'Motul 7100 10W-40', to_buy: 0, notes: null }]);
     expect(migrated.prepare('SELECT count(*) AS n FROM purchases').get()).toEqual({ n: 0 });
     expect(migrated.prepare('SELECT id, owner_kind FROM documents').all()).toEqual([{ id: 'd1', owner_kind: 'vehicle' }]);
     // The legacy CHECK still lets a document belong to a purchase (kept so a rollback works).
@@ -1116,7 +1133,7 @@ describe('migrations', () => {
   it('adds an empty ref_purchases table and leaves the legacy purchases alone', () => {
     const path = join(dir, 'garage.sqlite');
     const latest = (openDatabase(':memory:').prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
-    const old = openDatabase(path, undefined, latest - 3);
+    const old = openDatabase(path, undefined, latest - 4);
     old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v1', 'default', 'motorcycle', 'Old bike')`);
     old.exec(`INSERT INTO vehicle_parts (id, vehicle_id, name, unit, quantity) VALUES ('p1', 'v1', 'Motul 7100 10W-40', 'litre', 5)`);
     old.exec(`INSERT INTO purchases (id, part_id, vehicle_id, date, quantity, total_paid) VALUES ('b1', 'p1', 'v1', '2026-01-10', 5, 40)`);
@@ -1125,7 +1142,7 @@ describe('migrations', () => {
     const migrated = openDatabase(path);
     expect(migrated.prepare('SELECT count(*) AS n FROM ref_purchases').get()).toEqual({ n: 0 });
     expect(migrated.prepare('SELECT id FROM purchases').all()).toEqual([{ id: 'b1' }]);
-    expect(migrated.prepare('SELECT id FROM vehicle_parts').all()).toEqual([{ id: 'p1' }]);
+    expect(migrated.prepare('SELECT id FROM vehicle_items').all()).toEqual([{ id: 'p1' }]);
     migrated.close();
   });
 
@@ -1136,7 +1153,28 @@ describe('migrations', () => {
     old.exec(`INSERT INTO vehicle_parts (id, vehicle_id, name, unit, quantity) VALUES ('p1', 'v1', 'Motul 7100 10W-40', 'litre', 5)`);
     old.close();
     const migrated = openDatabase(path);
-    expect(migrated.prepare('SELECT id, spec_line_id FROM vehicle_parts').all()).toEqual([{ id: 'p1', spec_line_id: null }]);
+    expect(migrated.prepare('SELECT id, spec_line_id FROM vehicle_items').all()).toEqual([{ id: 'p1', spec_line_id: null }]);
+    migrated.close();
+  });
+
+  it('renames the Vehicle Part table to Vehicle Item and keeps every link', () => {
+    const path = join(dir, 'garage.sqlite');
+    const old = openDatabase(path, undefined, 40);
+    old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v1', 'default', 'motorcycle', 'Old bike')`);
+    old.exec(`INSERT INTO vehicle_parts (id, vehicle_id, name, unit, quantity) VALUES ('p1', 'v1', 'Motul 7100 10W-40', 'litre', 5)`);
+    old.exec(`INSERT INTO services (id, vehicle_id, date) VALUES ('s1', 'v1', '2026-10-01')`);
+    old.exec(`INSERT INTO service_items (service_id, sort, description, quantity, unit, part_id) VALUES ('s1', 0, 'Motul 7100 10W-40', 5, 'litre', 'p1')`);
+    old.exec(`INSERT INTO purchases (id, part_id, vehicle_id, date, quantity, total_paid) VALUES ('b1', 'p1', 'v1', '2026-01-10', 5, 40)`);
+    old.close();
+    const migrated = openDatabase(path);
+    expect(migrated.prepare('SELECT id, name FROM vehicle_items').all()).toEqual([{ id: 'p1', name: 'Motul 7100 10W-40' }]);
+    expect(() => migrated.prepare('SELECT * FROM vehicle_parts').all()).toThrow();
+    expect(migrated.prepare('SELECT item_id FROM service_items').all()).toEqual([{ item_id: 'p1' }]);
+    expect(migrated.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+    expect(migrated.prepare(`SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('vehicle_items_vehicle', 'vehicle_parts_vehicle')`).all()).toEqual([{ name: 'vehicle_items_vehicle' }]);
+    migrated.exec(`DELETE FROM vehicle_items WHERE id = 'p1'`);
+    expect(migrated.prepare('SELECT item_id FROM service_items').all()).toEqual([{ item_id: null }]);
+    expect(migrated.prepare('SELECT count(*) AS n FROM purchases').get()).toEqual({ n: 0 });
     migrated.close();
   });
 
@@ -1398,7 +1436,7 @@ describe('Notion sync migration', () => {
     const dir = mkdtempSync(join(tmpdir(), 'garage-actions-'));
     try {
       const path = join(dir, 'garage.sqlite');
-      const old = openDatabase(path, undefined, latest - 4);
+      const old = openDatabase(path, undefined, latest - 5);
       old.exec(`INSERT INTO ref_tasks (id, garage_id, notion_id, name, action, applicable_if, default_km, category) VALUES ('r1', 'default', 'n1', 'Vidange', 'replace', '["Moto"]', 6000, 'engine')`);
       expect(() => old.exec(`INSERT INTO ref_tasks (id, garage_id, notion_id, name, action) VALUES ('r2', 'default', 'n2', 'Tension', 'adjust')`)).toThrow();
       old.close();
@@ -1427,7 +1465,7 @@ describe('the glossary rename migration', () => {
   const latest = () => (openDatabase(':memory:').prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
   const seed = (path: string, backupDir?: string) => {
     // The version just before the rename (the ADR 0009 migration came after it).
-    const old = openDatabase(path, undefined, latest() - 2);
+    const old = openDatabase(path, undefined, latest() - 3);
     old.exec(`
       INSERT INTO vehicles (id, garage_id, kind, name, status) VALUES ('v1', 'default', 'car', 'Sold car', 'sold'), ('v2', 'default', 'car', 'Kept car', 'owned');
       INSERT INTO vehicle_consumables (id, garage_id, vehicle_id, notion_id, name, status) VALUES ('vc1', 'default', 'v1', 'n1', 'Huile', 'to_confirm');
@@ -1460,9 +1498,9 @@ describe('the glossary rename migration', () => {
     const backups = join(dir, 'backups');
     seed(path);
     openDatabase(path, backups).close();
-    const copy = readdirSync(backups).find((f) => f.startsWith(`garage-v${latest() - 2}-`) && f.endsWith('.sqlite'));
+    const copy = readdirSync(backups).find((f) => f.startsWith(`garage-v${latest() - 3}-`) && f.endsWith('.sqlite'));
     expect(copy).toBeDefined();
-    const saved = openDatabase(join(backups, copy!), undefined, latest() - 2);
+    const saved = openDatabase(join(backups, copy!), undefined, latest() - 3);
     expect(saved.prepare('SELECT status FROM vehicles WHERE id = ?').get('v1')).toEqual({ status: 'sold' });
     expect(saved.prepare('SELECT status FROM vehicle_specs').all()).toEqual([{ status: 'confirmed' }]);
     saved.close();
@@ -1491,7 +1529,7 @@ describe('the Item Spec migration (ADR 0009)', () => {
     try {
       const path = join(dir, 'garage.sqlite');
       const latest = (openDatabase(':memory:').prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
-      const old = openDatabase(path, undefined, latest - 1);
+      const old = openDatabase(path, undefined, latest - 2);
       old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v1', 'default', 'motorcycle', 'Old bike')`);
       old.exec(`INSERT INTO spec_lines (id, vehicle_id, label, value, spec_group, sort) VALUES ('s1', 'v1', 'Engine oil', '10W-40', 'fluids', 0)`);
       old.exec(`INSERT INTO vehicle_parts (id, vehicle_id, name, unit, quantity, spec_line_id) VALUES ('p1', 'v1', 'Motul 7100 10W-40', 'litre', 5, 's1')`);
@@ -1500,7 +1538,7 @@ describe('the Item Spec migration (ADR 0009)', () => {
       old.close();
 
       const migrated = openDatabase(path);
-      expect(migrated.prepare('SELECT id, spec_line_id, item_spec_id FROM vehicle_parts').all()).toEqual([{ id: 'p1', spec_line_id: 's1', item_spec_id: null }]);
+      expect(migrated.prepare('SELECT id, spec_line_id, item_spec_id FROM vehicle_items').all()).toEqual([{ id: 'p1', spec_line_id: 's1', item_spec_id: null }]);
       expect(migrated.prepare('SELECT id, label FROM spec_lines').all()).toEqual([{ id: 's1', label: 'Engine oil' }]);
       expect(migrated.prepare('SELECT count(*) AS n FROM spec_line_moves').get()).toEqual({ n: 0 });
       migrated.exec(`INSERT INTO spec_line_moves (spec_line_id, target, notion_id, created_page) VALUES ('s1', 'item_spec', 'page-item-1', 1)`);
@@ -1528,8 +1566,8 @@ describe('the Item Spec migration (ADR 0009)', () => {
     }
   });
 
-  it('sends the API version 3 header', async () => {
-    expect(API_VERSION).toBe(3);
-    expect((await call('GET', '/api/snapshot')).headers.get('x-api-version')).toBe('3');
+  it('sends the API version 4 header', async () => {
+    expect(API_VERSION).toBe(4);
+    expect((await call('GET', '/api/snapshot')).headers.get('x-api-version')).toBe('4');
   });
 });

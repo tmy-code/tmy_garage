@@ -59,7 +59,7 @@ const base: Snapshot = {
   services: [],
   readings: [],
   specLines: [],
-  vehicleParts: [],
+  vehicleItems: [],
   fillups: [],
   documents: [],
   catalogue: [],
@@ -103,7 +103,7 @@ describe('normalizeSnapshot', () => {
     const s = normalizeSnapshot(old);
     expect(s.tasks[0]).toMatchObject({ notes: null, category: null, action: 'replace', switchedOff: false });
     expect(s.services[0]).toMatchObject({ kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null });
-    expect(s.services[0]!.partsUsed).toEqual([{ description: 'Oil', partNumber: null, quantity: 1, unit: 'litre', price: 5, partId: null }]);
+    expect(s.services[0]!.partsUsed).toEqual([{ description: 'Oil', partNumber: null, quantity: 1, unit: 'litre', price: 5, itemId: null }]);
     expect(s.specLines).toEqual([]);
   });
 
@@ -138,7 +138,13 @@ describe('normalizeSnapshot', () => {
 
   it('gives a Vehicle Item no Item Spec when an older copy has none, and keeps the one it has', () => {
     const old = { vehicles: [], tasks: [], services: [], readings: [], vehicleParts: [{ id: 'p1', name: 'Huile' }, { id: 'p2', name: 'Filtre', itemSpecId: 'spec-1' }] } as unknown as Snapshot;
-    expect(normalizeSnapshot(old).vehicleParts.map((p) => p.itemSpecId)).toEqual([null, 'spec-1']);
+    expect(normalizeSnapshot(old).vehicleItems.map((p) => p.itemSpecId)).toEqual([null, 'spec-1']);
+  });
+
+  it('reads a Service queued before the rename (its partId) as itemId', () => {
+    const queued = { vehicles: [], tasks: [], services: [{ id: 's', partsUsed: [{ description: 'Oil', quantity: 1, unit: 'litre', partId: 'item-0001' }] }], readings: [] } as unknown as Snapshot;
+    expect(normalizeSnapshot(queued).services[0]!.partsUsed[0]).toMatchObject({ itemId: 'item-0001' });
+    expect(normalizeSnapshot(queued).services[0]!.partsUsed[0]).not.toHaveProperty('partId');
   });
 
   it('lets a snapshot with the new names pass through', () => {

@@ -2,6 +2,8 @@
 status: accepted (2026-11-10)
 ---
 
+> Renamed since: Vehicle Part is now Vehicle Item (table `vehicle_items`, `service_items.item_id`, routes `/api/items`); see ADR 0009. The DROP command below now reads `vehicle_items`.
+
 # The shopping list and the purchase log move to Notion; the app reads the owner's Achats
 
 The owner now keeps what to buy and what was bought in Notion, in their own *Achats* database, linked to the vehicle's consumable lines. Keeping the same thing in the app as well (the To buy / Bought state, the Purchase log, receipts, the CSV, the Articles copy) meant typing it twice. So the app stops being the place where purchases are entered, and instead reads Notion to say whether what a Task needs was bought since it was last done.

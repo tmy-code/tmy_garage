@@ -128,7 +128,7 @@ export function Layout({
 
 const SECTIONS = [
   ['garage', '/', 'home'],
-  ['parts', '/parts', 'cart'],
+  ['items', '/items', 'cart'],
   ['workshop', '/workshop', 'wrench'],
   ['settings', '/settings', 'settings'],
 ] as const;
@@ -138,7 +138,7 @@ type Section = (typeof SECTIONS)[number][0];
 /** Which menu entry the screen at this route belongs to. */
 function sectionOf([section, , sub]: string[]): Section {
   if (section === 'workshop' || section === 'tasks') return 'workshop';
-  if (section === 'parts' || (section === 'vehicles' && sub === 'parts')) return 'parts';
+  if (section === 'items' || (section === 'vehicles' && sub === 'items')) return 'items';
   if (section === 'vehicles' && sub === 'specs') return 'workshop';
   if (section === 'settings') return 'settings';
   return 'garage';

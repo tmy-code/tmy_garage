@@ -2,6 +2,8 @@
 status: accepted, mostly superseded by ADR 0008 (the to-buy state and the purchase log were removed; the Parts list remains)
 ---
 
+> Renamed since: Vehicle Part is now Vehicle Item (table `vehicle_items`, `service_items.item_id`, routes `/api/items`); see ADR 0009.
+
 # A garage-wide Parts section with a purchase log
 
 The parts list (ADR 0003) held only parts already bought, per Vehicle. The owner also wants to note parts they plan to buy, see every Vehicle's parts in one place, and record what each purchase cost so spending can be analysed outside the app. We added a **Parts section** over the existing per-Vehicle lists, a **To buy / Bought** state on each Vehicle Part, and a **Purchase** log under each part.

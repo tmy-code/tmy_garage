@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { messagesFor } from '../shared/messages.ts';
-import type { MaintenanceTask, Snapshot, SpecLine, Vehicle, VehiclePart } from '../shared/types.ts';
+import type { MaintenanceTask, Snapshot, SpecLine, Vehicle, VehicleItem } from '../shared/types.ts';
 import { buildCopy, buildSummary } from './copy.ts';
 
 const TODAY = '2026-11-01';
@@ -45,7 +45,7 @@ function spec(id: string, vehicleId: string, group: SpecLine['group']): SpecLine
   return { id, vehicleId, label: `Ligne ${id}`, value: '10W-40, 3.2 L', oem: null, group, category: 'engine', sort: 0 };
 }
 
-function part(id: string, vehicleId: string, overrides: Partial<VehiclePart> = {}): VehiclePart {
+function part(id: string, vehicleId: string, overrides: Partial<VehicleItem> = {}): VehicleItem {
   return {
     id,
     vehicleId,
@@ -87,7 +87,7 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
       { id: 'r2', vehicleId: 'v1', date: '2026-10-01', odometer: 11_000 },
     ],
     specLines: [spec('s1', 'v1', 'fluids'), spec('s2', 'v1', 'torque'), spec('s3', 'v2', 'parts')],
-    vehicleParts: [part('p1', 'v1', { taskId: 't1', specLineId: 's1' }), part('p2', 'v1', { specLineId: 's2' }), part('p3', 'v2')],
+    vehicleItems: [part('p1', 'v1', { taskId: 't1', specLineId: 's1' }), part('p2', 'v1', { specLineId: 's2' }), part('p3', 'v2')],
     fillups: [],
     documents: [],
     catalogue: [],

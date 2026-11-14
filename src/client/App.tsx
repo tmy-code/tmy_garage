@@ -1,4 +1,4 @@
-import { useLayoutEffect } from 'react';
+import { useEffect, useLayoutEffect } from 'react';
 import { DesktopOnlyPage, LanguageSwitch, Layout, NotFound } from './components.tsx';
 import { useT } from './i18n.ts';
 import { Dashboard, ManageGaragePage } from './pages/Dashboard.tsx';
@@ -9,9 +9,9 @@ import { ReadingForm, ServiceForm } from './pages/ServiceForm.tsx';
 import { CopyTasks, SellForm, TaskForm, VehicleForm } from './pages/SetupForms.tsx';
 import { FillupForm } from './pages/Fuel.tsx';
 import { VehiclePage } from './pages/Vehicle.tsx';
-import { PartsPage, VehiclePartForm } from './pages/Parts.tsx';
+import { ItemsPage, VehicleItemForm } from './pages/Items.tsx';
 import { SpecsPage, TaskPage, ToolsPage, WorkshopPage } from './pages/Workshop.tsx';
-import { desktopOnlyRoute, scrollForNewRoute, useRoute } from './router.ts';
+import { desktopOnlyRoute, legacyRoute, navigate, scrollForNewRoute, useRoute } from './router.ts';
 import { isAndroidApp } from './native.ts';
 import { ServerAddress } from './pages/Server.tsx';
 import { needsServerAddress, sync, useStore } from './store.ts';
@@ -27,6 +27,13 @@ export function App() {
   useLayoutEffect(() => {
     window.scrollTo(0, scrollForNewRoute());
   }, [path]);
+
+  // A bookmark from before Vehicle Part became Vehicle Item (#/parts...) moves to its new address.
+  const legacy = legacyRoute(route);
+  useEffect(() => {
+    if (legacy) navigate(legacy, { replace: true });
+  }, [legacy]);
+  if (legacy) return null;
 
   if (!loaded) {
     return (
@@ -77,12 +84,12 @@ export function App() {
   if (section === undefined) return <Dashboard snapshot={snapshot} />;
   if (section === 'workshop') return <WorkshopPage snapshot={snapshot} />;
   if (section === 'tools') return <ToolsPage snapshot={snapshot} />;
-  if (section === 'parts') {
-    if (id === undefined) return <PartsPage snapshot={snapshot} />;
-    if (id === 'vehicle' && sub) return <PartsPage key={sub} snapshot={snapshot} vehicleId={sub} />;
-    if (id === 'new') return <VehiclePartForm key={sub ?? 'new'} snapshot={snapshot} vehicleId={sub} />;
-    const part = id === 'part' ? snapshot.vehicleParts.find((p) => p.id === sub) : undefined;
-    return part ? <VehiclePartForm key={part.id} snapshot={snapshot} existing={part} /> : <NotFound what="page" />;
+  if (section === 'items') {
+    if (id === undefined) return <ItemsPage snapshot={snapshot} />;
+    if (id === 'vehicle' && sub) return <ItemsPage key={sub} snapshot={snapshot} vehicleId={sub} />;
+    if (id === 'new') return <VehicleItemForm key={sub ?? 'new'} snapshot={snapshot} vehicleId={sub} />;
+    const item = id === 'item' ? snapshot.vehicleItems.find((p) => p.id === sub) : undefined;
+    return item ? <VehicleItemForm key={item.id} snapshot={snapshot} existing={item} /> : <NotFound what="page" />;
   }
   if (section === 'settings' && id === 'parts') {
     if (sub === undefined) return <CataloguePage snapshot={snapshot} />;
@@ -118,8 +125,8 @@ export function App() {
         return <CopyTasks vehicle={vehicle} snapshot={snapshot} />;
       case 'specs':
         return <SpecsPage vehicle={vehicle} snapshot={snapshot} />;
-      case 'parts':
-        return <PartsPage key={vehicle.id} snapshot={snapshot} vehicleId={vehicle.id} />;
+      case 'items':
+        return <ItemsPage key={vehicle.id} snapshot={snapshot} vehicleId={vehicle.id} />;
       case 'tasks':
         if (subId === 'new') return <TaskForm vehicle={vehicle} snapshot={snapshot} />;
     }

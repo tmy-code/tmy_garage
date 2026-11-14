@@ -75,7 +75,7 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     readings: [],
     fillups: [],
     specLines: [],
-    vehicleParts: [],
+    vehicleItems: [],
     documents: [],
     catalogue: [],
     refTasks: [ref('rt-oil', { consumableTypeIds: ['ct-oil', 'ct-filter'] }), ref('rt-check', { action: 'inspect', consumableTypeIds: ['ct-oil'] }), ref('rt-none')],

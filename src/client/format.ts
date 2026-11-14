@@ -66,7 +66,7 @@ export function matchesQuery(texts: (string | null)[], query: string): boolean {
 
 /** "3.2 litres", "1 piece". */
 export function formatQuantity(quantity: number, unit: PartUnit, m: Messages = messages()): string {
-  const word = quantity === 1 ? m.parts.unitSingular[unit] : (unit === 'litre' ? m.workshop.litre : m.workshop.piece).toLowerCase();
+  const word = quantity === 1 ? m.items.unitSingular[unit] : (unit === 'litre' ? m.workshop.litre : m.workshop.piece).toLowerCase();
   return `${quantity} ${word}`;
 }
 

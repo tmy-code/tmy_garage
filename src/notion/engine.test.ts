@@ -105,7 +105,7 @@ const snapshot = (): Snapshot =>
     tasks: [],
     services: [],
     readings: [],
-    vehicleParts: [{ id: 'p1', vehicleId: 'bike', name: 'Huile test', partNumber: 'REF-1', unit: 'litre', quantity: 3, price: null, taskId: null, specLineId: 's1', notes: 'Boutique' }],
+    vehicleItems: [{ id: 'p1', vehicleId: 'bike', name: 'Huile test', partNumber: 'REF-1', unit: 'litre', quantity: 3, price: null, taskId: null, specLineId: 's1', notes: 'Boutique' }],
     specLines: [{ id: 's1', vehicleId: 'bike', label: 'Huile', value: '10W-40', oem: null, group: 'fluids', category: 'engine', sort: 0 }],
   } as unknown as Snapshot);
 

@@ -47,7 +47,7 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     readings: [],
     fillups: [],
     specLines: [],
-    vehicleParts: [],
+    vehicleItems: [],
     documents: [],
     catalogue: [],
     refTasks: [],

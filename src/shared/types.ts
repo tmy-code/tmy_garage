@@ -186,17 +186,17 @@ export interface PartUsed {
   unit: PartUnit;
   /** What was paid per piece or per litre. */
   price?: number | null;
-  /** The Vehicle Part it was picked from; a copy of its details is kept here, so the history never changes. */
-  partId?: string | null;
+  /** The Vehicle Item it was picked from; a copy of its details is kept here, so the history never changes. */
+  itemId?: string | null;
   /** The Consumable Type and Product it was, from the Notion referentials (types only for now). */
   consumableTypeId?: string | null;
   productId?: string | null;
-  /** Only when sending a Service: also keep it in the Vehicle's parts list (under `partId`). */
+  /** Only when sending a Service: also keep it in the Vehicle's items list (under `itemId`). */
   remember?: boolean;
 }
 
 /** A part or fluid the owner buys for one Vehicle, picked when logging a Service. */
-export interface VehiclePart {
+export interface VehicleItem {
   id: string;
   vehicleId: string;
   /** Brand and variant, such as "Motul 7100 10W-40". */
@@ -300,7 +300,7 @@ export interface Snapshot {
   fillups: Fillup[];
   /** Spec Lines not moved to Notion yet (or that cannot be, e.g. sold vehicles). Read-only, legacy. */
   specLines: SpecLine[];
-  vehicleParts: VehiclePart[];
+  vehicleItems: VehicleItem[];
   /** Document details only; the files are fetched on demand. */
   documents: GarageDocument[];
   /** The owner's changes to the parts catalogue; see catalogueOf. */

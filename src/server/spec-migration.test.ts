@@ -82,11 +82,11 @@ beforeEach(() => {
       ('l-sold', 'sold', 'Huile moteur', '5W-30', NULL, 'fluids', NULL, 0),
       ('l-eoil', 'car', 'Engine oil', '5W-40', NULL, 'fluids', 'engine', 0),
       ('l-wipers', 'car', 'Wiper blades', '600 mm', NULL, 'parts', 'chassis', 1);
-    INSERT INTO vehicle_parts (id, vehicle_id, name, unit, quantity, spec_line_id) VALUES
+    INSERT INTO vehicle_items (id, vehicle_id, name, unit, quantity, spec_line_id) VALUES
       ('part-oil', 'bike', 'Motul 7100 10W-40', 'litre', 3.2, 'l-oil'),
       ('part-oil-2', 'bike', 'Autre huile', 'litre', 3.2, 'l-oil'),
       ('part-drain', 'bike', 'Joint de bouchon', 'piece', 1, 'l-drain');
-    UPDATE vehicle_parts SET item_spec_id = 'chosen-by-owner' WHERE id = 'part-oil-2';
+    UPDATE vehicle_items SET item_spec_id = 'chosen-by-owner' WHERE id = 'part-oil-2';
   `);
   seedNotion();
 });
@@ -99,7 +99,7 @@ describe('migrateSpecLines', () => {
     expect(workspace.writes).toEqual([]);
     expect(count('spec_line_moves')).toBe(0);
     expect(count('vehicle_consumables')).toBe(0);
-    expect(db.prepare("SELECT item_spec_id FROM vehicle_parts WHERE id = 'part-oil'").get()).toEqual({ item_spec_id: null });
+    expect(db.prepare("SELECT item_spec_id FROM vehicle_items WHERE id = 'part-oil'").get()).toEqual({ item_spec_id: null });
     expect(report).toMatchObject({ dryRun: true, created: 3, linked: 2, skipped: 4, itemsRepointed: 1, itemsUnlinked: 1 });
     const move = (id: string) => report.moves.find((m) => m.specLineId === id)!;
     expect(move('l-oil')).toMatchObject({ target: 'item_spec', action: 'create', items: 2, preview: { Désignation: 'Huile moteur', Type: 'Huile moteur', Spécification: '10W-40', Capacité: '3,2 L', 'Réf. OEM': 'OEM-1', Statut: 'À confirmer' } });
@@ -136,9 +136,9 @@ describe('migrateSpecLines', () => {
     expect(db.prepare("SELECT created_page FROM spec_line_moves WHERE spec_line_id = 'l-oil'").get()).toEqual({ created_page: 1 });
     // The new pages are in the app already, and the items point at them (only where they pointed at nothing).
     const oil = db.prepare("SELECT id FROM vehicle_consumables WHERE vehicle_id = 'bike' AND name = 'Huile moteur'").get() as { id: string };
-    expect(db.prepare("SELECT item_spec_id FROM vehicle_parts WHERE id = 'part-oil'").get()).toEqual({ item_spec_id: oil.id });
-    expect(db.prepare("SELECT item_spec_id FROM vehicle_parts WHERE id = 'part-oil-2'").get()).toEqual({ item_spec_id: 'chosen-by-owner' });
-    expect(db.prepare("SELECT item_spec_id FROM vehicle_parts WHERE id = 'part-drain'").get()).toEqual({ item_spec_id: null });
+    expect(db.prepare("SELECT item_spec_id FROM vehicle_items WHERE id = 'part-oil'").get()).toEqual({ item_spec_id: oil.id });
+    expect(db.prepare("SELECT item_spec_id FROM vehicle_items WHERE id = 'part-oil-2'").get()).toEqual({ item_spec_id: 'chosen-by-owner' });
+    expect(db.prepare("SELECT item_spec_id FROM vehicle_items WHERE id = 'part-drain'").get()).toEqual({ item_spec_id: null });
     expect(db.prepare("SELECT confirmation FROM vehicle_consumables WHERE id = ?").get(oil.id)).toEqual({ confirmation: 'to_confirm' });
     // Nothing is deleted: the lines stay, and only the unmoved ones remain in the snapshot.
     expect(count('spec_lines')).toBe(9);
@@ -158,10 +158,10 @@ describe('migrateSpecLines', () => {
   it('finishes the re-pointing of lines moved by an earlier, interrupted run', async () => {
     await run(false);
     const oil = db.prepare("SELECT id FROM vehicle_consumables WHERE vehicle_id = 'bike' AND name = 'Huile moteur'").get() as { id: string };
-    db.prepare("UPDATE vehicle_parts SET item_spec_id = NULL WHERE id = 'part-oil'").run(); // as if the run had stopped before step 7
+    db.prepare("UPDATE vehicle_items SET item_spec_id = NULL WHERE id = 'part-oil'").run(); // as if the run had stopped before step 7
     const again = await run(false);
     expect(again).toMatchObject({ created: 0, itemsRepointed: 1 });
-    expect(db.prepare("SELECT item_spec_id FROM vehicle_parts WHERE id = 'part-oil'").get()).toEqual({ item_spec_id: oil.id });
+    expect(db.prepare("SELECT item_spec_id FROM vehicle_items WHERE id = 'part-oil'").get()).toEqual({ item_spec_id: oil.id });
   });
 
   it('stops before any write when a column the plan writes is missing', async () => {

@@ -2,6 +2,8 @@
 status: accepted, extended by ADR 0004 (parts can also be To buy, and have a purchase log; removed by 0008)
 ---
 
+> Renamed since: Vehicle Part is now Vehicle Item (table `vehicle_items`, `service_items.item_id`, routes `/api/items`); see ADR 0009.
+
 # A parts list per Vehicle, picked when logging a Service
 
 The components of a Service were free text typed each time. We added a **parts list** per Vehicle (`vehicle_parts`): what the owner actually buys, with part number, unit, usual quantity, price per unit and the Task it is usually bought for. Logging a Service picks from it, and a part typed by hand is kept in it by default.

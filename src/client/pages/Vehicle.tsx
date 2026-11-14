@@ -224,8 +224,8 @@ function SetupRow({
   );
 }
 
-type Tab = 'plan' | 'history' | 'specs' | 'parts' | 'fuel';
-const TABS: Tab[] = ['plan', 'history', 'specs', 'parts', 'fuel'];
+type Tab = 'plan' | 'history' | 'specs' | 'items' | 'fuel';
+const TABS: Tab[] = ['plan', 'history', 'specs', 'items', 'fuel'];
 
 /** The tab last used on this vehicle, kept for the session so coming back from a task lands where you were. */
 function savedTab(vehicleId: string, tabs: Tab[]): Tab {
@@ -250,8 +250,8 @@ export function VehiclePage({ vehicle, snapshot, openSetup = false }: { vehicle:
   const pending = new Set(outbox.map((op) => op.data.id));
   // Item Specs and Component Specs (Notion), plus the old Spec Lines not moved there yet.
   const specCount = [snapshot.itemSpecs, snapshot.componentSpecs, snapshot.specLines].reduce((n, list) => n + list.filter((s) => s.vehicleId === vehicle.id).length, 0);
-  const vehicleParts = snapshot.vehicleParts.filter((p) => p.vehicleId === vehicle.id);
-  const partCount = vehicleParts.length;
+  const vehicleItems = snapshot.vehicleItems.filter((p) => p.vehicleId === vehicle.id);
+  const itemCount = vehicleItems.length;
   // An electric vehicle has no fuel log.
   const hasFuel = vehicle.fuel !== 'electric';
   const tabs = hasFuel ? TABS : TABS.filter((x) => x !== 'fuel');
@@ -456,12 +456,12 @@ export function VehiclePage({ vehicle, snapshot, openSetup = false }: { vehicle:
             </ul>
           </section>
 
-          <section {...panel('parts')} aria-labelledby={wide ? undefined : 'tab-parts'}>
-            <h2>{t.parts.title}</h2>
+          <section {...panel('items')} aria-labelledby={wide ? undefined : 'tab-items'}>
+            <h2>{t.items.title}</h2>
             <ul className="list">
               <li>
-                <a href={`#/parts/vehicle/${vehicle.id}`}>
-                  {t.parts.vehicleLink(partCount)}
+                <a href={`#/items/vehicle/${vehicle.id}`}>
+                  {t.items.vehicleLink(itemCount)}
                 </a>
               </li>
             </ul>
