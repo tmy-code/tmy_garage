@@ -237,7 +237,7 @@ describe('vehicleDue', () => {
       fillups: [],
       documents: [],
       catalogue: [],
-      refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], vehicleSpecs: [], notionPurchases: [], notion: null,
+      refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], componentSpecs: [], notionPurchases: [], notion: null,
     };
     const { usage, due } = vehicleDue(snapshot, 'bike', '2026-10-01');
     expect(usage.latest?.odometer).toBe(21_500);
@@ -259,7 +259,7 @@ describe('vehicleDue', () => {
       fillups: [],
       documents: [],
       catalogue: [],
-      refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], vehicleSpecs: [], notionPurchases: [], notion: null,
+      refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], componentSpecs: [], notionPurchases: [], notion: null,
     };
     const { due } = vehicleDue(snapshot, 'bike', '2026-10-01');
     expect(due.map((d) => [d.taskId, d.status])).toEqual([
@@ -321,7 +321,7 @@ describe('pointsOf and usageOf with fill-ups', () => {
     fillups: [fillup('f1', 'bike', '2026-03-01', 12_000), fillup('f2', 'bike', '2026-03-05', null), fillup('f3', 'other', '2026-03-09', 99_999)],
     documents: [],
     catalogue: [],
-    refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], vehicleSpecs: [], notionPurchases: [], notion: null,
+    refTasks: [], componentTypes: [], consumableTypes: [], products: [], tools: [], vehicleConsumables: [], componentSpecs: [], notionPurchases: [], notion: null,
   };
 
   it('includes the fill-ups of the vehicle with a distance, and skips the others', () => {

@@ -7,7 +7,7 @@ import { buildJournal, buildLastDone } from './journal.ts';
 const fr = messagesFor('fr');
 
 const vehicle = (id: string, overrides: Partial<Vehicle> = {}): Vehicle =>
-  ({ id, kind: 'motorcycle', name: `Moto ${id}`, make: 'Exemple', model: 'Test', year: 2020, vin: 'VF1TESTVIN0000001', status: 'owned', onGaragePage: true, equipment: [], ...overrides }) as Vehicle;
+  ({ id, kind: 'motorcycle', name: `Moto ${id}`, make: 'Exemple', model: 'Test', year: 2020, vin: 'VF1TESTVIN0000001', ownership: 'owned', onGaragePage: true, equipment: [], ...overrides }) as Vehicle;
 
 const task = (id: string, overrides: Partial<MaintenanceTask> = {}): MaintenanceTask => ({
   id,
@@ -45,7 +45,7 @@ const service = (id: string, overrides: Partial<Service> = {}): Service => ({
 
 function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
   return normalizeSnapshot({
-    vehicles: [vehicle('v1'), vehicle('v2', { status: 'sold' })],
+    vehicles: [vehicle('v1'), vehicle('v2', { ownership: 'sold' })],
     tasks: [
       task('t-oil', { refTaskId: 'rt-oil', notionPlanId: 'plan-oil', action: 'replace' }),
       task('t-check', { action: 'inspect' }),
@@ -142,7 +142,7 @@ describe('buildLastDone', () => {
   });
 
   it('skips the Tasks of a sold vehicle', () => {
-    const s = snapshot({ vehicles: [vehicle('v1', { status: 'sold' })], tasks: [task('t-oil', { refTaskId: 'rt-oil', baselineDate: '2026-02-01' })] });
+    const s = snapshot({ vehicles: [vehicle('v1', { ownership: 'sold' })], tasks: [task('t-oil', { refTaskId: 'rt-oil', baselineDate: '2026-02-01' })] });
     expect(buildLastDone(s, today)).toEqual([]);
   });
 });

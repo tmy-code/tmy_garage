@@ -243,7 +243,7 @@ export function VehiclePage({ vehicle, snapshot, openSetup = false }: { vehicle:
   const { usage, due } = useMemo(() => vehicleDue(snapshot, vehicle.id, today), [snapshot, vehicle.id, today]);
   const tasks = new Map(snapshot.tasks.filter((task) => task.vehicleId === vehicle.id).map((task) => [task.id, task]));
   // Never-done tasks of an owned Vehicle have no due date: they get their own block, the rest stay under their categories.
-  const owned = vehicle.status === 'owned';
+  const owned = vehicle.ownership === 'owned';
   const noRecord = owned ? due.filter((d) => d.status === 'unknown') : [];
   const groups = groupByCategory(owned ? due.filter((d) => d.status !== 'unknown') : due, tasks);
   const pending = new Set(outbox.map((op) => op.data.id));
@@ -362,7 +362,7 @@ export function VehiclePage({ vehicle, snapshot, openSetup = false }: { vehicle:
                 )}
               </div>
             ) : null}
-            {vehicle.status === 'sold' ? <p className="banner banner-warn">{t.vehicle.sold(saleDetails)}</p> : null}
+            {vehicle.ownership === 'sold' ? <p className="banner banner-warn">{t.vehicle.sold(saleDetails)}</p> : null}
             <p className="odometer">
               {usage.latest === null ? (
                 t.vehicle.noReading

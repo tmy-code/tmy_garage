@@ -40,7 +40,7 @@ export function buildSummary(v: Vehicle, t: Messages): string {
 }
 
 export function buildCopy(snapshot: Snapshot, today: IsoDate, t: Messages): NotionCopy {
-  const owned = snapshot.vehicles.filter((v) => v.status === 'owned');
+  const owned = snapshot.vehicles.filter((v) => v.ownership === 'owned');
 
   const vehicles = owned.map((v): VehicleRow => {
     const { usage } = vehicleDue(snapshot, v.id, today);

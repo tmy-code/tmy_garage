@@ -16,7 +16,7 @@ const line = (id: string, overrides: Partial<VehicleConsumable> = {}): VehicleCo
   quantity: null,
   compatibleProductIds: [],
   chosenProductId: null,
-  status: null,
+  confirmation: null,
   notionId: `n-${id}`,
   ...overrides,
 });
@@ -81,7 +81,7 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     products: [],
     tools: [],
     vehicleConsumables: [line('vc-oil'), line('vc-filter', { typeId: 'ct-filter' })],
-    vehicleSpecs: [],
+    componentSpecs: [],
     notionPurchases: [],
     notion: null,
     ...overrides,

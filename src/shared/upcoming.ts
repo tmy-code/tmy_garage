@@ -37,7 +37,7 @@ export function upcoming(snapshot: Snapshot, today: IsoDate): Upcoming[] {
   const later: Upcoming[] = [];
   const readings: Upcoming[] = [];
   for (const vehicle of snapshot.vehicles) {
-    if (vehicle.status !== 'owned') continue;
+    if (vehicle.ownership !== 'owned') continue;
     const vehicleId = vehicle.id;
     const { usage, due } = vehicleDue(snapshot, vehicleId, today);
     for (const d of due) {

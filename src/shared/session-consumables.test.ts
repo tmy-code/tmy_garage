@@ -30,7 +30,7 @@ const row = (overrides: Partial<VehicleConsumable> = {}): VehicleConsumable => (
   quantity: null,
   compatibleProductIds: [],
   chosenProductId: null,
-  status: null,
+  confirmation: null,
   notionId: 'n-vc1',
   ...overrides,
 });
@@ -84,7 +84,7 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     products: [product('p-a'), product('p-b'), product('p-c'), product('p-f', { typeId: 'ct-filter' })],
     tools: [],
     vehicleConsumables: [row({ chosenProductId: 'p-c', compatibleProductIds: ['p-b', 'p-c'] })],
-    vehicleSpecs: [],
+    componentSpecs: [],
     notionPurchases: [],
     notion: null,
     ...overrides,
@@ -195,7 +195,7 @@ describe('mergeNeeds', () => {
       ref('rt-check', { action: 'inspect', consumableTypeIds: ['ct-oil'] }),
     ],
     componentTypes: [{ id: 'comp-plug', name: 'Bouchon', category: null, notes: null, notionId: 'n-comp' }],
-    vehicleSpecs: [{ id: 'vs1', vehicleId: 'v1', label: 'Couple', componentTypeId: 'comp-plug', category: null, value: '25', unit: 'N·m', source: null, status: null, notionId: 'n-vs' }],
+    componentSpecs: [{ id: 'vs1', vehicleId: 'v1', label: 'Couple', componentTypeId: 'comp-plug', category: null, value: '25', unit: 'N·m', source: null, confirmation: null, notionId: 'n-vs' }],
   });
 
   it('gives one block per type, naming every ticked task that needs it, in the order of the tasks', () => {

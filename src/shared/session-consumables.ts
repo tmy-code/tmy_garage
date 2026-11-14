@@ -2,7 +2,7 @@
 // required consumable type, and what picking one fills in. No React, nothing from the client: the server image can load it.
 import { requiredConsumables, torqueSpecs, type RequiredConsumable } from './applicability.ts';
 import type { PartUnit } from './schemas.ts';
-import type { ComponentType, ConsumableType, Product, Snapshot, VehicleConsumable, VehicleSpec } from './types.ts';
+import type { ComponentType, ConsumableType, Product, Snapshot, VehicleConsumable, ComponentSpec } from './types.ts';
 
 export type ProductGroup = 'chosen' | 'compatible' | 'other';
 
@@ -87,7 +87,7 @@ export interface MergedNeed {
   rows: VehicleConsumable[];
   choices: ProductChoice[];
   /** The torque values of the components of those Tasks, each once. */
-  torque: { component: ComponentType; spec: VehicleSpec }[];
+  torque: { component: ComponentType; spec: ComponentSpec }[];
 }
 
 /**

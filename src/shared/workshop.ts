@@ -1,6 +1,6 @@
 import { PART_CATEGORIES, type PartCategory } from './catalogue.ts';
 import type { DueInfo } from './due.ts';
-import type { MaintenanceTask, Service, Snapshot } from './types.ts';
+import type { ComponentSpec, Confirmation, MaintenanceTask, Ownership, Service, Snapshot } from './types.ts';
 
 /** A Maintenance Task's category: the one the owner picked, else 'other'. */
 export function taskCategory(task: MaintenanceTask): PartCategory {
@@ -36,10 +36,24 @@ export function refKey(s: string | null | undefined): string {
 }
 
 /**
+ * The mapping from the old names stays while phones may hold old snapshots (or an old server may answer): the
+ * Component Specs were `vehicleSpecs`, and `status` was the `ownership` of a Vehicle and the `confirmation` of a
+ * Vehicle Consumable or Component Spec.
+ */
+type LegacyStatus = { status?: unknown };
+type LegacySnapshot = Omit<Snapshot, 'vehicles' | 'vehicleConsumables' | 'componentSpecs'> & {
+  vehicles: (Omit<Snapshot['vehicles'][number], 'ownership'> & { ownership?: Ownership } & LegacyStatus)[];
+  vehicleConsumables?: (Omit<Snapshot['vehicleConsumables'][number], 'confirmation'> & { confirmation?: Confirmation } & LegacyStatus)[];
+  componentSpecs?: (Omit<ComponentSpec, 'confirmation'> & { confirmation?: Confirmation } & LegacyStatus)[];
+  vehicleSpecs?: (Omit<ComponentSpec, 'confirmation'> & { confirmation?: Confirmation } & LegacyStatus)[];
+};
+
+/**
  * Fills in what an older offline copy lacks. A phone may hold a snapshot (or queued Services) saved
  * before workshop data existed; screens can then rely on every field being there.
  */
-export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
+export function normalizeSnapshot(input: Snapshot): Snapshot {
+  const { vehicleSpecs: legacySpecs, ...snapshot } = input as unknown as LegacySnapshot;
   return {
     ...snapshot,
     tasks: snapshot.tasks.map((t) => ({
@@ -57,16 +71,22 @@ export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
     consumableTypes: snapshot.consumableTypes ?? [],
     products: snapshot.products ?? [],
     tools: snapshot.tools ?? [],
-    vehicleConsumables: (snapshot.vehicleConsumables ?? []).map((c) => ({ ...c, compatibleProductIds: c.compatibleProductIds ?? [], specification: c.specification ?? null })),
-    vehicleSpecs: snapshot.vehicleSpecs ?? [],
+    vehicleConsumables: (snapshot.vehicleConsumables ?? []).map(({ status, ...c }) => ({
+      ...c,
+      compatibleProductIds: c.compatibleProductIds ?? [],
+      specification: c.specification ?? null,
+      confirmation: c.confirmation ?? (status as Confirmation | undefined) ?? null,
+    })),
+    componentSpecs: (snapshot.componentSpecs ?? legacySpecs ?? []).map(({ status, ...s }) => ({ ...s, confirmation: s.confirmation ?? (status as Confirmation | undefined) ?? null })),
     notionPurchases: (snapshot.notionPurchases ?? []).map((p) => ({ ...p, productId: p.productId ?? null, quantity: p.quantity ?? null, price: p.price ?? null, shop: p.shop ?? null })),
     notion: snapshot.notion ?? null,
     services: snapshot.services.map(normalizeService),
     catalogue: (snapshot.catalogue ?? []).map((e) => ({ ...e, overrides: e.overrides ?? null, own: e.own ? { ...e.own, action: e.own.action ?? 'replace' } : null })),
     specLines: (snapshot.specLines ?? []).map((l) => ({ ...l, oem: l.oem ?? null, category: l.category ?? null })),
     vehicleParts: (snapshot.vehicleParts ?? []).map((p) => ({ ...p, partNumber: p.partNumber ?? null, price: p.price ?? null, taskId: p.taskId ?? null, specLineId: p.specLineId ?? null, notes: p.notes ?? null })),
-    vehicles: snapshot.vehicles.map((v) => ({
+    vehicles: snapshot.vehicles.map(({ status, ...v }) => ({
       ...v,
+      ownership: v.ownership ?? (status as Ownership | undefined) ?? 'owned',
       vin: v.vin ?? null,
       firstRegistrationDate: v.firstRegistrationDate ?? null,
       purchaseDate: v.purchaseDate ?? null,
@@ -84,7 +104,7 @@ export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
       hasAdblue: v.hasAdblue ?? false,
       hasAc: v.hasAc ?? false,
       hasAirSuspension: v.hasAirSuspension ?? false,
-      onGaragePage: v.onGaragePage ?? v.status === 'owned',
+      onGaragePage: v.onGaragePage ?? (v.ownership ?? status ?? 'owned') === 'owned',
       equipment: v.equipment ?? [],
       notionPageId: v.notionPageId ?? null,
     })),

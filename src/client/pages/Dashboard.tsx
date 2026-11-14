@@ -85,7 +85,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
 /** "sold 3 March 2025" for a sold Vehicle, nothing for an owned one. */
 function SoldNote({ vehicle }: { vehicle: Vehicle }) {
   const t = useT();
-  if (vehicle.status !== 'sold') return null;
+  if (vehicle.ownership !== 'sold') return null;
   return <span className="muted">{vehicle.soldDate ? t.dashboard.soldOn(formatDate(vehicle.soldDate, t)) : t.dashboard.sold}</span>;
 }
 
@@ -94,7 +94,7 @@ export function ManageGaragePage({ snapshot }: { snapshot: Snapshot }) {
   const t = useT();
   const { error, disabled, run } = useSubmit();
   // Owned first, then sold, each in the order they were added.
-  const vehicles = [...snapshot.vehicles].sort((a, b) => Number(a.status === 'sold') - Number(b.status === 'sold'));
+  const vehicles = [...snapshot.vehicles].sort((a, b) => Number(a.ownership === 'sold') - Number(b.ownership === 'sold'));
 
   function toggle(vehicle: Vehicle) {
     void run(() => online('PUT', `/api/vehicles/${vehicle.id}/garage-page`, { shown: !vehicle.onGaragePage }));
@@ -142,8 +142,8 @@ function VehicleCard({ vehicle, items, snapshot, today }: { vehicle: Vehicle; it
   const due = items.filter((i) => i.kind !== 'reading');
   // Tasks never done have no due date, so "nothing due" would be a guess: say how many cannot be reminded yet.
   const noHistory = useMemo(
-    () => (vehicle.status === 'owned' ? vehicleDue(snapshot, vehicle.id, today).due.filter((d) => d.status === 'unknown').length : 0),
-    [snapshot, vehicle.id, vehicle.status, today],
+    () => (vehicle.ownership === 'owned' ? vehicleDue(snapshot, vehicle.id, today).due.filter((d) => d.status === 'unknown').length : 0),
+    [snapshot, vehicle.id, vehicle.ownership, today],
   );
 
   return (
@@ -155,7 +155,7 @@ function VehicleCard({ vehicle, items, snapshot, today }: { vehicle: Vehicle; it
         {usage.latest ? <span className="muted">{formatKm(usage.latest.odometer)}</span> : null}
         {average !== null ? <span className="muted vehicle-consumption">{t.fuel.consumption(formatDecimal(average, 1, t))}</span> : null}
       </a>
-      {vehicle.status === 'owned' ? (
+      {vehicle.ownership === 'owned' ? (
         <QuickReading vehicle={vehicle} latest={usage.latest?.odometer ?? null} today={today} />
       ) : null}
       {reading ? (
@@ -163,7 +163,7 @@ function VehicleCard({ vehicle, items, snapshot, today }: { vehicle: Vehicle; it
           {reading.daysSince === null ? t.dashboard.noReading : t.dashboard.staleReading(reading.daysSince)}
         </a>
       ) : null}
-      {vehicle.status === 'sold' ? (
+      {vehicle.ownership === 'sold' ? (
         <p>
           <SoldNote vehicle={vehicle} />
         </p>

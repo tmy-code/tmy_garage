@@ -59,7 +59,7 @@ export function SessionConsumables({
                   <li key={spec.id} className="need-torque">
                     <strong>{component.name}</strong>
                     <span>{t.notion.torqueLine([localizeNumber(spec.value, t), spec.unit].filter(Boolean).join(' '))}</span>
-                    {spec.status === 'to_confirm' ? <span className="chip chip-dueSoon">{t.notion.toConfirm}</span> : null}
+                    {spec.confirmation === 'to_confirm' ? <span className="chip chip-dueSoon">{t.notion.toConfirm}</span> : null}
                   </li>
                 ))}
               </ul>
@@ -78,7 +78,7 @@ export function SessionConsumables({
                   <dt>{t.workshop.quantity}</dt>
                   <dd>{row.quantity !== null ? localizeNumber(row.quantity, t) : toFill}</dd>
                 </dl>
-                {row.status ? <span className={`chip ${row.status === 'confirmed' ? 'chip-ok' : 'chip-dueSoon'}`}>{row.status === 'confirmed' ? t.notion.confirmed : t.notion.toConfirm}</span> : null}
+                {row.confirmation ? <span className={`chip ${row.confirmation === 'confirmed' ? 'chip-ok' : 'chip-dueSoon'}`}>{row.confirmation === 'confirmed' ? t.notion.confirmed : t.notion.toConfirm}</span> : null}
               </div>
             ))}
             {options.length === 0 ? <p className="muted">{t.notion.noProduct}</p> : null}

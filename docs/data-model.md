@@ -14,7 +14,7 @@ Read the section you need: use the table of contents below, not the whole file.
 | [3. Service History Log](#3-service-history-log) | `services`, `service_tasks`, `service_items`, `vehicle_parts`, `purchases` (legacy), `documents` |
 | [4. Mileage Log and fuel](#4-mileage-log-and-fuel) | `odometer_readings`, `fuel_fillups` |
 | [5. Worked out, not stored](#5-worked-out-not-stored) | Odometer, consumption, Due Date, Status |
-| [Notion referentials](#notion-referentials) | `ref_tasks`, types, `products`, `tools`, `vehicle_consumables`, `vehicle_specs`, `ref_purchases` (Achats), `notion_state` |
+| [Notion referentials](#notion-referentials) | `ref_tasks`, types, `products`, `tools`, `vehicle_consumables`, `component_specs`, `ref_purchases` (Achats), `notion_state` |
 | [Todoist](#todoist) · [Deleting](#deleting-things) · [Offline copy](#the-offline-copy) · [Changing the model](#changing-the-data-model) | |
 
 ## Overview
@@ -88,9 +88,9 @@ Never deleted: sold, hidden from the garage page, or both.
 | `make`, `model`, `vin` | Brand, model, identification number. |
 | `year` | Year of `first_registration_date`, not typed by hand. An older Vehicle keeps its year until a date is given. |
 | `first_registration_date`, `purchase_date` | Optional dates: first on the road ("mise en circulation"); bought by the owner. |
-| `status` | Required. `owned` (default) or `sold`. Sold keeps its history and has nothing due. |
+| `ownership` | Required. `owned` (default) or `sold`. Sold keeps its history and has nothing due. Not the Status of section 5. |
 | `sold_date`, `sold_odometer`, `sold_price` | Set when sold. |
-| `on_garage_page` | Required. Has a card on the garage page, whatever its status. Selling hides it; the owner can change that. |
+| `on_garage_page` | Required. Has a card on the garage page, whatever its ownership. Selling hides it; the owner can change that. |
 | `equipment` | Required, a JSON list of text (default `[]`). The equipment tags the owner picks in the Notion Véhicules database ("Transmission chaîne", "ABS"…). Written by the Notion pull only; it decides which catalogue tasks apply. |
 | `notion_page_id` | The Vehicle's page in the Notion Véhicules database, for the link on its page. Written by the pull. |
 
@@ -321,8 +321,8 @@ Owned by Notion ([ADR 0007](adr/0007-two-way-notion-sync.md)): the server pulls 
 | `consumable_types` | `name`, `category`, `family` (`fluid`/`part`), `notes`. |
 | `products` | `type_id`, `name`, `brand`, `reference`, `supplier`, `price` (a default, not a purchase), `notes`. |
 | `tools` | `name`, `kind`, `size`, `owned`, `price`, `notes`. |
-| `vehicle_consumables` | Per Vehicle (`vehicle_id`): `name`, `type_id`, `specification`, `oem_ref`, `capacity`, `quantity`, `compatible_product_ids`, `chosen_product_id`, `status` (`confirmed`/`to_confirm`). |
-| `vehicle_specs` | Per Vehicle: `label`, `component_type_id`, `category`, `value` (number or text), `unit`, `source`, `status`. Separate from `spec_lines`, which stay the app's own. A Notion page pointing at several Vehicles gives one row each. |
+| `vehicle_consumables` | Per Vehicle (`vehicle_id`): `name`, `type_id`, `specification`, `oem_ref`, `capacity`, `quantity`, `compatible_product_ids`, `chosen_product_id`, `confirmation` (`confirmed`/`to_confirm`/null). |
+| `component_specs` | The **Component Specs**, per Vehicle: `label`, `component_type_id`, `category`, `value` (number or text), `unit`, `source`, `confirmation` (`confirmed`/`to_confirm`/null). Separate from `spec_lines` (Spec Lines), which stay the app's own; neither overrides the other. A Notion page pointing at several Vehicles gives one row each. |
 | `ref_purchases` | The owner's **Achats** database, read-only ([ADR 0008](adr/0008-shopping-list-and-purchase-log-move-to-notion.md)): `date`, `article_notion_id` (the Notion page id of a "Consommables par véhicule" line, matched to `vehicle_consumables.notion_id` when read, so the pull order does not matter), `product_id` (→ `products`, loose), `quantity`, `price`, `shop`. Never invoice files or notes. Not per Vehicle. Rows that left Notion are hidden. |
 | `notion_state` | One row per garage: `last_sync_at`, `last_error`, `warnings` (JSON list), `paused_tasks`. Shown in Settings. |
 
@@ -366,10 +366,12 @@ Foreign keys block deletion while rows still need it, except below; the server a
 
 The phone keeps one `Snapshot` ([`types.ts`](../src/shared/types.ts)) to work with no signal ([ADR 0001](adr/0001-offline-service-logging-via-send-queue.md)).
 
-- It holds Vehicles (with their equipment), Tasks, Services, readings, Fill-ups, Spec Lines, parts lists and Template changes; Document details but not files. It also holds the Notion referentials (catalogue, types, products, tools, per-Vehicle consumables and specs, and the Achats as `notionPurchases`) and the last sync status, **read-only**: they need no send queue.
+- It holds Vehicles (with their equipment), Tasks, Services, readings, Fill-ups, Spec Lines, parts lists and Template changes; Document details but not files. It also holds the Notion referentials (catalogue, types, products, tools, per-Vehicle consumables and Component Specs (`componentSpecs`), and the Achats as `notionPurchases`) and the last sync status, **read-only**: they need no send queue.
 - It is shaped for screens, not tables (a Service carries `taskIds` and `partsUsed`).
 - Services, Odometer Readings and Fill-ups can be logged offline: queued on the phone, sent on reconnect. Everything else needs a connection.
 - `normalizeSnapshot` in [`workshop.ts`](../src/shared/workshop.ts) fills what an older saved snapshot lacks (e.g. no Fill-ups) and drops removed fields.
+- **Old names**: the Component Specs used to be `vehicleSpecs` and `vehicles.ownership`, `vehicleConsumables[].confirmation` and `componentSpecs[].confirmation` were all `status`. `normalizeSnapshot` maps the old names to the new ones, so a phone that saved a snapshot (or an old server answer) before the rename still loads. Keep that mapping while phones may hold old snapshots. `API_VERSION` went to 2 with the rename.
+- The previous table and column names (`vehicle_specs`, `status` on `vehicles`, `vehicle_consumables` and the specs) live on only in backups written before the rename migration (`garage-v<N>-*.sqlite`).
 
 ## History: the five-parts rework
 

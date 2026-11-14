@@ -41,7 +41,7 @@ ADR 0001's send queue is unchanged. The reference data travels in the snapshot a
 
 ## Considered Options
 
-- **Merging Notion specs into `spec_lines`**: rejected. Notion would overwrite what the owner typed in the app. A separate Notion-owned `vehicle_specs` table keeps both.
+- **Merging Notion specs into `spec_lines`**: rejected. Notion would overwrite what the owner typed in the app. A separate Notion-owned `component_specs` table (formerly `vehicle_specs`) keeps both.
 - **Notion write access from the phone**: rejected. It would put the token on the phone.
 - **Deleting rows gone from Notion**: rejected. A mistaken edit in Notion must never remove data from the garage.
 

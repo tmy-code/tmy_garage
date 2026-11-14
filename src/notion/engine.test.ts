@@ -89,7 +89,7 @@ function vehicle(): Vehicle {
     hasAdblue: false,
     hasAc: false,
     hasAirSuspension: false,
-    status: 'owned',
+    ownership: 'owned',
     onGaragePage: true,
     soldDate: null,
     soldOdometer: null,
@@ -393,7 +393,7 @@ describe('plans, "Dernier fait" and the journal', () => {
 
     it('makes none for a task of a sold vehicle, and warns when the Plans database is missing', async () => {
       const noPage = world(plansDb());
-      const other = snap({ vehicles: [vehicle(), { ...vehicle(), id: 'car', name: 'Auto test', status: 'sold' as const }], tasks: [task({ vehicleId: 'car' })] });
+      const other = snap({ vehicles: [vehicle(), { ...vehicle(), id: 'car', name: 'Auto test', ownership: 'sold' as const }], tasks: [task({ vehicleId: 'car' })] });
       expect((await run(noPage.client, other)).createdPlans).toEqual([]);
 
       const missing = world(null);

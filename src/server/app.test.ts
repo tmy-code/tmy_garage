@@ -70,7 +70,7 @@ describe('vehicles and tasks', () => {
     await createTask(bike.id);
     const s = await snapshot();
     expect(s.vehicles).toHaveLength(1);
-    expect(s.vehicles[0]).toMatchObject({ kind: 'motorcycle', name: 'Test bike', status: 'owned' });
+    expect(s.vehicles[0]).toMatchObject({ kind: 'motorcycle', name: 'Test bike', ownership: 'owned' });
     expect(s.tasks[0]).toMatchObject({ vehicleId: bike.id, intervalKm: 6000, intervalMonths: 12 });
   });
 
@@ -167,7 +167,7 @@ describe('vehicles and tasks', () => {
   it('marks a vehicle as sold and keeps its history', async () => {
     const bike = await createVehicle();
     const res = await call('POST', `/api/vehicles/${bike.id}/sell`, { date: '2028-05-01', odometer: 40000, price: 4500 });
-    expect(await res.json()).toMatchObject({ status: 'sold', soldDate: '2028-05-01', soldOdometer: 40000, soldPrice: 4500 });
+    expect(await res.json()).toMatchObject({ ownership: 'sold', soldDate: '2028-05-01', soldOdometer: 40000, soldPrice: 4500 });
   });
 
   it('shows a vehicle on the garage page until sold, unless the user chooses otherwise', async () => {
@@ -176,13 +176,13 @@ describe('vehicles and tasks', () => {
     const sold = (await (await call('POST', `/api/vehicles/${bike.id}/sell`, { date: '2028-05-01' })).json()) as Vehicle;
     expect(sold.onGaragePage).toBe(false);
     const shown = await call('PUT', `/api/vehicles/${bike.id}/garage-page`, { shown: true });
-    expect(await shown.json()).toMatchObject({ status: 'sold', onGaragePage: true });
+    expect(await shown.json()).toMatchObject({ ownership: 'sold', onGaragePage: true });
     // Editing the vehicle's details keeps the choice.
     await call('PUT', `/api/vehicles/${bike.id}`, { ...BIKE, name: 'Renamed' });
     expect((await snapshot()).vehicles[0]).toMatchObject({ name: 'Renamed', onGaragePage: true });
     await call('PUT', `/api/vehicles/${bike.id}/garage-page`, { shown: false });
     const back = (await (await call('POST', `/api/vehicles/${bike.id}/unsell`)).json()) as Vehicle;
-    expect(back).toMatchObject({ status: 'owned', onGaragePage: true });
+    expect(back).toMatchObject({ ownership: 'owned', onGaragePage: true });
     expect((await call('PUT', '/api/vehicles/nope/garage-page', { shown: true })).status).toBe(404);
   });
 
@@ -1114,7 +1114,7 @@ describe('migrations', () => {
   it('adds an empty ref_purchases table and leaves the legacy purchases alone', () => {
     const path = join(dir, 'garage.sqlite');
     const latest = (openDatabase(':memory:').prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
-    const old = openDatabase(path, undefined, latest - 1);
+    const old = openDatabase(path, undefined, latest - 2);
     old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v1', 'default', 'motorcycle', 'Old bike')`);
     old.exec(`INSERT INTO vehicle_parts (id, vehicle_id, name, unit, quantity) VALUES ('p1', 'v1', 'Motul 7100 10W-40', 'litre', 5)`);
     old.exec(`INSERT INTO purchases (id, part_id, vehicle_id, date, quantity, total_paid) VALUES ('b1', 'p1', 'v1', '2026-01-10', 5, 40)`);
@@ -1266,8 +1266,8 @@ describe('Notion-owned tasks and the Notion snapshot', () => {
       INSERT INTO products (id, garage_id, notion_id, type_id, name, price) VALUES ('p1', 'default', 'n4', 'c1', 'Huile test', 9.5);
       INSERT INTO tools (id, garage_id, notion_id, name, owned) VALUES ('tool1', 'default', 'n5', 'Clé', 1), ('tool2', 'default', 'n6', 'Vieille clé', 0);
       UPDATE tools SET notion_removed = 1 WHERE id = 'tool2';
-      INSERT INTO vehicle_consumables (id, garage_id, vehicle_id, notion_id, name, type_id, quantity, compatible_product_ids, status) VALUES ('vc1', 'default', '${bike.id}', 'n7', 'Huile moteur', 'c1', 3.2, '["p1"]', 'to_confirm');
-      INSERT INTO vehicle_specs (id, garage_id, vehicle_id, notion_id, label, value, unit, status) VALUES ('vs1', 'default', '${bike.id}', 'n8', 'Couple bouchon', '25', 'N·m', 'confirmed');
+      INSERT INTO vehicle_consumables (id, garage_id, vehicle_id, notion_id, name, type_id, quantity, compatible_product_ids, confirmation) VALUES ('vc1', 'default', '${bike.id}', 'n7', 'Huile moteur', 'c1', 3.2, '["p1"]', 'to_confirm');
+      INSERT INTO component_specs (id, garage_id, vehicle_id, notion_id, label, value, unit, confirmation) VALUES ('vs1', 'default', '${bike.id}', 'n8', 'Couple bouchon', '25', 'N·m', 'confirmed');
     `);
     const s = await snapshot();
     expect(s.vehicles[0]!.equipment).toEqual(['ABS', 'Transmission chaîne']);
@@ -1278,8 +1278,8 @@ describe('Notion-owned tasks and the Notion snapshot', () => {
     expect(s.consumableTypes).toMatchObject([{ id: 'c1', family: 'fluid' }]);
     expect(s.products).toMatchObject([{ id: 'p1', typeId: 'c1', price: 9.5 }]);
     expect(s.tools.map((t) => [t.name, t.owned])).toEqual([['Clé', true]]);
-    expect(s.vehicleConsumables).toMatchObject([{ id: 'vc1', quantity: 3.2, compatibleProductIds: ['p1'], status: 'to_confirm' }]);
-    expect(s.vehicleSpecs).toMatchObject([{ id: 'vs1', value: '25', unit: 'N·m', status: 'confirmed' }]);
+    expect(s.vehicleConsumables).toMatchObject([{ id: 'vc1', quantity: 3.2, compatibleProductIds: ['p1'], confirmation: 'to_confirm' }]);
+    expect(s.componentSpecs).toMatchObject([{ id: 'vs1', value: '25', unit: 'N·m', confirmation: 'confirmed' }]);
     expect(s.notion).toBeNull();
   });
 });
@@ -1375,7 +1375,7 @@ describe('Notion sync migration', () => {
         { id: 't1', name: 'Oil change', interval_km: 6000, ref_task_id: null, notion_plan_id: null, plan_auto: 0, notion_removed: 0 },
       ]);
       expect(migrated.prepare('SELECT equipment FROM vehicles').get()).toEqual({ equipment: '[]' });
-      for (const table of ['ref_tasks', 'ref_component_types', 'consumable_types', 'products', 'tools', 'vehicle_consumables', 'vehicle_specs', 'notion_state']) {
+      for (const table of ['ref_tasks', 'ref_component_types', 'consumable_types', 'products', 'tools', 'vehicle_consumables', 'component_specs', 'notion_state']) {
         expect(migrated.prepare(`SELECT count(*) AS n FROM ${table}`).get()).toEqual({ n: 0 });
       }
       // One catalogue row per Notion page per garage; one task per catalogue task and vehicle; a page may serve several vehicles.
@@ -1384,7 +1384,7 @@ describe('Notion sync migration', () => {
       migrated.exec(`UPDATE maintenance_tasks SET ref_task_id = 'r1', notion_plan_id = 'pl1' WHERE id = 't1'`);
       expect(() => migrated.exec(`INSERT INTO maintenance_tasks (id, vehicle_id, name, interval_km, ref_task_id) VALUES ('t2', 'v1', 'Vidange', 1, 'r1')`)).toThrow();
       migrated.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v2', 'default', 'car', 'Car')`);
-      migrated.exec(`INSERT INTO vehicle_specs (id, garage_id, vehicle_id, notion_id, label, value) VALUES ('a', 'default', 'v1', 'n9', 'Couple', '25'), ('b', 'default', 'v2', 'n9', 'Couple', '25')`);
+      migrated.exec(`INSERT INTO component_specs (id, garage_id, vehicle_id, notion_id, label, value) VALUES ('a', 'default', 'v1', 'n9', 'Couple', '25'), ('b', 'default', 'v2', 'n9', 'Couple', '25')`);
       migrated.close();
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -1396,7 +1396,7 @@ describe('Notion sync migration', () => {
     const dir = mkdtempSync(join(tmpdir(), 'garage-actions-'));
     try {
       const path = join(dir, 'garage.sqlite');
-      const old = openDatabase(path, undefined, latest - 2);
+      const old = openDatabase(path, undefined, latest - 3);
       old.exec(`INSERT INTO ref_tasks (id, garage_id, notion_id, name, action, applicable_if, default_km, category) VALUES ('r1', 'default', 'n1', 'Vidange', 'replace', '["Moto"]', 6000, 'engine')`);
       expect(() => old.exec(`INSERT INTO ref_tasks (id, garage_id, notion_id, name, action) VALUES ('r2', 'default', 'n2', 'Tension', 'adjust')`)).toThrow();
       old.close();
@@ -1412,5 +1412,72 @@ describe('Notion sync migration', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('the glossary rename migration', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'garage-rename-'));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  const latest = () => (openDatabase(':memory:').prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
+  const seed = (path: string, backupDir?: string) => {
+    const old = openDatabase(path, undefined, latest() - 1);
+    old.exec(`
+      INSERT INTO vehicles (id, garage_id, kind, name, status) VALUES ('v1', 'default', 'car', 'Sold car', 'sold'), ('v2', 'default', 'car', 'Kept car', 'owned');
+      INSERT INTO vehicle_consumables (id, garage_id, vehicle_id, notion_id, name, status) VALUES ('vc1', 'default', 'v1', 'n1', 'Huile', 'to_confirm');
+      INSERT INTO vehicle_specs (id, garage_id, vehicle_id, notion_id, label, value, status) VALUES ('vs1', 'default', 'v1', 'n2', 'Couple', '25', 'confirmed');
+    `);
+    old.close();
+    return backupDir;
+  };
+
+  it('renames the table and the columns and keeps the values', () => {
+    const path = join(dir, 'garage.sqlite');
+    seed(path);
+    const migrated = openDatabase(path);
+    expect(migrated.prepare('SELECT id, ownership FROM vehicles ORDER BY id').all()).toEqual([
+      { id: 'v1', ownership: 'sold' },
+      { id: 'v2', ownership: 'owned' },
+    ]);
+    expect(migrated.prepare('SELECT id, confirmation FROM vehicle_consumables').all()).toEqual([{ id: 'vc1', confirmation: 'to_confirm' }]);
+    expect(migrated.prepare('SELECT id, confirmation FROM component_specs').all()).toEqual([{ id: 'vs1', confirmation: 'confirmed' }]);
+    expect(() => migrated.prepare('SELECT * FROM vehicle_specs').all()).toThrow();
+    expect(() => migrated.exec(`UPDATE vehicles SET ownership = 'x' WHERE id = 'v2'`)).toThrow();
+    const indexes = (migrated.prepare(`SELECT name FROM sqlite_master WHERE type = 'index'`).all() as { name: string }[]).map((i) => i.name);
+    expect(indexes).toContain('component_specs_vehicle');
+    expect(indexes).not.toContain('vehicle_specs_vehicle');
+    migrated.close();
+  });
+
+  it('writes the backup before renaming, still with the old names', () => {
+    const path = join(dir, 'garage.sqlite');
+    const backups = join(dir, 'backups');
+    seed(path);
+    openDatabase(path, backups).close();
+    const copy = readdirSync(backups).find((f) => f.startsWith(`garage-v${latest() - 1}-`) && f.endsWith('.sqlite'));
+    expect(copy).toBeDefined();
+    const saved = openDatabase(join(backups, copy!), undefined, latest() - 1);
+    expect(saved.prepare('SELECT status FROM vehicles WHERE id = ?').get('v1')).toEqual({ status: 'sold' });
+    expect(saved.prepare('SELECT status FROM vehicle_specs').all()).toEqual([{ status: 'confirmed' }]);
+    saved.close();
+  });
+
+  it('answers the snapshot with the new names only', async () => {
+    const bike = await createVehicle();
+    db.exec(`
+      INSERT INTO vehicle_consumables (id, garage_id, vehicle_id, notion_id, name, confirmation) VALUES ('vc1', 'default', '${bike.id}', 'n7', 'Huile', 'to_confirm');
+      INSERT INTO component_specs (id, garage_id, vehicle_id, notion_id, label, value, confirmation) VALUES ('vs1', 'default', '${bike.id}', 'n8', 'Couple', '25', 'confirmed');
+    `);
+    const s = (await snapshot()) as unknown as Record<string, any>;
+    expect(s.vehicles[0]).toHaveProperty('ownership', 'owned');
+    expect(s.vehicles[0]).not.toHaveProperty('status');
+    expect(s.componentSpecs).toMatchObject([{ id: 'vs1', confirmation: 'confirmed' }]);
+    expect(s).not.toHaveProperty('vehicleSpecs');
+    expect(s.vehicleConsumables[0]).toHaveProperty('confirmation', 'to_confirm');
+    expect(s.vehicleConsumables[0]).not.toHaveProperty('status');
+    expect(s.componentSpecs[0]).not.toHaveProperty('status');
   });
 });

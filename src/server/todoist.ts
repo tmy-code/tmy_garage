@@ -66,7 +66,7 @@ export interface WantedTask {
 /** The Maintenance Tasks that are due soon or overdue today, each with the date to show in Todoist. */
 export function wantedTasks(snapshot: Snapshot, today: IsoDate): WantedTask[] {
   const wanted: WantedTask[] = [];
-  for (const vehicle of snapshot.vehicles.filter((v) => v.status === 'owned')) {
+  for (const vehicle of snapshot.vehicles.filter((v) => v.ownership === 'owned')) {
     for (const d of vehicleDue(snapshot, vehicle.id, today).due) {
       if (d.status !== 'overdue' && d.status !== 'dueSoon') continue;
       const task = snapshot.tasks.find((t) => t.id === d.taskId);

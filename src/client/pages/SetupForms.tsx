@@ -312,8 +312,8 @@ export function SellForm({ vehicle }: { vehicle: Vehicle }) {
           <input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} />
         </Field>
         <FormError error={error} />
-        <Submit disabled={disabled}>{vehicle.status === 'sold' ? t.setup.saveSale : t.setup.markSold}</Submit>
-        {vehicle.status === 'sold' ? (
+        <Submit disabled={disabled}>{vehicle.ownership === 'sold' ? t.setup.saveSale : t.setup.markSold}</Submit>
+        {vehicle.ownership === 'sold' ? (
           <button type="button" className="button button-block" onClick={unsell} disabled={disabled}>
             {t.setup.unsell}
           </button>

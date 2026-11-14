@@ -56,7 +56,7 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     products: [],
     tools: [],
     vehicleConsumables: [],
-    vehicleSpecs: [],
+    componentSpecs: [],
     notionPurchases: [],
     notion: null,
     ...overrides,
@@ -122,7 +122,7 @@ describe('requiredConsumables', () => {
         quantity: 3,
         compatibleProductIds: ['p-b', 'p-c'],
         chosenProductId: 'p-c',
-        status: 'confirmed',
+        confirmation: 'confirmed',
         notionId: 'nvc1',
       },
     ],
@@ -161,7 +161,7 @@ describe('torqueSpecs', () => {
     value: '25',
     unit: null,
     source: null,
-    status: null,
+    confirmation: null,
     notionId: `n-${id}`,
     ...overrides,
   });
@@ -172,7 +172,7 @@ describe('torqueSpecs', () => {
       { id: 'comp-plug', name: 'Bouchon de vidange', category: null, notes: null, notionId: 'nc1' },
       { id: 'comp-other', name: 'Autre', category: null, notes: null, notionId: 'nc2' },
     ],
-    vehicleSpecs: [
+    componentSpecs: [
       spec('torque', { unit: 'N·m' }),
       spec('torque-by-category', { category: 'Couple de serrage', unit: null }),
       spec('size', { unit: 'mm' }),
