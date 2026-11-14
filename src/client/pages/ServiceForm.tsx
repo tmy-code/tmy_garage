@@ -6,7 +6,7 @@ import { PART_CATEGORIES, type PartCategory } from '../../shared/catalogue.ts';
 import { buyStates } from '../../shared/purchases.ts';
 import { formFigure, mergeNeeds, prefillForType, prefillFromProduct, type MergedNeed } from '../../shared/session-consumables.ts';
 import type { PartUnit, PerformedBy, ServiceKind } from '../../shared/schemas.ts';
-import type { OdometerReading, PartUsed, Service, Snapshot, Vehicle, VehiclePart } from '../../shared/types.ts';
+import type { OdometerReading, PartUsed, Service, Snapshot, Vehicle, VehicleItem } from '../../shared/types.ts';
 import { newId } from '../api.ts';
 import { confirmDelete, ConsistencyWarnings, Field, FormError, Layout, segmentedKeys, StatusChip } from '../components.tsx';
 import { formatKm, formatMoney, formatQuantity, matchesQuery, parseNumber, taskName } from '../format.ts';
@@ -29,7 +29,7 @@ interface PartDraft {
   /** Price per piece or litre, as typed. */
   price: string;
   /** The part of the Vehicle's list it was picked from, if it still is that part. */
-  partId: string | null;
+  itemId: string | null;
   /** A part typed by hand is also kept in the list, unless the owner unticks it. */
   remember: boolean;
   /** The required Consumable Type (from the Notion catalogue) and the Product it is for, when picked from a Task's block. */
@@ -50,14 +50,14 @@ function toDraft(p: PartUsed): PartDraft {
     quantity: String(p.quantity),
     unit: p.unit,
     price: p.price != null ? String(p.price) : '',
-    partId: p.partId ?? null,
+    itemId: p.itemId ?? null,
     remember: false,
     consumableTypeId: p.consumableTypeId ?? null,
     productId: p.productId ?? null,
   };
 }
 
-function draftOfListed(p: VehiclePart): PartDraft {
+function draftOfListed(p: VehicleItem): PartDraft {
   return {
     key: nextKey++,
     description: p.name,
@@ -65,7 +65,7 @@ function draftOfListed(p: VehiclePart): PartDraft {
     quantity: String(p.quantity),
     unit: p.unit,
     price: p.price !== null ? String(p.price) : '',
-    partId: p.id,
+    itemId: p.id,
     remember: false,
     consumableTypeId: null,
     productId: null,
@@ -86,8 +86,8 @@ function fromDraft(d: PartDraft, t: Messages): PartUsed {
     unit: d.unit,
     price,
     // An id made here for a part to keep travels with the Service, so sending it again never doubles it.
-    partId: d.partId ?? (remember ? newId() : null),
-    ...(remember && !d.partId ? { remember: true } : {}),
+    itemId: d.itemId ?? (remember ? newId() : null),
+    ...(remember && !d.itemId ? { remember: true } : {}),
     ...(d.consumableTypeId ? { consumableTypeId: d.consumableTypeId } : {}),
     ...(d.productId ? { productId: d.productId } : {}),
   };
@@ -183,7 +183,7 @@ export function ServiceForm({
         quantity: '1',
         unit: 'piece',
         price: '',
-        partId: null,
+        itemId: null,
         remember: true,
         consumableTypeId: null,
         productId: null,
@@ -207,7 +207,7 @@ export function ServiceForm({
         quantity: fill.quantity ? formFigure(fill.quantity, comma) : '1',
         unit: fill.unit ?? 'piece',
         price: fill.price ? formFigure(fill.price, comma) : '',
-        partId: null,
+        itemId: null,
         // A product from the Notion catalogue is not also kept in the parts list; a part typed by hand is.
         remember: product === undefined,
         consumableTypeId: fill.consumableTypeId,
@@ -240,7 +240,7 @@ export function ServiceForm({
   const keptLines = parts.some((p) => p.consumableTypeId !== null && !needed.has(p.consumableTypeId));
 
   /** The Vehicle's listed parts: those usually bought for a ticked Task first. */
-  const listed = snapshot.vehicleParts.filter((p) => p.vehicleId === vehicle.id).sort((a, b) => a.name.localeCompare(b.name));
+  const listed = snapshot.vehicleItems.filter((p) => p.vehicleId === vehicle.id).sort((a, b) => a.name.localeCompare(b.name));
   const forTasks = listed.filter((p) => p.taskId !== null && selected.has(p.taskId));
   const others = listed.filter((p) => !forTasks.includes(p));
   function pickListed(id: string) {
@@ -462,7 +462,7 @@ export function ServiceForm({
                   ) : null}
                   <input
                     value={d.description}
-                    onChange={(e) => setPart(d.key, { description: e.target.value, ...(d.partId ? { partId: null, remember: true } : {}) })}
+                    onChange={(e) => setPart(d.key, { description: e.target.value, ...(d.itemId ? { itemId: null, remember: true } : {}) })}
                     maxLength={200}
                     placeholder={t.workshop.descriptionHint}
                     aria-label={t.workshop.description}
@@ -481,17 +481,17 @@ export function ServiceForm({
                       <input inputMode="decimal" value={d.price} onChange={(e) => setPart(d.key, { price: e.target.value })} />
                     </Field>
                   </div>
-                  {d.partId === null && isDesktop ? (
+                  {d.itemId === null && isDesktop ? (
                     <label className="check">
                       <input type="checkbox" checked={d.remember} onChange={(e) => setPart(d.key, { remember: e.target.checked })} />
-                      <span>{t.workshop.keepPart}</span>
+                      <span>{t.workshop.keepItem}</span>
                     </label>
                   ) : null}
                   <details className="part-details">
                     <summary>{t.workshop.moreDetails}</summary>
                     <div className="row">
                       <Field label={t.workshop.partNumber}>
-                        <input value={d.partNumber} onChange={(e) => setPart(d.key, { partNumber: e.target.value, ...(d.partId ? { partId: null, remember: true } : {}) })} maxLength={120} />
+                        <input value={d.partNumber} onChange={(e) => setPart(d.key, { partNumber: e.target.value, ...(d.itemId ? { itemId: null, remember: true } : {}) })} maxLength={120} />
                       </Field>
                     </div>
                   </details>
@@ -499,10 +499,10 @@ export function ServiceForm({
               ))}
               <div className="actions">
                 {listed.length > 0 ? (
-                  <select value="" onChange={(e) => pickListed(e.target.value)} aria-label={t.workshop.pickPart}>
-                    <option value="">{t.workshop.pickPart}</option>
+                  <select value="" onChange={(e) => pickListed(e.target.value)} aria-label={t.workshop.pickItem}>
+                    <option value="">{t.workshop.pickItem}</option>
                     {forTasks.length > 0 ? (
-                      <optgroup label={t.workshop.pickPartForTasks}>
+                      <optgroup label={t.workshop.pickItemForTasks}>
                         {forTasks.map((p) => (
                           <option key={p.id} value={p.id}>
                             {listedLabel(p, t, snapshot)}
@@ -511,7 +511,7 @@ export function ServiceForm({
                       </optgroup>
                     ) : null}
                     {others.length > 0 ? (
-                      <optgroup label={forTasks.length > 0 ? t.workshop.pickPartOthers : t.workshop.partsListLink}>
+                      <optgroup label={forTasks.length > 0 ? t.workshop.pickItemOthers : t.workshop.itemsListLink}>
                         {others.map((p) => (
                           <option key={p.id} value={p.id}>
                             {listedLabel(p, t, snapshot)}
@@ -560,11 +560,11 @@ export function ServiceForm({
 }
 
 /** "Motul 7100 10W-40 · 3.2 L · spec 10W-40, 3.2 L" in the picker: the Item Spec it is for is shown to compare (the old Spec Line while it is still listed). */
-function listedLabel(p: VehiclePart, t: Messages, snapshot: Snapshot): string {
+function listedLabel(p: VehicleItem, t: Messages, snapshot: Snapshot): string {
   const itemSpec = snapshot.itemSpecs.find((s) => s.id === p.itemSpecId);
   const line = itemSpec ? undefined : snapshot.specLines.find((l) => l.id === p.specLineId);
   const specValue = itemSpec ? [itemSpec.specification, itemSpec.capacity].filter(Boolean).join(', ') : line?.value;
-  return `${p.name} · ${formatQuantity(p.quantity, p.unit, t)}${p.price !== null ? ` · ${formatMoney(p.price, t)}` : ''}${specValue ? ` · ${t.parts.specShown(specValue)}` : ''}`;
+  return `${p.name} · ${formatQuantity(p.quantity, p.unit, t)}${p.price !== null ? ` · ${formatMoney(p.price, t)}` : ''}${specValue ? ` · ${t.items.specShown(specValue)}` : ''}`;
 }
 
 /** Says a Service or Odometer Reading was saved; a new one can be taken back for a few seconds. */

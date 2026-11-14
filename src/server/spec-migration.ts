@@ -164,8 +164,8 @@ export async function migrateSpecLines(opts: { db: DatabaseSync; garageId: strin
          ORDER BY v.created_at, l.vehicle_id, l.spec_group, l.sort`,
       )
       .all(garageId) as Row[];
-    const itemCount = db.prepare('SELECT count(*) AS n FROM vehicle_parts WHERE spec_line_id = ?');
-    const pointableCount = db.prepare('SELECT count(*) AS n FROM vehicle_parts WHERE spec_line_id = ? AND item_spec_id IS NULL');
+    const itemCount = db.prepare('SELECT count(*) AS n FROM vehicle_items WHERE spec_line_id = ?');
+    const pointableCount = db.prepare('SELECT count(*) AS n FROM vehicle_items WHERE spec_line_id = ? AND item_spec_id IS NULL');
     const planned: Planned[] = [];
     const pageOfVehicle = new Map(Object.entries(pull.vehiclePageIds).map(([appId, pageId]) => [pageId, appId]));
 
@@ -306,7 +306,7 @@ export async function migrateSpecLines(opts: { db: DatabaseSync; garageId: strin
     db.exec('BEGIN');
     try {
       const find = db.prepare('SELECT id FROM vehicle_consumables WHERE vehicle_id = ? AND notion_id = ? AND garage_id = ? AND notion_removed = 0');
-      const point = db.prepare('UPDATE vehicle_parts SET item_spec_id = ? WHERE spec_line_id = ? AND item_spec_id IS NULL');
+      const point = db.prepare('UPDATE vehicle_items SET item_spec_id = ? WHERE spec_line_id = ? AND item_spec_id IS NULL');
       // Every recorded move, not only this run's: a run that stopped half way is finished by the next one.
       const recorded = db
         .prepare(
@@ -319,7 +319,7 @@ export async function migrateSpecLines(opts: { db: DatabaseSync; garageId: strin
       for (const r of recorded) {
         const local = find.get(r.vehicle_id, r.notion_id, garageId) as Row | undefined;
         if (!local) {
-          const pending = Number((db.prepare('SELECT COUNT(*) AS n FROM vehicle_parts WHERE spec_line_id = ? AND item_spec_id IS NULL').get(r.spec_line_id) as Row).n);
+          const pending = Number((db.prepare('SELECT COUNT(*) AS n FROM vehicle_items WHERE spec_line_id = ? AND item_spec_id IS NULL').get(r.spec_line_id) as Row).n);
           unlinked += pending;
           if (pending > 0) warn(`"${r.label}": the Notion page is not in the app yet, so its items were not re-pointed`);
           continue;

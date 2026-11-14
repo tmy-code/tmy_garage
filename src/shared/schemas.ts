@@ -230,16 +230,18 @@ export const partUsedInput = z.object({
   quantity,
   unit: partUnit,
   price: unitPrice,
-  partId: z.string().min(8).max(64).nullish().transform((v) => v ?? null),
+  itemId: z.string().min(8).max(64).nullish(),
+  /** Legacy (API 3): a Service queued on a phone before the rename sends partId; read as itemId. */
+  partId: z.string().min(8).max(64).nullish(),
   /** The Consumable Type and Product (from the Notion referentials) it was; loose links, kept as sent. */
   consumableTypeId: z.string().min(1).max(64).nullish().transform((v) => v ?? null),
   productId: z.string().min(1).max(64).nullish().transform((v) => v ?? null),
   remember: z.boolean().default(false),
-});
+}).transform(({ partId, itemId, ...p }) => ({ ...p, itemId: itemId ?? partId ?? null }));
 
-/** A part or fluid in a Vehicle's parts list. */
+/** A part or fluid on a Vehicle's items list. */
 // An old app may still send "toBuy" (the shopping list moved to Notion): z.object strips unknown keys, so it is ignored, not rejected.
-export const vehiclePartInput = z.object({
+export const vehicleItemInput = z.object({
   name: z.string().trim().min(1).max(200),
   partNumber: optionalText(120),
   unit: partUnit,

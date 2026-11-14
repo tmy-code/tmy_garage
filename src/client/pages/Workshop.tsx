@@ -4,7 +4,7 @@ import { todayIso } from '../../shared/dates.ts';
 import { requiredConsumables, torqueSpecs } from '../../shared/applicability.ts';
 import { vehicleDue } from '../../shared/due.ts';
 import type { PartUnit } from '../../shared/schemas.ts';
-import type { ComponentSpec, Confirmation, ItemSpec, MaintenanceTask, PartUsed, Snapshot, SpecLine, Vehicle, VehiclePart } from '../../shared/types.ts';
+import type { ComponentSpec, Confirmation, ItemSpec, MaintenanceTask, PartUsed, Snapshot, SpecLine, Vehicle, VehicleItem } from '../../shared/types.ts';
 import { confirmAction } from '../feedback.ts';
 import { confirmDelete, DesktopOnlyNote, Field, FormError, Layout, NeedsConnection, segmentedKeys, StatusChip, useWide } from '../components.tsx';
 import { describeDue, describeInterval, formatDate, formatKm, formatMoney, localizeNumber, matchesQuery, parseNumber, specErrorText, taskName } from '../format.ts';

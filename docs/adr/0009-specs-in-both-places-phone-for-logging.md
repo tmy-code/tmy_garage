@@ -14,7 +14,7 @@ The owner uses the phone in the garage to record Services, Odometer Readings and
 - **Migration.** A one-off script, dry run first, creates the Notion pages for the existing Spec Lines and re-points each Vehicle Item's spec link. It runs against the NAS snapshot, never a database copy. The frozen *Caractéristiques* database is archived by the owner, not deleted.
 - **Notion names.** *Consommables par véhicule* becomes *Spécifications d'articles* and *Spécifications* becomes *Spécifications de composants*. The app finds databases by title, so it accepts both the old and the new title during the changeover; the Notion rename is the last step, done after the release and with the owner's go-ahead.
 - **Receipts are desktop-only.** A Service's Receipts (Documents) are added and removed on the desktop; the phone shows them read-only. They stay in the app and never go to Notion.
-- **Vehicle Part becomes Vehicle Item** (the word the screens already use). The code rename is a separate task.
+- **Vehicle Part becomes Vehicle Item** (the word the screens already use). Done in code and schema (API 4).
 
 ## Consequences
 

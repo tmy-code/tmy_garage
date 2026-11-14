@@ -72,8 +72,8 @@ A line of a Service naming what went in, with brand and variant ("Motul 7100 10W
 _Avoid_: Part Used, Part Spec, Element
 
 **Vehicle Item**:
-A part or fluid bought for one Vehicle ("Motul 7100 10W-40", "Mann HU 7008 z"), with its part number, unit, usual quantity and price per unit, and optionally the Task it is bought for and the Item Spec it is for. The owner picks from the Vehicle's parts when logging a Service. Not the same as an Item Spec, which is the factory figure: the item only points at it, so the figure is shown next to what was bought.
-On screen it is an **item** (article in French), so the word covers fluids as well as parts. "Vehicle Part" was its old name and stays in the code until the rename lands.
+A part or fluid bought for one Vehicle ("Motul 7100 10W-40", "Mann HU 7008 z"), with its part number, unit, usual quantity and price per unit, and optionally the Task it is bought for and the Item Spec it is for. The owner picks from the Vehicle's items when logging a Service. Not the same as an Item Spec, which is the factory figure: the item only points at it, so the figure is shown next to what was bought.
+On screen it is an **item** (article in French), so the word covers fluids as well as parts.
 _Avoid_: Vehicle Part (old name), Catalogue (that word is for the Plan Templates), stock, inventory, wishlist, shopping list
 
 **Achat**:
@@ -84,8 +84,8 @@ _Avoid_: Purchase (the removed app log), order, expense
 An offer the owner found online for a Vehicle Item while looking for a good price: a link, a price, a shop and the day it was checked. It is not an Achat: buying it is recorded in the owner's Notion Achats database.
 _Avoid_: Offer, quote, bargain
 
-**Parts section**:
-The garage-wide place in the app that lists the Vehicle Items of every Vehicle together, filterable by Vehicle. Each part still belongs to exactly one Vehicle.
+**Items section**:
+The garage-wide place in the app that lists the Vehicle Items of every Vehicle together, filterable by Vehicle. Each item still belongs to exactly one Vehicle.
 
 **Receipt**:
 The photo or PDF of the invoice attached to a Service. Added on the desktop only; the phone shows it. It stays in the app and never goes to Notion.

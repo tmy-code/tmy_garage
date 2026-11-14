@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import type { PartUnit } from '../../shared/schemas.ts';
-import type { Snapshot, Vehicle, VehiclePart } from '../../shared/types.ts';
+import type { Snapshot, Vehicle, VehicleItem } from '../../shared/types.ts';
 import { itemSpecText } from '../../shared/workshop.ts';
 import { confirmDelete, DesktopOnlyNote, Field, FormError, Layout, NeedsConnection } from '../components.tsx';
 import { formatMoney, formatQuantity, matchesQuery, parseNumber, taskName } from '../format.ts';
@@ -10,37 +10,37 @@ import { navigate } from '../router.ts';
 import { online } from '../store.ts';
 import { Submit, useSubmit } from './SetupForms.tsx';
 
-// The Parts section: every Vehicle's parts and fluids in one place. Desk work, so it needs a connection; it can be read
+// The Items section: every Vehicle's parts and fluids in one place. Desk work, so it needs a connection; it can be read
 // offline from the phone's copy. What was bought is tracked in Notion (ADR 0008).
 
 /** "Engine oil: 10W-40, 3.2 L" from the item's Item Spec; for an item not re-pointed yet, from its old Spec Line while that is still listed. */
-function specText(snapshot: Snapshot, part: VehiclePart): string | null {
-  const spec = snapshot.itemSpecs.find((s) => s.id === part.itemSpecId);
+function specText(snapshot: Snapshot, item: VehicleItem): string | null {
+  const spec = snapshot.itemSpecs.find((s) => s.id === item.itemSpecId);
   if (spec) return itemSpecText(spec);
-  const line = snapshot.specLines.find((l) => l.id === part.specLineId);
+  const line = snapshot.specLines.find((l) => l.id === item.specLineId);
   return line ? (line.value ? `${line.label}: ${line.value}` : line.label) : null;
 }
 
-/** All the parts, or those of one Vehicle (opened from its page), by name. */
-export function PartsPage({ snapshot, vehicleId }: { snapshot: Snapshot; vehicleId?: string }) {
+/** All the items, or those of one Vehicle (opened from its page), by name. */
+export function ItemsPage({ snapshot, vehicleId }: { snapshot: Snapshot; vehicleId?: string }) {
   const t = useT();
   const [vehicleFilter, setVehicleFilter] = useState(vehicleId ?? '');
   const [query, setQuery] = useState('');
   const vehicles = new Map(snapshot.vehicles.map((v) => [v.id, v]));
-  const parts = snapshot.vehicleParts
+  const items = snapshot.vehicleItems
     .filter((p) => (vehicleFilter === '' || p.vehicleId === vehicleFilter) && matchesQuery([p.name, p.partNumber, p.notes], query))
     .sort((a, b) => a.name.localeCompare(b.name));
-  const addPath = vehicleFilter ? `#/parts/new/${vehicleFilter}` : '#/parts/new';
+  const addPath = vehicleFilter ? `#/items/new/${vehicleFilter}` : '#/items/new';
 
   return (
-    <Layout title={t.parts.title} back={vehicleId ? `/vehicles/${vehicleId}` : undefined} titleAction={isDesktop ? <a className="button button-small" href={addPath}>{t.parts.add}</a> : undefined}>
+    <Layout title={t.items.title} back={vehicleId ? `/vehicles/${vehicleId}` : undefined} titleAction={isDesktop ? <a className="button button-small" href={addPath}>{t.items.add}</a> : undefined}>
       <NeedsConnection />
-      <p className="muted">{t.parts.intro}</p>
+      <p className="muted">{t.items.intro}</p>
       <DesktopOnlyNote />
       <div className="row filters">
-        <Field label={t.parts.vehicle}>
+        <Field label={t.items.vehicle}>
           <select value={vehicleFilter} onChange={(e) => setVehicleFilter(e.target.value)}>
-            <option value="">{t.parts.allVehicles}</option>
+            <option value="">{t.items.allVehicles}</option>
             {snapshot.vehicles.map((v) => (
               <option key={v.id} value={v.id}>
                 {v.name}
@@ -49,29 +49,29 @@ export function PartsPage({ snapshot, vehicleId }: { snapshot: Snapshot; vehicle
           </select>
         </Field>
       </div>
-      {snapshot.vehicleParts.length > 0 ? (
-        <input type="search" className="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t.parts.search} aria-label={t.parts.search} autoComplete="off" />
+      {snapshot.vehicleItems.length > 0 ? (
+        <input type="search" className="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t.items.search} aria-label={t.items.search} autoComplete="off" />
       ) : null}
-      {parts.length === 0 ? <p className="empty">{snapshot.vehicleParts.length === 0 ? t.parts.empty : t.parts.emptyFiltered}</p> : null}
+      {items.length === 0 ? <p className="empty">{snapshot.vehicleItems.length === 0 ? t.items.empty : t.items.emptyFiltered}</p> : null}
       <ul className="list list-grid list-even">
-        {parts.map((part) => {
-          const spec = specText(snapshot, part);
+        {items.map((item) => {
+          const spec = specText(snapshot, item);
           const content = (
             <>
-              <strong>{part.name}</strong>
-              {part.partNumber ? <span>{part.partNumber}</span> : null}
-              {vehicleFilter === '' ? <span className="muted">{vehicles.get(part.vehicleId)?.name}</span> : null}
+              <strong>{item.name}</strong>
+              {item.partNumber ? <span>{item.partNumber}</span> : null}
+              {vehicleFilter === '' ? <span className="muted">{vehicles.get(item.vehicleId)?.name}</span> : null}
               <span className="muted">
-                {t.workshop.usualQuantity}: {formatQuantity(part.quantity, part.unit, t)}
-                {part.price !== null ? <> · <span className="nowrap">{formatMoney(part.price, t)} / {t.parts.unitSingular[part.unit]}</span></> : null}
+                {t.workshop.usualQuantity}: {formatQuantity(item.quantity, item.unit, t)}
+                {item.price !== null ? <> · <span className="nowrap">{formatMoney(item.price, t)} / {t.items.unitSingular[item.unit]}</span></> : null}
               </span>
-              {spec ? <span className="muted">{t.parts.specShown(spec)}</span> : null}
+              {spec ? <span className="muted">{t.items.specShown(spec)}</span> : null}
             </>
           );
           return (
-            <li key={part.id}>
+            <li key={item.id}>
               {isDesktop ? (
-                <a className="history-row" href={`#/parts/part/${part.id}`}>
+                <a className="history-row" href={`#/items/item/${item.id}`}>
                   {content}
                 </a>
               ) : (
@@ -85,8 +85,8 @@ export function PartsPage({ snapshot, vehicleId }: { snapshot: Snapshot; vehicle
   );
 }
 
-/** Add a part, or edit one. */
-export function VehiclePartForm({ snapshot, existing, vehicleId }: { snapshot: Snapshot; existing?: VehiclePart; vehicleId?: string }) {
+/** Add an item, or edit one. */
+export function VehicleItemForm({ snapshot, existing, vehicleId }: { snapshot: Snapshot; existing?: VehicleItem; vehicleId?: string }) {
   const t = useT();
   const owned = snapshot.vehicles.filter((v) => v.ownership === 'owned');
   const [vehicle, setVehicle] = useState(existing?.vehicleId ?? (owned.some((v) => v.id === vehicleId) ? vehicleId! : (owned[0]?.id ?? '')));
@@ -114,28 +114,28 @@ export function VehiclePartForm({ snapshot, existing, vehicleId }: { snapshot: S
     const body = { name, partNumber, unit, quantity: qty, price: unitPrice, taskId: taskId || null, itemSpecId: itemSpecId || null, notes };
     void run(async () => {
       if (existing) {
-        await online('PUT', `/api/parts/${existing.id}`, body);
+        await online('PUT', `/api/items/${existing.id}`, body);
       } else {
-        await online('POST', `/api/vehicles/${vehicle}/parts`, body);
-        navigate('/parts', { replace: true });
+        await online('POST', `/api/vehicles/${vehicle}/items`, body);
+        navigate('/items', { replace: true });
       }
-    }, existing ? undefined : t.parts.created);
+    }, existing ? undefined : t.items.created);
   }
 
   async function remove() {
-    if (!existing || !(await confirmDelete(t.parts.confirmDelete(existing.name)))) return;
+    if (!existing || !(await confirmDelete(t.items.confirmDelete(existing.name)))) return;
     void run(async () => {
-      await online('DELETE', `/api/parts/${existing.id}`);
-      navigate('/parts', { replace: true });
+      await online('DELETE', `/api/items/${existing.id}`);
+      navigate('/items', { replace: true });
     }, t.feedback.deleted);
   }
 
   return (
-    <Layout title={existing ? t.parts.editTitle : t.parts.newTitle} back="/parts" entry>
+    <Layout title={existing ? t.items.editTitle : t.items.newTitle} back="/items" entry>
       <NeedsConnection />
-      {owned.length === 0 && !existing ? <p className="empty">{t.parts.noOwnedVehicle}</p> : null}
+      {owned.length === 0 && !existing ? <p className="empty">{t.items.noOwnedVehicle}</p> : null}
       <form onSubmit={submit} className="form" noValidate>
-        <Field label={t.parts.vehicle} hint={existing ? t.parts.vehicleLocked : undefined}>
+        <Field label={t.items.vehicle} hint={existing ? t.items.vehicleLocked : undefined}>
           <select
             value={vehicle}
             disabled={existing !== undefined}
@@ -172,7 +172,7 @@ export function VehiclePartForm({ snapshot, existing, vehicleId }: { snapshot: S
             <input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} />
           </Field>
         </div>
-        <Field label={t.workshop.partTask} hint={t.workshop.partTaskHint}>
+        <Field label={t.workshop.itemTask} hint={t.workshop.itemTaskHint}>
           <select value={taskId} onChange={(e) => setTaskId(e.target.value)}>
             <option value="">{t.workshop.noTask}</option>
             {tasks.map((task) => (
@@ -182,9 +182,9 @@ export function VehiclePartForm({ snapshot, existing, vehicleId }: { snapshot: S
             ))}
           </select>
         </Field>
-        <Field label={t.parts.forSpec} hint={t.parts.forSpecHint}>
+        <Field label={t.items.forSpec} hint={t.items.forSpecHint}>
           <select value={itemSpecId} onChange={(e) => setItemSpecId(e.target.value)}>
-            <option value="">{t.parts.noSpec}</option>
+            <option value="">{t.items.noSpec}</option>
             {itemSpecs.map((s) => (
               <option key={s.id} value={s.id}>
                 {itemSpecText(s)}
@@ -192,14 +192,14 @@ export function VehiclePartForm({ snapshot, existing, vehicleId }: { snapshot: S
             ))}
           </select>
         </Field>
-        <Field label={t.parts.notes} hint={t.parts.notesHint}>
+        <Field label={t.items.notes} hint={t.items.notesHint}>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} />
         </Field>
         <FormError error={error} />
-        <Submit disabled={disabled || (!existing && !owner)}>{busy ? '…' : t.parts.save}</Submit>
+        <Submit disabled={disabled || (!existing && !owner)}>{busy ? '…' : t.items.save}</Submit>
         {existing ? (
           <button type="button" className="button button-danger button-block" onClick={remove} disabled={disabled}>
-            {t.parts.deletePart}
+            {t.items.deleteItem}
           </button>
         ) : null}
       </form>

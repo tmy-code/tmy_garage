@@ -58,9 +58,26 @@ export function desktopOnlyRoute(route: string[]): boolean {
     return sub === 'tasks' && subId === 'new';
   }
   if (section === 'tasks') return sub === 'edit';
-  if (section === 'parts') return id === 'new' || id === 'part';
+  if (section === 'items') return id === 'new' || id === 'item';
   if (section === 'settings') return id === 'parts';
   return false;
+}
+
+/**
+ * The new path of a bookmarked or cached route from before Vehicle Part became Vehicle Item (`#/parts...`), or null
+ * when the route is current. `/settings/parts` (Plan Templates) is not one of them.
+ */
+export function legacyRoute(route: string[]): string | null {
+  const [section, id, sub, subId] = route;
+  if (section === 'parts') {
+    if (id === undefined) return '/items';
+    if (id === 'vehicle' && sub) return `/items/vehicle/${sub}`;
+    if (id === 'new') return sub ? `/items/new/${sub}` : '/items/new';
+    if (id === 'part' && sub) return `/items/item/${sub}`;
+    return '/items';
+  }
+  if (section === 'vehicles' && id && sub === 'parts' && subId === undefined) return `/vehicles/${id}/items`;
+  return null;
 }
 
 export function navigate(path: string, { replace = false } = {}): void {

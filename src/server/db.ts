@@ -926,6 +926,13 @@ const MIGRATIONS: (string | ((db: DatabaseSync) => void))[] = [
     moved_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `,
+  // Vehicle Part is now Vehicle Item (CONTEXT.md, ADR 0009). Data kept as is. The previous release cannot open this schema: the garage-v<N>-*.sqlite copy written just before this migration is the way back. SQLite rewrites the foreign keys of service_items and purchases to the new name.
+  `
+  ALTER TABLE vehicle_parts RENAME TO vehicle_items;
+  DROP INDEX vehicle_parts_vehicle;
+  CREATE INDEX vehicle_items_vehicle ON vehicle_items (vehicle_id);
+  ALTER TABLE service_items RENAME COLUMN part_id TO item_id;
+`,
 ];
 
 /** Replaces what the owner changed on a template that was split by the same change on each of the new ones. */
