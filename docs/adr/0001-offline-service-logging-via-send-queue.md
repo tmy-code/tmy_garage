@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Renamed since: Parts Used is now Components Used (wire key `componentsUsed`, API 5); see CONTEXT.md.
+
 # Offline Service logging via a send queue, not full local-first sync
 
 The user works on their vehicles in a basement car park with no cell reception, so the phone app must work offline — but only for what happens there: reading Maintenance Tasks, Part Specs, Vehicle Specs, workshop data and what is fitted, and logging Services, Parts Used, Odometer Readings and photos. We cache that data on the phone and put offline writes in a send queue that is replayed to the server when the connection returns, with "last write wins" for the rare conflict. This is safe because each Garage has a single editor, so concurrent edits to the same record practically never happen.

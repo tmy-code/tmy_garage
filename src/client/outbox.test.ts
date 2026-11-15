@@ -5,7 +5,7 @@ import { applyOutbox, enqueueOp, opDeletePath, opRequest, type OutboxOp } from '
 const base: Snapshot = {
   vehicles: [],
   tasks: [],
-  services: [{ id: 's1', vehicleId: 'v', date: '2026-01-01', odometer: 100, taskIds: ['t'], notes: null, kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null, partsUsed: [] }],
+  services: [{ id: 's1', vehicleId: 'v', date: '2026-01-01', odometer: 100, taskIds: ['t'], notes: null, kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null, componentsUsed: [] }],
   readings: [],
   specLines: [],
   vehicleItems: [],
@@ -17,7 +17,7 @@ const base: Snapshot = {
 
 const service = (id: string, odometer: number): OutboxOp => ({
   kind: 'service',
-  data: { id, vehicleId: 'v', date: '2026-10-01', odometer, taskIds: ['t'], notes: null, kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null, partsUsed: [] },
+  data: { id, vehicleId: 'v', date: '2026-10-01', odometer, taskIds: ['t'], notes: null, kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null, componentsUsed: [] },
 });
 
 describe('outbox', () => {
@@ -30,6 +30,14 @@ describe('outbox', () => {
     ]);
     expect(view.readings).toHaveLength(1);
     expect(base.services[0]!.odometer).toBe(100);
+  });
+
+  it('shows the Components Used of a Service queued with the old partsUsed key', () => {
+    const legacy = { kind: 'service', data: { ...service('s3', 300).data, componentsUsed: undefined, partsUsed: [{ description: 'Oil', quantity: 1, unit: 'litre', partId: 'item-0001' }] } } as unknown as OutboxOp;
+    const view = applyOutbox(base, [legacy]);
+    const added = view.services.find((s) => s.id === 's3')!;
+    expect(added.componentsUsed[0]).toMatchObject({ description: 'Oil', itemId: 'item-0001' });
+    expect(added).not.toHaveProperty('partsUsed');
   });
 
   it('keeps one queued version per record, the latest', () => {

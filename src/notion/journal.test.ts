@@ -39,7 +39,7 @@ const service = (id: string, overrides: Partial<Service> = {}): Service => ({
   category: null,
   performedBy: 'diy',
   totalCost: 999,
-  partsUsed: [],
+  componentsUsed: [],
   ...overrides,
 });
 
@@ -68,7 +68,7 @@ describe('buildJournal', () => {
     services: [
       service('s1', {
         taskIds: ['t-oil', 't-check'],
-        partsUsed: [
+        componentsUsed: [
           { description: 'Huile test 10W-40', partNumber: 'PN-SECRET', quantity: 3.2, unit: 'litre', price: 11.5, consumableTypeId: 'ct-oil', productId: 'prod-1' },
           { description: 'Filtre test', partNumber: null, quantity: 1, unit: 'piece', price: 9, consumableTypeId: 'ct-filter' },
           { description: 'Joint tapé à la main', partNumber: null, quantity: 1, unit: 'piece', price: null },
@@ -116,7 +116,7 @@ describe('buildJournal', () => {
 
   it('gives nothing for a Service of a sold vehicle, and leaves a line with no Task unattached', () => {
     expect(journal.sessions.map((x) => x.appId)).not.toContain('s3');
-    const alone = buildJournal(snapshot({ services: [service('s9', { partsUsed: [{ description: 'Chiffon', partNumber: null, quantity: 1, unit: 'piece' }] })] }), fr);
+    const alone = buildJournal(snapshot({ services: [service('s9', { componentsUsed: [{ description: 'Chiffon', partNumber: null, quantity: 1, unit: 'piece' }] })] }), fr);
     expect(alone.used[0]).toMatchObject({ interventionAppId: null });
   });
 });

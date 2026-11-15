@@ -179,7 +179,7 @@ export interface SpecLine {
 }
 
 /** A component used in a Service, with its brand and variant in the description. */
-export interface PartUsed {
+export interface ComponentUsed {
   description: string;
   partNumber: string | null;
   quantity: number;
@@ -248,7 +248,7 @@ export interface Service {
   performedBy: PerformedBy;
   /** Parts and labour, in one amount. */
   totalCost: number | null;
-  partsUsed: PartUsed[];
+  componentsUsed: ComponentUsed[];
 }
 
 export interface OdometerReading {

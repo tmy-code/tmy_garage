@@ -6,7 +6,7 @@ import { PART_CATEGORIES, type PartCategory } from '../../shared/catalogue.ts';
 import { buyStates } from '../../shared/purchases.ts';
 import { formFigure, mergeNeeds, prefillForType, prefillFromProduct, type MergedNeed } from '../../shared/session-consumables.ts';
 import type { PartUnit, PerformedBy, ServiceKind } from '../../shared/schemas.ts';
-import type { OdometerReading, PartUsed, Service, Snapshot, Vehicle, VehicleItem } from '../../shared/types.ts';
+import type { OdometerReading, ComponentUsed, Service, Snapshot, Vehicle, VehicleItem } from '../../shared/types.ts';
 import { newId } from '../api.ts';
 import { confirmDelete, ConsistencyWarnings, Field, FormError, Layout, segmentedKeys, StatusChip } from '../components.tsx';
 import { formatKm, formatMoney, formatQuantity, matchesQuery, parseNumber, taskName } from '../format.ts';
@@ -20,7 +20,7 @@ import { DocumentsPanel } from './Documents.tsx';
 import { OTHER_PRODUCT, SessionConsumables } from './SessionConsumables.tsx';
 
 /** A Part Used as typed in the form: numbers stay text until saved. */
-interface PartDraft {
+interface ComponentUsedDraft {
   key: number;
   description: string;
   partNumber: string;
@@ -28,9 +28,9 @@ interface PartDraft {
   unit: PartUnit;
   /** Price per piece or litre, as typed. */
   price: string;
-  /** The part of the Vehicle's list it was picked from, if it still is that part. */
+  /** The item of the Vehicle's list it was picked from, if it still is that item. */
   itemId: string | null;
-  /** A part typed by hand is also kept in the list, unless the owner unticks it. */
+  /** A component typed by hand is also kept in the list, unless the owner unticks it. */
   remember: boolean;
   /** The required Consumable Type (from the Notion catalogue) and the Product it is for, when picked from a Task's block. */
   consumableTypeId: string | null;
@@ -42,7 +42,7 @@ const SEARCH_FROM = 8;
 
 let nextKey = 1;
 
-function toDraft(p: PartUsed): PartDraft {
+function toDraft(p: ComponentUsed): ComponentUsedDraft {
   return {
     key: nextKey++,
     description: p.description,
@@ -57,7 +57,7 @@ function toDraft(p: PartUsed): PartDraft {
   };
 }
 
-function draftOfListed(p: VehicleItem): PartDraft {
+function draftOfListed(p: VehicleItem): ComponentUsedDraft {
   return {
     key: nextKey++,
     description: p.name,
@@ -72,20 +72,20 @@ function draftOfListed(p: VehicleItem): PartDraft {
   };
 }
 
-function fromDraft(d: PartDraft, t: Messages): PartUsed {
+function fromDraft(d: ComponentUsedDraft, t: Messages): ComponentUsed {
   // The phone does not add to the items list (ADR 0009): nothing is kept from a Service logged there.
   const remember = d.remember && isDesktop;
   const quantity = parseNumber(d.quantity);
   const price = parseNumber(d.price);
-  if (!d.description.trim() || quantity === null || Number.isNaN(quantity) || quantity <= 0) throw new Error(t.workshop.partError);
-  if (price !== null && (Number.isNaN(price) || price < 0)) throw new Error(t.workshop.partError);
+  if (!d.description.trim() || quantity === null || Number.isNaN(quantity) || quantity <= 0) throw new Error(t.workshop.itemError);
+  if (price !== null && (Number.isNaN(price) || price < 0)) throw new Error(t.workshop.itemError);
   return {
     description: d.description.trim(),
     partNumber: d.partNumber.trim() || null,
     quantity,
     unit: d.unit,
     price,
-    // An id made here for a part to keep travels with the Service, so sending it again never doubles it.
+    // An id made here for an item to keep travels with the Service, so sending it again never doubles it.
     itemId: d.itemId ?? (remember ? newId() : null),
     ...(remember && !d.itemId ? { remember: true } : {}),
     ...(d.consumableTypeId ? { consumableTypeId: d.consumableTypeId } : {}),
@@ -135,7 +135,7 @@ export function ServiceForm({
   const [titleError, setTitleError] = useState<string | null>(null);
   const [performedBy, setPerformedBy] = useState<PerformedBy>(existing?.performedBy ?? 'diy');
   const [costText, setCostText] = useState(existing?.totalCost != null ? String(existing.totalCost) : '');
-  const [parts, setParts] = useState<PartDraft[]>(() => (existing?.partsUsed ?? []).map(toDraft));
+  const [drafts, setDrafts] = useState<ComponentUsedDraft[]>(() => (existing?.componentsUsed ?? []).map(toDraft));
   const [error, setError] = useState<string | null>(null);
   const [odometerError, setOdometerError] = useState<string | null>(null);
   const [tasksError, setTasksError] = useState<string | null>(null);
@@ -169,13 +169,13 @@ export function ServiceForm({
     setTasksError(null);
   }
 
-  function setPart(key: number, patch: Partial<PartDraft>) {
-    setParts(parts.map((p) => (p.key === key ? { ...p, ...patch } : p)));
+  function setDraft(key: number, patch: Partial<ComponentUsedDraft>) {
+    setDrafts(drafts.map((p) => (p.key === key ? { ...p, ...patch } : p)));
   }
 
   function addEmptyPart() {
-    setParts([
-      ...parts,
+    setDrafts([
+      ...drafts,
       {
         key: nextKey++,
         description: '',
@@ -198,8 +198,8 @@ export function ServiceForm({
     const comma = t.locale.startsWith('fr');
     const key = nextKey++;
     focusLine.current = key;
-    setParts([
-      ...parts,
+    setDrafts([
+      ...drafts,
       {
         key,
         description: fill.description,
@@ -208,7 +208,7 @@ export function ServiceForm({
         unit: fill.unit ?? 'piece',
         price: fill.price ? formFigure(fill.price, comma) : '',
         itemId: null,
-        // A product from the Notion catalogue is not also kept in the parts list; a part typed by hand is.
+        // A product from the Notion catalogue is not also kept in the items list; a component typed by hand is.
         remember: product === undefined,
         consumableTypeId: fill.consumableTypeId,
         productId: fill.productId,
@@ -220,11 +220,11 @@ export function ServiceForm({
   const focusLine = useRef<number | null>(null);
   useEffect(() => {
     if (focusLine.current === null) return;
-    const field = document.getElementById(`part-qty-${focusLine.current}`);
+    const field = document.getElementById(`component-qty-${focusLine.current}`);
     focusLine.current = null;
     field?.scrollIntoView({ block: 'center' });
     field?.focus();
-  }, [parts]);
+  }, [drafts]);
 
   // The needs of the ticked Tasks, one block per consumable type.
   // Whether each required type was bought since its Task was last done (Notion's Achats); the strictest date of the ticked Tasks.
@@ -237,15 +237,15 @@ export function ServiceForm({
   );
   const needs = useMemo(() => mergeNeeds(snapshot, vehicle.id, due.filter((d) => selected.has(d.taskId)).map((d) => d.taskId)), [snapshot, vehicle.id, due, selected]);
   const needed = new Set(needs.map((n) => n.type.id));
-  const keptLines = parts.some((p) => p.consumableTypeId !== null && !needed.has(p.consumableTypeId));
+  const keptLines = drafts.some((p) => p.consumableTypeId !== null && !needed.has(p.consumableTypeId));
 
-  /** The Vehicle's listed parts: those usually bought for a ticked Task first. */
+  /** The Vehicle's listed items: those usually bought for a ticked Task first. */
   const listed = snapshot.vehicleItems.filter((p) => p.vehicleId === vehicle.id).sort((a, b) => a.name.localeCompare(b.name));
   const forTasks = listed.filter((p) => p.taskId !== null && selected.has(p.taskId));
   const others = listed.filter((p) => !forTasks.includes(p));
   function pickListed(id: string) {
-    const part = listed.find((p) => p.id === id);
-    if (part) setParts([...parts, draftOfListed(part)]);
+    const item = listed.find((p) => p.id === id);
+    if (item) setDrafts([...drafts, draftOfListed(item)]);
   }
 
   async function submit(event: FormEvent) {
@@ -274,9 +274,9 @@ export function ServiceForm({
       setError(t.service.totalCostError);
       return;
     }
-    let partsUsed: PartUsed[];
+    let componentsUsed: ComponentUsed[];
     try {
-      partsUsed = parts.map((d) => fromDraft(d, t));
+      componentsUsed = drafts.map((d) => fromDraft(d, t));
     } catch (e) {
       setError((e as Error).message);
       return;
@@ -295,7 +295,7 @@ export function ServiceForm({
         notes: notes.trim() || null,
         performedBy,
         totalCost,
-        partsUsed,
+        componentsUsed,
       },
     };
     await enqueue(op);
@@ -375,7 +375,7 @@ export function ServiceForm({
             <SessionConsumables
               needs={needs}
               snapshot={snapshot}
-              lines={(typeId) => parts.filter((p) => p.consumableTypeId === typeId).map((p) => p.productId)}
+              lines={(typeId) => drafts.filter((p) => p.consumableTypeId === typeId).map((p) => p.productId)}
               buy={buy}
               onAdd={addForType}
             />
@@ -443,16 +443,16 @@ export function ServiceForm({
           </div>
           <div className="form">
             <fieldset className="field">
-              <legend className="field-label">{t.workshop.partsUsed}</legend>
+              <legend className="field-label">{t.workshop.componentsUsed}</legend>
               {keptLines ? <p className="muted">{t.notion.keptLines}</p> : null}
-              {parts.map((d) => (
-                <div key={d.key} className="card part-used">
+              {drafts.map((d) => (
+                <div key={d.key} className="card component-used">
                   <div className="section-head">
                     <span className="field-label">{t.workshop.description}</span>
                     <button
                       type="button"
                       className="button button-small button-danger"
-                      onClick={() => setParts(parts.filter((p) => p.key !== d.key))}
+                      onClick={() => setDrafts(drafts.filter((p) => p.key !== d.key))}
                     >
                       {t.workshop.remove}
                     </button>
@@ -462,36 +462,36 @@ export function ServiceForm({
                   ) : null}
                   <input
                     value={d.description}
-                    onChange={(e) => setPart(d.key, { description: e.target.value, ...(d.itemId ? { itemId: null, remember: true } : {}) })}
+                    onChange={(e) => setDraft(d.key, { description: e.target.value, ...(d.itemId ? { itemId: null, remember: true } : {}) })}
                     maxLength={200}
                     placeholder={t.workshop.descriptionHint}
                     aria-label={t.workshop.description}
                   />
                   <div className="row">
                     <Field label={t.workshop.quantity}>
-                      <input id={`part-qty-${d.key}`} inputMode="decimal" value={d.quantity} onChange={(e) => setPart(d.key, { quantity: e.target.value })} />
+                      <input id={`component-qty-${d.key}`} inputMode="decimal" value={d.quantity} onChange={(e) => setDraft(d.key, { quantity: e.target.value })} />
                     </Field>
                     <Field label={t.workshop.unit}>
-                      <select value={d.unit} onChange={(e) => setPart(d.key, { unit: e.target.value as PartUnit })}>
+                      <select value={d.unit} onChange={(e) => setDraft(d.key, { unit: e.target.value as PartUnit })}>
                         <option value="piece">{t.workshop.piece}</option>
                         <option value="litre">{t.workshop.litre}</option>
                       </select>
                     </Field>
                     <Field label={t.workshop.unitPrice}>
-                      <input inputMode="decimal" value={d.price} onChange={(e) => setPart(d.key, { price: e.target.value })} />
+                      <input inputMode="decimal" value={d.price} onChange={(e) => setDraft(d.key, { price: e.target.value })} />
                     </Field>
                   </div>
                   {d.itemId === null && isDesktop ? (
                     <label className="check">
-                      <input type="checkbox" checked={d.remember} onChange={(e) => setPart(d.key, { remember: e.target.checked })} />
+                      <input type="checkbox" checked={d.remember} onChange={(e) => setDraft(d.key, { remember: e.target.checked })} />
                       <span>{t.workshop.keepItem}</span>
                     </label>
                   ) : null}
-                  <details className="part-details">
+                  <details className="component-details">
                     <summary>{t.workshop.moreDetails}</summary>
                     <div className="row">
                       <Field label={t.workshop.partNumber}>
-                        <input value={d.partNumber} onChange={(e) => setPart(d.key, { partNumber: e.target.value, ...(d.itemId ? { itemId: null, remember: true } : {}) })} maxLength={120} />
+                        <input value={d.partNumber} onChange={(e) => setDraft(d.key, { partNumber: e.target.value, ...(d.itemId ? { itemId: null, remember: true } : {}) })} maxLength={120} />
                       </Field>
                     </div>
                   </details>
@@ -522,7 +522,7 @@ export function ServiceForm({
                   </select>
                 ) : null}
                 <button type="button" className="button button-small" onClick={addEmptyPart}>
-                  {t.workshop.addPartUsed}
+                  {t.workshop.addComponentUsed}
                 </button>
               </div>
             </fieldset>
