@@ -705,7 +705,7 @@ const fr: Messages = {
   nav: {
     label: 'Rubriques',
     garage: 'Garage',
-    items: 'Pièces',
+    items: 'Articles',
     workshop: 'Fiches',
     settings: 'Réglages',
   },
@@ -893,7 +893,7 @@ const fr: Messages = {
     editShort: 'Modifier',
     showAllHistory: (n) => `Voir tout l’historique (${n})`,
     readingsSummary: (n) => `${n} relevé${n === 1 ? '' : 's'} kilométrique${n === 1 ? '' : 's'}`,
-    tabs: { plan: 'Plan', history: 'Historique', specs: 'Spécifications', items: 'Pièces', fuel: 'Carburant' },
+    tabs: { plan: 'Plan', history: 'Historique', specs: 'Spécifications', items: 'Articles', fuel: 'Carburant' },
     tabsLabel: 'Rubriques de ce véhicule',
   },
   consistency: {
@@ -1109,7 +1109,7 @@ const fr: Messages = {
     noSpec: 'Aucune spécification en particulier',
     specShown: (text: string) => `Fiche : ${text}`,
     notes: 'Notes',
-    notesHint: 'La boutique, un lien, pourquoi vous l’avez choisie…',
+    notesHint: 'La boutique, un lien, pourquoi vous l’avez choisi…',
     vehicleLocked: 'Un article appartient à un seul véhicule, définitivement.',
     noOwnedVehicle: 'Ajoutez d’abord un véhicule.',
     save: 'Enregistrer',
