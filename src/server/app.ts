@@ -33,7 +33,7 @@ import type {
   MaintenanceTask,
   OdometerReading,
   NotionStatus,
-  PartUsed,
+  ComponentUsed,
   Product,
   NotionPurchase,
   RefTask,
@@ -258,7 +258,7 @@ export interface AppOptions {
   notionSync?: NotionSyncService;
 }
 
-const toPartUsed = (r: Row): PartUsed => ({
+const toComponentUsed = (r: Row): ComponentUsed => ({
   description: r.description,
   partNumber: r.part_number,
   quantity: r.quantity,
@@ -335,7 +335,7 @@ function garageReader(db: DatabaseSync, garageId: string) {
       .all(garageId) as Row[];
     const taskIdsByService = new Map<string, string[]>();
     for (const l of links) taskIdsByService.set(l.service_id, [...(taskIdsByService.get(l.service_id) ?? []), l.task_id]);
-    const partsByService = groupBy(
+    const componentsByService = groupBy(
       db
         .prepare(
           `SELECT p.* FROM service_items p JOIN services s ON s.id = p.service_id JOIN vehicles v ON v.id = s.vehicle_id
@@ -343,7 +343,7 @@ function garageReader(db: DatabaseSync, garageId: string) {
         )
         .all(garageId) as Row[],
       'service_id',
-      toPartUsed,
+      toComponentUsed,
     );
     const services: Service[] = (
       db
@@ -364,7 +364,7 @@ function garageReader(db: DatabaseSync, garageId: string) {
       performedBy: r.performed_by,
       totalCost: r.total_cost,
       taskIds: taskIdsByService.get(r.id) ?? [],
-      partsUsed: partsByService.get(r.id) ?? [],
+      componentsUsed: componentsByService.get(r.id) ?? [],
     }));
     const readings = (
       db
@@ -1098,7 +1098,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       const other = db.prepare('SELECT id FROM maintenance_tasks WHERE vehicle_id = ? AND template_code = ?').get(s.vehicleId, included) as Row | undefined;
       if (other && !taskIds.includes(other.id)) taskIds.push(other.id);
     }
-    const partsUsed = s.partsUsed;
+    const componentsUsed = s.componentsUsed;
     transaction(() => {
       db.prepare(
         `INSERT INTO services (id, vehicle_id, date, odometer, notes, performed_by, total_cost, kind, title, category)
@@ -1111,25 +1111,25 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       const link = db.prepare('INSERT INTO service_tasks (service_id, task_id) VALUES (?, ?)');
       for (const taskId of taskIds) link.run(s.id, taskId);
       db.prepare('DELETE FROM service_items WHERE service_id = ?').run(s.id);
-      const part = db.prepare('INSERT INTO service_items (service_id, sort, description, part_number, quantity, unit, price, item_id, consumable_type_id, product_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-      // A part to keep goes on the Vehicle's list (once, whatever the replays), tied to the Service's Task when it has just one.
+      const insertComponent = db.prepare('INSERT INTO service_items (service_id, sort, description, part_number, quantity, unit, price, item_id, consumable_type_id, product_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+      // A Component Used to keep goes on the Vehicle's items list (once, whatever the replays), tied to the Service's Task when it has just one.
       const keep = db.prepare('INSERT OR IGNORE INTO vehicle_items (id, vehicle_id, name, part_number, unit, quantity, price, task_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
       const listed = db.prepare('SELECT id FROM vehicle_items WHERE id = ? AND vehicle_id = ?');
       const oneTask = new Set(s.taskIds).size === 1 ? s.taskIds[0]! : null;
-      const linked = partsUsed.map((p) => {
+      const linked = componentsUsed.map((p) => {
         let itemId = p.itemId;
         if (p.remember && itemId !== null) {
           const twin = sameItem(s.vehicleId, p.description, p.partNumber, itemId);
           if (twin) itemId = twin.id;
           else keep.run(itemId, s.vehicleId, p.description, p.partNumber, p.unit, p.quantity, p.price, oneTask);
         }
-        // A link to a part that is gone, or on another Vehicle, is dropped: the Service keeps its copy.
+        // A link to an item that is gone, or on another Vehicle, is dropped: the Service keeps its copy.
         return { ...p, remember: false, itemId: itemId !== null && listed.get(itemId, s.vehicleId) ? itemId : null };
       });
-      linked.forEach((p, i) => part.run(s.id, i, p.description, p.partNumber, p.quantity, p.unit, p.price, p.itemId, p.consumableTypeId, p.productId));
-      partsUsed.splice(0, partsUsed.length, ...linked);
+      linked.forEach((p, i) => insertComponent.run(s.id, i, p.description, p.partNumber, p.quantity, p.unit, p.price, p.itemId, p.consumableTypeId, p.productId));
+      componentsUsed.splice(0, componentsUsed.length, ...linked);
     });
-    return c.json({ ...s, taskIds, partsUsed });
+    return c.json({ ...s, taskIds, componentsUsed });
   });
 
   app.delete('/api/services/:id', (c) => {

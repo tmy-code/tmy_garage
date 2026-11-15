@@ -4,7 +4,7 @@ import { todayIso } from '../../shared/dates.ts';
 import { requiredConsumables, torqueSpecs } from '../../shared/applicability.ts';
 import { vehicleDue } from '../../shared/due.ts';
 import type { PartUnit } from '../../shared/schemas.ts';
-import type { ComponentSpec, Confirmation, ItemSpec, MaintenanceTask, PartUsed, Snapshot, SpecLine, Vehicle, VehicleItem } from '../../shared/types.ts';
+import type { ComponentSpec, ComponentUsed, Confirmation, ItemSpec, MaintenanceTask, Snapshot, SpecLine, Vehicle, VehicleItem } from '../../shared/types.ts';
 import { confirmAction } from '../feedback.ts';
 import { confirmDelete, DesktopOnlyNote, Field, FormError, Layout, NeedsConnection, segmentedKeys, StatusChip, useWide } from '../components.tsx';
 import { describeDue, describeInterval, formatDate, formatKm, formatMoney, localizeNumber, matchesQuery, parseNumber, specErrorText, taskName } from '../format.ts';
@@ -19,8 +19,8 @@ import { useSubmit } from './SetupForms.tsx';
 // works offline from the phone's copy, which is what matters mid-job (ADR 0009).
 
 /** "Motul 7100 10W-40 · ref. 123" */
-export function describePart(part: PartUsed): string {
-  return [part.description, part.partNumber].filter(Boolean).join(' · ');
+export function describeComponentUsed(line: ComponentUsed): string {
+  return [line.description, line.partNumber].filter(Boolean).join(' · ');
 }
 
 /** Text with web links made tappable. */
@@ -698,7 +698,7 @@ export function TaskPage({ task, vehicle, snapshot }: { task: MaintenanceTask; v
                   {t.service.performers[s.performedBy]}
                   {s.totalCost !== null ? ` · ${formatMoney(s.totalCost, t)}` : ''}
                 </span>
-                {s.partsUsed.length > 0 ? <span className="muted">{s.partsUsed.map(describePart).join(', ')}</span> : null}
+                {s.componentsUsed.length > 0 ? <span className="muted">{s.componentsUsed.map(describeComponentUsed).join(', ')}</span> : null}
                 {s.notes ? <span className="muted">{s.notes}</span> : null}
               </a>
             </li>

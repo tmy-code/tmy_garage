@@ -105,7 +105,7 @@ export function buildJournal(snapshot: Snapshot, t: Messages): NotionJournal {
     });
     journal.interventions.push(...interventions.map((i) => i.row));
 
-    service.partsUsed.forEach((line, index) => {
+    service.componentsUsed.forEach((line, index) => {
       // A line goes with the Task that needs its Consumable Type, else with the Service's first Task.
       const owner = interventions.find((i) => line.consumableTypeId && i.consumableTypeIds.includes(line.consumableTypeId)) ?? interventions[0];
       journal.used.push({

@@ -223,8 +223,8 @@ export const componentSpecInput = z.object({
   confirmation: z.enum(['confirmed', 'to_confirm']).nullish().transform((v) => v ?? null),
 });
 
-/** A component used in a Service, with its brand and variant in the description. Older phones also send a price, a supplier and a link to a Part Spec: those are ignored. */
-export const partUsedInput = z.object({
+/** A Component Used in a Service, with its brand and variant in the description. Older phones also send a price, a supplier and a link to a Part Spec: those are ignored. */
+export const componentUsedInput =z.object({
   description: z.string().trim().min(1).max(200),
   partNumber: optionalText(120),
   quantity,
@@ -277,14 +277,17 @@ export const serviceInput = z
     .max(1_000_000)
     .nullish()
     .transform((v) => v ?? null),
-  partsUsed: z.array(partUsedInput).max(100).default([]),
+  componentsUsed: z.array(componentUsedInput).max(100).optional(),
+  /** Legacy (API 4): a Service queued before the rename sends partsUsed; read as componentsUsed. */
+  partsUsed: z.array(componentUsedInput).max(100).optional(),
 })
   .superRefine((s, ctx) => {
     if (s.kind === 'maintenance' && s.taskIds.length === 0) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['taskIds'], message: 'A Service completes at least one Maintenance Task' });
     }
     if (s.kind === 'repair' && !s.title) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['title'], message: 'A repair needs a title' });
-  });
+  })
+  .transform(({ partsUsed, componentsUsed, ...s }) => ({ ...s, componentsUsed: componentsUsed ?? partsUsed ?? [] }));
 
 export const odometerReadingInput = z.object({
   id: clientId,

@@ -228,7 +228,7 @@ describe('services and readings (replayed by the offline send queue)', () => {
     expect((await call('PUT', '/api/services/svc-00001', body)).status).toBe(200);
     expect((await call('PUT', '/api/services/svc-00001', body)).status).toBe(200);
     const s = await snapshot();
-    expect(s.services).toEqual([{ ...body, kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null, partsUsed: [] }]);
+    expect(s.services).toEqual([{ ...body, kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null, componentsUsed: [] }]);
   });
 
   it('stores a Service without an odometer value, for time-based tasks', async () => {
@@ -236,7 +236,7 @@ describe('services and readings (replayed by the offline send queue)', () => {
     const coolant = await createTask(bike.id, { name: 'Coolant', intervalKm: null, intervalMonths: 36 });
     const body = { id: 'svc-00002', vehicleId: bike.id, date: '2026-07-14', taskIds: [coolant.id], notes: null };
     expect((await call('PUT', '/api/services/svc-00002', body)).status).toBe(200);
-    expect((await snapshot()).services).toEqual([{ ...body, odometer: null, kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null, partsUsed: [] }]);
+    expect((await snapshot()).services).toEqual([{ ...body, odometer: null, kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null, componentsUsed: [] }]);
   });
 
   it('updates a Service and its tasks on a later PUT', async () => {
@@ -515,10 +515,10 @@ describe('spec lines and the plan templates', () => {
       date: '2026-10-01',
       odometer: 18000,
       taskIds: [task.id],
-      partsUsed: [{ partSpecId: 'gone', itemId: 'gone-part-id', description: 'Motul 7100 10W-40', quantity: 3, unit: 'litre', price: 40, supplier: 'Shop' }],
+      componentsUsed: [{ partSpecId: 'gone', itemId: 'gone-part-id', description: 'Motul 7100 10W-40', quantity: 3, unit: 'litre', price: 40, supplier: 'Shop' }],
     });
     expect(res.status).toBe(200);
-    expect((await snapshot()).services[0]!.partsUsed).toEqual([{ description: 'Motul 7100 10W-40', partNumber: null, quantity: 3, unit: 'litre', price: 40, itemId: null }]);
+    expect((await snapshot()).services[0]!.componentsUsed).toEqual([{ description: 'Motul 7100 10W-40', partNumber: null, quantity: 3, unit: 'litre', price: 40, itemId: null }]);
   });
 
   it('keeps a Vehicle’s parts list: add, edit, refuse a twin, delete', async () => {
@@ -543,19 +543,19 @@ describe('spec lines and the plan templates', () => {
       date: '2026-10-01',
       odometer: 18000,
       taskIds: [task.id],
-      partsUsed: [{ description: 'Mann HU 7008 z', partNumber: 'HU 7008 z', quantity: 1, unit: 'piece', price: 9.9, itemId: 'part-0000001', remember: true }],
+      componentsUsed: [{ description: 'Mann HU 7008 z', partNumber: 'HU 7008 z', quantity: 1, unit: 'piece', price: 9.9, itemId: 'part-0000001', remember: true }],
     };
     expect((await call('PUT', '/api/services/svc-00010', body)).status).toBe(200);
     expect((await call('PUT', '/api/services/svc-00010', body)).status).toBe(200);
     const parts = (await snapshot()).vehicleItems;
     expect(parts).toEqual([{ id: 'part-0000001', vehicleId: bike.id, name: 'Mann HU 7008 z', partNumber: 'HU 7008 z', unit: 'piece', quantity: 1, price: 9.9, taskId: task.id, itemSpecId: null, specLineId: null, notes: null }]);
-    expect((await snapshot()).services[0]!.partsUsed[0]).toMatchObject({ itemId: 'part-0000001', price: 9.9 });
+    expect((await snapshot()).services[0]!.componentsUsed[0]).toMatchObject({ itemId: 'part-0000001', price: 9.9 });
     // The same part typed again in another Service links to the list instead of doubling it.
-    await call('PUT', '/api/services/svc-00011', { ...body, id: 'svc-00011', partsUsed: [{ ...body.partsUsed[0], itemId: 'part-0000002' }] });
+    await call('PUT', '/api/services/svc-00011', { ...body, id: 'svc-00011', componentsUsed: [{ ...body.componentsUsed[0], itemId: 'part-0000002' }] });
     expect((await snapshot()).vehicleItems).toHaveLength(1);
-    expect((await snapshot()).services.find((x) => x.id === 'svc-00011')!.partsUsed[0]!.itemId).toBe('part-0000001');
+    expect((await snapshot()).services.find((x) => x.id === 'svc-00011')!.componentsUsed[0]!.itemId).toBe('part-0000001');
     await call('DELETE', '/api/items/part-0000001');
-    const kept = (await snapshot()).services.find((x) => x.id === 'svc-00010')!.partsUsed[0]!;
+    const kept = (await snapshot()).services.find((x) => x.id === 'svc-00010')!.componentsUsed[0]!;
     expect(kept).toMatchObject({ description: 'Mann HU 7008 z', itemId: null, price: 9.9 });
   });
 
@@ -568,12 +568,48 @@ describe('spec lines and the plan templates', () => {
       date: '2026-10-01',
       odometer: 18000,
       taskIds: [task.id],
-      partsUsed: [{ description: 'Mann HU 7008 z', quantity: 1, unit: 'piece', partId: 'part-0000009', remember: true }],
+      componentsUsed: [{ description: 'Mann HU 7008 z', quantity: 1, unit: 'piece', partId: 'part-0000009', remember: true }],
     });
     expect(res.status).toBe(200);
     const snap = await snapshot();
     expect(snap.vehicleItems.map((i) => i.id)).toEqual(['part-0000009']);
-    expect(snap.services[0]!.partsUsed[0]).toMatchObject({ itemId: 'part-0000009' });
+    expect(snap.services[0]!.componentsUsed[0]).toMatchObject({ itemId: 'part-0000009' });
+  });
+
+  it('still reads the partsUsed of a Service queued on an API 4 phone', async () => {
+    const bike = await createVehicle();
+    const task = await createTask(bike.id);
+    const res = await call('PUT', '/api/services/svc-00021', {
+      id: 'svc-00021',
+      vehicleId: bike.id,
+      date: '2026-10-01',
+      odometer: 18000,
+      taskIds: [task.id],
+      partsUsed: [{ description: 'Mann HU 7008 z', quantity: 1, unit: 'piece', itemId: 'part-0000010', remember: true }],
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body).not.toHaveProperty('partsUsed');
+    const service = (await snapshot()).services[0]!;
+    expect(service.componentsUsed[0]).toMatchObject({ description: 'Mann HU 7008 z', itemId: 'part-0000010' });
+    expect(service).not.toHaveProperty('partsUsed');
+  });
+
+  it('prefers componentsUsed when both keys are sent', async () => {
+    const bike = await createVehicle();
+    const task = await createTask(bike.id);
+    const res = await call('PUT', '/api/services/svc-00022', {
+      id: 'svc-00022',
+      vehicleId: bike.id,
+      date: '2026-10-01',
+      odometer: 18000,
+      taskIds: [task.id],
+      componentsUsed: [{ description: 'New key', quantity: 1, unit: 'piece' }],
+      partsUsed: [{ description: 'Old key', quantity: 2, unit: 'piece' }],
+    });
+    expect(res.status).toBe(200);
+    const lines = (await snapshot()).services[0]!.componentsUsed;
+    expect(lines.map((l) => l.description)).toEqual(['New key']);
   });
 });
 
@@ -687,12 +723,12 @@ describe('the Parts section', () => {
       date: '2026-11-04',
       odometer: 18500,
       taskIds: [task.id],
-      partsUsed: [{ description: part.name, quantity: 5, unit: 'litre', itemId: part.id }],
+      componentsUsed: [{ description: part.name, quantity: 5, unit: 'litre', itemId: part.id }],
     };
     expect((await call('PUT', '/api/services/svc-00020', body)).status).toBe(200);
     const after = await snapshot();
     expect(after.vehicleItems[0]).not.toHaveProperty('toBuy');
-    expect(after.services[0]!.partsUsed[0]).toMatchObject({ itemId: part.id });
+    expect(after.services[0]!.componentsUsed[0]).toMatchObject({ itemId: part.id });
   });
 });
 
@@ -1380,7 +1416,7 @@ describe('services keep the consumable type and product of a part used', () => {
       date: '2026-11-01',
       odometer: 1000,
       taskIds: [task.id],
-      partsUsed: [
+      componentsUsed: [
         { description: 'Huile test', quantity: 3, unit: 'litre', consumableTypeId: 'type-1', productId: 'product-1' },
         { description: 'Joint', quantity: 1, unit: 'piece' },
       ],
@@ -1392,8 +1428,8 @@ describe('services keep the consumable type and product of a part used', () => {
       { description: 'Joint', consumable_type_id: null, product_id: null },
     ]);
     const [service] = (await snapshot()).services;
-    expect(service!.partsUsed[0]).toMatchObject({ consumableTypeId: 'type-1', productId: 'product-1' });
-    expect(service!.partsUsed[1]).not.toHaveProperty('consumableTypeId');
+    expect(service!.componentsUsed[0]).toMatchObject({ consumableTypeId: 'type-1', productId: 'product-1' });
+    expect(service!.componentsUsed[1]).not.toHaveProperty('consumableTypeId');
   });
 });
 
@@ -1566,8 +1602,8 @@ describe('the Item Spec migration (ADR 0009)', () => {
     }
   });
 
-  it('sends the API version 4 header', async () => {
-    expect(API_VERSION).toBe(4);
-    expect((await call('GET', '/api/snapshot')).headers.get('x-api-version')).toBe('4');
+  it('sends the API version 5 header', async () => {
+    expect(API_VERSION).toBe(5);
+    expect((await call('GET', '/api/snapshot')).headers.get('x-api-version')).toBe('5');
   });
 });

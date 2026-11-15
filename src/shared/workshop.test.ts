@@ -103,7 +103,7 @@ describe('normalizeSnapshot', () => {
     const s = normalizeSnapshot(old);
     expect(s.tasks[0]).toMatchObject({ notes: null, category: null, action: 'replace', switchedOff: false });
     expect(s.services[0]).toMatchObject({ kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null });
-    expect(s.services[0]!.partsUsed).toEqual([{ description: 'Oil', partNumber: null, quantity: 1, unit: 'litre', price: 5, itemId: null }]);
+    expect(s.services[0]!.componentsUsed).toEqual([{ description: 'Oil', partNumber: null, quantity: 1, unit: 'litre', price: 5, itemId: null }]);
     expect(s.specLines).toEqual([]);
   });
 
@@ -143,8 +143,9 @@ describe('normalizeSnapshot', () => {
 
   it('reads a Service queued before the rename (its partId) as itemId', () => {
     const queued = { vehicles: [], tasks: [], services: [{ id: 's', partsUsed: [{ description: 'Oil', quantity: 1, unit: 'litre', partId: 'item-0001' }] }], readings: [] } as unknown as Snapshot;
-    expect(normalizeSnapshot(queued).services[0]!.partsUsed[0]).toMatchObject({ itemId: 'item-0001' });
-    expect(normalizeSnapshot(queued).services[0]!.partsUsed[0]).not.toHaveProperty('partId');
+    expect(normalizeSnapshot(queued).services[0]!.componentsUsed[0]).toMatchObject({ itemId: 'item-0001' });
+    expect(normalizeSnapshot(queued).services[0]!.componentsUsed[0]).not.toHaveProperty('partId');
+    expect(normalizeSnapshot(queued).services[0]).not.toHaveProperty('partsUsed');
   });
 
   it('lets a snapshot with the new names pass through', () => {
@@ -164,7 +165,7 @@ describe('normalizeSnapshot', () => {
 
   it('keeps the consumable type and product of a part used when they are there', () => {
     const queued = { vehicles: [], tasks: [], services: [{ id: 's', partsUsed: [{ description: 'Oil', quantity: 1, unit: 'litre', consumableTypeId: 'c1', productId: 'p1' }] }], readings: [] } as unknown as Snapshot;
-    expect(normalizeSnapshot(queued).services[0]!.partsUsed[0]).toMatchObject({ consumableTypeId: 'c1', productId: 'p1' });
+    expect(normalizeSnapshot(queued).services[0]!.componentsUsed[0]).toMatchObject({ consumableTypeId: 'c1', productId: 'p1' });
   });
 });
 

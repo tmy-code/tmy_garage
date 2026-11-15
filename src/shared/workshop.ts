@@ -1,6 +1,6 @@
 import { PART_CATEGORIES, type PartCategory } from './catalogue.ts';
 import type { DueInfo } from './due.ts';
-import type { ComponentSpec, Confirmation, ItemSpec, MaintenanceTask, Ownership, Service, Snapshot, VehicleItem } from './types.ts';
+import type { ComponentSpec, ComponentUsed, Confirmation, ItemSpec, MaintenanceTask, Ownership, Service, Snapshot, VehicleItem } from './types.ts';
 
 /** A Maintenance Task's category: the one the owner picked, else 'other'. */
 export function taskCategory(task: MaintenanceTask): PartCategory {
@@ -121,6 +121,10 @@ export function itemSpecText(spec: Pick<ItemSpec, 'name' | 'specification' | 'ca
   return detail ? `${spec.name}: ${detail}` : spec.name;
 }
 
+/** A Service as an older phone queued it or an older app cached it: the Components Used under their old key `partsUsed`, a line with `partId`. */
+type LegacyService = Service & { partsUsed?: (ComponentUsed & { partId?: string | null })[] };
+
 export function normalizeService(service: Service): Service {
-  return { ...service, partsUsed: (service.partsUsed ?? []).map((p) => ({ description: p.description, partNumber: p.partNumber ?? null, quantity: p.quantity, unit: p.unit, price: p.price ?? null, itemId: p.itemId ?? (p as { partId?: string | null }).partId ?? null, ...(p.consumableTypeId ? { consumableTypeId: p.consumableTypeId } : {}), ...(p.productId ? { productId: p.productId } : {}), ...(p.remember ? { remember: true } : {}) })), kind: service.kind ?? 'maintenance', title: service.title ?? null, category: service.category ?? null, performedBy: service.performedBy ?? 'diy', totalCost: service.totalCost ?? null };
+  const { partsUsed, componentsUsed, ...rest } = service as LegacyService;
+  return { ...rest, componentsUsed: ((componentsUsed ?? partsUsed ?? []) as (ComponentUsed & { partId?: string | null })[]).map((p) => ({ description: p.description, partNumber: p.partNumber ?? null, quantity: p.quantity, unit: p.unit, price: p.price ?? null, itemId: p.itemId ?? p.partId ?? null, ...(p.consumableTypeId ? { consumableTypeId: p.consumableTypeId } : {}), ...(p.productId ? { productId: p.productId } : {}), ...(p.remember ? { remember: true } : {}) })), kind: service.kind ?? 'maintenance', title: service.title ?? null, category: service.category ?? null, performedBy: service.performedBy ?? 'diy', totalCost: service.totalCost ?? null };
 }

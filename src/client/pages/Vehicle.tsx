@@ -4,7 +4,7 @@ import { estimateOdometerAt, pointsOf, vehicleDue, type DueInfo, type OdometerPo
 import { buyStates } from '../../shared/purchases.ts';
 import { groupByCategory } from '../../shared/workshop.ts';
 import type { PerformedBy } from '../../shared/schemas.ts';
-import type { MaintenanceTask, PartUsed, Snapshot, Vehicle } from '../../shared/types.ts';
+import type { ComponentUsed, MaintenanceTask, Snapshot, Vehicle } from '../../shared/types.ts';
 import { BuyChips, DesktopOnlyNote, EditHint, Field, FormError, Layout, segmentedKeys, StatusChip, useWide } from '../components.tsx';
 import { describeDueShort, describeInterval, formatDate, formatKm, formatMoney, parseNumber, taskName } from '../format.ts';
 import { useT } from '../i18n.ts';
@@ -14,13 +14,13 @@ import { isDesktop } from '../native.ts';
 import { online, useStore } from '../store.ts';
 import { showToast } from '../feedback.ts';
 import { FuelSection } from './Fuel.tsx';
-import { describePart } from './Workshop.tsx';
+import { describeComponentUsed } from './Workshop.tsx';
 
 /** Phones show the latest few History entries; the rest are one tap away. */
 const HISTORY_PREVIEW = 5;
 
 type HistoryEntry =
-  | { kind: 'service'; id: string; date: string; odometer: number | null; text: string; notes: string | null; partsUsed: PartUsed[]; performedBy: PerformedBy; totalCost: number | null; repair: string | null }
+  | { kind: 'service'; id: string; date: string; odometer: number | null; text: string; notes: string | null; componentsUsed: ComponentUsed[]; performedBy: PerformedBy; totalCost: number | null; repair: string | null }
   | { kind: 'reading'; id: string; date: string; odometer: number };
 
 /** Maintenance Tasks, one per line: status, name, interval, when due and when last done. */
@@ -291,7 +291,7 @@ export function VehiclePage({ vehicle, snapshot, openSetup = false }: { vehicle:
         date: s.date,
         odometer: s.odometer,
         notes: s.notes,
-        partsUsed: s.partsUsed,
+        componentsUsed: s.componentsUsed,
         performedBy: s.performedBy,
         totalCost: s.totalCost,
         repair: s.kind === 'repair' ? s.title : null,
@@ -496,9 +496,9 @@ export function VehiclePage({ vehicle, snapshot, openSetup = false }: { vehicle:
                       {t.service.performers[h.performedBy]}
                       {h.totalCost !== null ? ` · ${formatMoney(h.totalCost, t)}` : ''}
                     </span>
-                    {h.partsUsed.length > 0 ? (
+                    {h.componentsUsed.length > 0 ? (
                       <span className="muted with-icon">
-                        <Icon name="part" /> {h.partsUsed.map(describePart).join(', ')}
+                        <Icon name="part" /> {h.componentsUsed.map(describeComponentUsed).join(', ')}
                       </span>
                     ) : null}
                     {h.notes ? <span className="muted">{h.notes}</span> : null}

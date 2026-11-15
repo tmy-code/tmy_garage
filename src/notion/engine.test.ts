@@ -483,7 +483,7 @@ describe('plans, "Dernier fait" and the journal', () => {
       category: null,
       performedBy: 'diy',
       totalCost: 4242,
-      partsUsed: [{ description: 'Huile test', partNumber: 'PN-SECRET', quantity: 3, unit: 'litre', price: 12.5, consumableTypeId: 'ct1', productId: 'pr1' }],
+      componentsUsed: [{ description: 'Huile test', partNumber: 'PN-SECRET', quantity: 3, unit: 'litre', price: 12.5, consumableTypeId: 'ct1', productId: 'pr1' }],
       ...overrides,
     });
     const withService = () => snap({ tasks: [task({ notionPlanId: 'plan-1' })], services: [service('s1')] });
@@ -514,7 +514,7 @@ describe('plans, "Dernier fait" and the journal', () => {
 
     it('leaves a relation empty when the task, plan or product has no Notion id', async () => {
       const { client, writes } = world(plansDb());
-      await run(client, snap({ tasks: [task({ refTaskId: null })], services: [service('s1', { partsUsed: [{ description: 'Chiffon', partNumber: null, quantity: 1, unit: 'piece', price: null }] })] }));
+      await run(client, snap({ tasks: [task({ refTaskId: null })], services: [service('s1', { componentsUsed: [{ description: 'Chiffon', partNumber: null, quantity: 1, unit: 'piece', price: null }] })] }));
       const pageIn = (ds: string) => writes.find((w) => w.method === 'POST' && w.body?.parent?.data_source_id === ds)!.body.properties;
       expect(pageIn('ds-db-interventions').Tâche).toEqual({ relation: [] });
       expect(pageIn('ds-db-interventions').Plan).toEqual({ relation: [] });

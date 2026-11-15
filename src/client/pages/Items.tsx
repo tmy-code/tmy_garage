@@ -108,7 +108,7 @@ export function VehicleItemForm({ snapshot, existing, vehicleId }: { snapshot: S
     const qty = parseNumber(quantity);
     const unitPrice = parseNumber(price);
     if (qty === null || Number.isNaN(qty) || qty <= 0 || (unitPrice !== null && (Number.isNaN(unitPrice) || unitPrice < 0))) {
-      setError(t.workshop.partError);
+      setError(t.workshop.itemError);
       return;
     }
     const body = { name, partNumber, unit, quantity: qty, price: unitPrice, taskId: taskId || null, itemSpecId: itemSpecId || null, notes };

@@ -99,7 +99,7 @@ describe('wantedTasks', () => {
     const after = wantedTasks(
       snapshot({
         tasks: [task({ intervalMonths: 1, baselineDate: '2025-01-01' })],
-        services: [{ id: 's', vehicleId: 'v', date: '2026-09-20', odometer: 1000, notes: null, kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null, taskIds: ['t'], partsUsed: [] }],
+        services: [{ id: 's', vehicleId: 'v', date: '2026-09-20', odometer: 1000, notes: null, kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null, taskIds: ['t'], componentsUsed: [] }],
       }),
       TODAY,
     )[0]!;
@@ -150,7 +150,7 @@ describe('syncTodoist', () => {
     await run(client, snapshot({ tasks: [task({ baselineDate: '2025-11-10' })] }));
     const done = snapshot({
       tasks: [task({ baselineDate: '2025-11-10' })],
-      services: [{ id: 's', vehicleId: 'v', date: '2026-10-24', odometer: 1000, notes: null, kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null, taskIds: ['t'], partsUsed: [] }],
+      services: [{ id: 's', vehicleId: 'v', date: '2026-10-24', odometer: 1000, notes: null, kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null, taskIds: ['t'], componentsUsed: [] }],
     });
     await run(client, done);
     expect(client.close).toHaveBeenCalledWith('todo-1');

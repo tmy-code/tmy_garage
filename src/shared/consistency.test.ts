@@ -62,7 +62,7 @@ describe('findDuplicateService', () => {
     category: null,
     performedBy: 'diy',
     totalCost: null,
-    partsUsed: [],
+    componentsUsed: [],
   });
   const services = [service('s1', 'v1', '2026-05-01', 20_000), service('s2', 'v2', '2026-05-01', 20_000), service('s3', 'v1', '2026-05-02', null)];
 
