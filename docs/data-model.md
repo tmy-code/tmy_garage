@@ -95,6 +95,7 @@ Never deleted: sold, hidden from the garage page, or both.
 | `on_garage_page` | Required. Has a card on the garage page, whatever its ownership. Selling hides it; the owner can change that. |
 | `equipment` | Required, a JSON list of text (default `[]`). The equipment tags the owner picks in the Notion Véhicules database ("Transmission chaîne", "ABS"…). Written by the Notion pull only; it decides which catalogue tasks apply. |
 | `notion_page_id` | The Vehicle's page in the Notion Véhicules database, for the link on its page. Written by the pull. |
+| `archive_folder` | Optional (ADR 0010). Where the Vehicle's Receipts are filed in the owner's Proton Drive, relative to the Proton root, e.g. `31 Véhicules\31.02 CB650R`. Relative only: no `..`, no drive letter. Set from the Vehicle form through `PUT /api/vehicles/:id/archive-folder`, never guessed from the name. |
 
 Build columns decide which Plan Templates a new Vehicle gets:
 
@@ -279,6 +280,8 @@ A legacy Purchase's receipt is a Document with `owner_kind` `purchase`; the `doc
 
 **Receipts are added and removed on the desktop only (ADR 0009); the phone shows them read-only. They never go to Notion.** The server still accepts an upload from any client: the rule is in the screens.
 
+**A Receipt is also filed in Proton Drive (ADR 0010).** The server never touches Proton: after the upload the desktop browser writes the file into the Vehicle's Archive folder, in its `Entretien` subfolder (made if missing, the Vehicle's own folder must exist), and then records where (`archive_path`). Without a path a Receipt is Pending and the screen offers a retry. Deleting a Receipt never deletes its Archive copy.
+
 Belongs to one owner (`owner_kind` + `owner_id`). Shown only for a Service and a Vehicle. Documents of removed features (insurance, inspections, legacy purchase receipts) stay stored, unshown. The server checks the owner exists and removes a Service's Documents, files included, with it.
 
 | Column | Meaning |
@@ -290,6 +293,7 @@ Belongs to one owner (`owner_kind` + `owner_id`). Shown only for a Service and a
 | `type` | Required. `invoice` for a receipt. |
 | `file_name`, `content_type`, `size` | Required. Original name, e.g. `application/pdf`, bytes. |
 | `title`, `issue_date`, `expiry_date` | Unused for receipts. |
+| `archive_path` | Optional (ADR 0010). Only for a Receipt (`service` owner): the path of its Archive copy in Proton Drive, relative to the Proton root, forward slashes. Null means Pending. `PUT /api/documents/:id/archive` sets or clears it; a Vehicle Document is refused (422). |
 
 ## 4. Mileage Log and fuel
 

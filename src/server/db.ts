@@ -933,6 +933,11 @@ const MIGRATIONS: (string | ((db: DatabaseSync) => void))[] = [
   CREATE INDEX vehicle_items_vehicle ON vehicle_items (vehicle_id);
   ALTER TABLE service_items RENAME COLUMN part_id TO item_id;
 `,
+  // ADR 0010. The Vehicle's folder in the owner's Proton Drive tree, and where a Receipt's Archive copy was filed. Additive only.
+  `
+  ALTER TABLE vehicles ADD COLUMN archive_folder TEXT;
+  ALTER TABLE documents ADD COLUMN archive_path TEXT;
+`,
 ];
 
 /** Replaces what the owner changed on a template that was split by the same change on each of the new ones. */

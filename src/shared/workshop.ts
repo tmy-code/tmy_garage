@@ -109,6 +109,7 @@ export function normalizeSnapshot(input: Snapshot): Snapshot {
       onGaragePage: v.onGaragePage ?? (v.ownership ?? status ?? 'owned') === 'owned',
       equipment: v.equipment ?? [],
       notionPageId: v.notionPageId ?? null,
+      archiveFolder: v.archiveFolder ?? null,
     })),
     fillups: (snapshot.fillups ?? []).map((f) => ({ ...f, odometer: f.odometer ?? null, notes: f.notes ?? null, fullTank: f.fullTank ?? true })),
     documents: snapshot.documents ?? [],

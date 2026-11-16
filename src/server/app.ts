@@ -14,6 +14,8 @@ import {
   mergeTaskInput,
   documentInput,
   documentOwner,
+  archiveFolderInput,
+  archivePathInput,
   odometerReadingInput,
   fillupInput,
   ownPartInput,
@@ -102,6 +104,7 @@ const toVehicle = (r: Row): Vehicle => ({
   soldPrice: r.sold_price,
   equipment: parseJsonList(r.equipment),
   notionPageId: r.notion_page_id,
+  archiveFolder: r.archive_folder ?? null,
 });
 
 /** A JSON list of text kept in one column. */
@@ -245,6 +248,7 @@ const toDocument = (r: Row): GarageDocument => ({
   fileName: r.file_name,
   contentType: r.content_type,
   size: r.size,
+  archivePath: r.archive_path ?? null,
 });
 
 /** Files a Document may be: what a phone camera or a scanner produces. */
@@ -632,6 +636,15 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       s.price,
       id,
     );
+    return c.json(toVehicle(vehicleOrThrow(id)));
+  });
+
+  // ADR 0010: where this Vehicle's Receipts are filed in Proton Drive. Its own route, so the long Vehicle save stays as it is.
+  app.put('/api/vehicles/:id/archive-folder', async (c) => {
+    const id = c.req.param('id');
+    vehicleOrThrow(id);
+    const { folder } = await parse(c, archiveFolderInput);
+    db.prepare('UPDATE vehicles SET archive_folder = ? WHERE id = ?').run(folder, id);
     return c.json(toVehicle(vehicleOrThrow(id)));
   });
 
@@ -1054,6 +1067,15 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       id,
     );
     return c.json(toDocument(documentOrThrow(id)));
+  });
+
+  // ADR 0010: the desktop browser filed (or failed to file) the Archive copy in Proton Drive; the server only records where.
+  app.put('/api/documents/:id/archive', async (c) => {
+    const row = documentOrThrow(c.req.param('id'));
+    if (row.owner_kind !== 'service') throw new HttpError(422, 'Only the Receipt of a Service is filed in Proton Drive');
+    const { path } = await parse(c, archivePathInput);
+    db.prepare('UPDATE documents SET archive_path = ? WHERE id = ?').run(path, row.id);
+    return c.json(toDocument(documentOrThrow(row.id)));
   });
 
   app.get('/api/documents/:id/file', async (c) => {

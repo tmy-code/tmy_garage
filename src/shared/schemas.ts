@@ -332,6 +332,28 @@ export const documentInput = z.object({
 
 export const documentOwner = z.object({ ownerKind: documentOwnerKind, ownerId: z.string().min(1) });
 
+/** A path inside the Proton Drive tree: relative, forward or back slashes, no `..`, no drive letter, no control characters. */
+export function isSafeArchivePath(value: string): boolean {
+  if (value.length === 0 || value.length > 300) return false;
+  if (/^[a-zA-Z]:|^[\\/]/.test(value) || /[\u0000-\u001f<>:"|?*]/.test(value)) return false;
+  return value.split(/[\\/]/).every((part) => part.length > 0 && part !== '.' && part !== '..');
+}
+
+const archivePath = z.string().trim().refine(isSafeArchivePath, 'Must be a relative folder path without ".." or a drive letter');
+
+/** A Vehicle's Archive folder in Proton Drive; null or empty clears it. */
+export const archiveFolderInput = z.object({
+  folder: z
+    .string()
+    .trim()
+    .nullish()
+    .transform((v) => v || null)
+    .refine((v) => v === null || isSafeArchivePath(v), 'Must be a relative folder path without ".." or a drive letter'),
+});
+
+/** Where a Receipt's Archive copy was filed; null marks it Pending again. */
+export const archivePathInput = z.object({ path: archivePath.nullable() });
+
 export type VehicleKind = z.infer<typeof vehicleKind>;
 export type FuelType = z.infer<typeof fuelType>;
 export type Transmission = z.infer<typeof transmission>;

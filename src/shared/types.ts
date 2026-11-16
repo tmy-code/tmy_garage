@@ -28,6 +28,8 @@ export interface Vehicle extends VehicleSpecs {
   equipment: string[];
   /** The Vehicle's page in the Notion Véhicules database, once the sync has seen it. */
   notionPageId?: string | null;
+  /** Where this Vehicle's Receipts are filed in the owner's Proton Drive, relative to the Proton root (ADR 0010). */
+  archiveFolder?: string | null;
 }
 
 export interface MaintenanceTask {
@@ -288,6 +290,8 @@ export interface GarageDocument {
   fileName: string;
   contentType: string;
   size: number;
+  /** Where the Archive copy was filed in Proton Drive, relative to the Proton root; null while Pending (ADR 0010). */
+  archivePath?: string | null;
 }
 
 /** Everything the phone needs to work offline in the garage. */

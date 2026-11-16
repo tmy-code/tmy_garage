@@ -88,8 +88,16 @@ _Avoid_: Offer, quote, bargain
 The garage-wide place in the app that lists the Vehicle Items of every Vehicle together, filterable by Vehicle. Each item still belongs to exactly one Vehicle.
 
 **Receipt**:
-The photo or PDF of the invoice attached to a Service. Added on the desktop only; the phone shows it. It stays in the app and never goes to Notion.
+The photo or PDF of the invoice attached to a Service. Added on the desktop only; the phone shows it. It is kept in the app and also filed in the owner's Proton Drive (its Archive copy). It never goes to Notion.
 _Avoid_: Invoice (as a record), paper
+
+**Archive copy**:
+The copy of a Receipt filed in the owner's Proton Drive, in the Vehicle's Archive folder. A Receipt is either Filed (its Archive copy exists) or Pending (the copy could not be made yet). Deleting a Receipt in the app never removes its Archive copy.
+_Avoid_: Backup, upload
+
+**Archive folder**:
+The place in the owner's Proton Drive tree (numbered by the Johnny Decimal index, JDex) where a Vehicle's Receipts are filed: the Vehicle's own folder, then its `Entretien` folder. Each Vehicle names its own folder explicitly.
+_Avoid_: Proton path
 
 **Fill-up**:
 One visit to the pump: the date, the litres, the total paid and, if noted, the odometer. It is either a full tank or a top-up. The price per litre is worked out from the total paid and the litres, never typed.
