@@ -790,6 +790,30 @@ describe('documents', () => {
     expect(readdirSync(uploads)).toEqual([]);
   });
 
+  it('records where a Receipt was filed in Proton Drive, and where a Vehicle files them (ADR 0010)', async () => {
+    const bike = await createVehicle('Bike');
+    expect(bike.archiveFolder).toBeNull();
+    const set = await call('PUT', `/api/vehicles/${bike.id}/archive-folder`, { folder: ' 31 Véhicules\\31.99 Test ' });
+    expect(set.status).toBe(200);
+    expect(await set.json()).toMatchObject({ archiveFolder: '31 Véhicules\\31.99 Test' });
+    expect((await call('PUT', `/api/vehicles/${bike.id}/archive-folder`, { folder: '..\\elsewhere' })).status).toBe(422);
+    expect((await call('PUT', `/api/vehicles/${bike.id}/archive-folder`, { folder: 'C:\\Users\\x' })).status).toBe(422);
+    expect((await snapshot()).vehicles[0]).toMatchObject({ archiveFolder: '31 Véhicules\\31.99 Test' });
+
+    await call('PUT', '/api/services/svc-arch', { id: 'svc-arch', vehicleId: bike.id, date: '2026-10-03', kind: 'repair', title: 'Test repair', category: 'other', performedBy: 'diy', taskIds: [] });
+    const receipt = (await (await upload({ ownerKind: 'service', ownerId: 'svc-arch', type: 'invoice' })).json()) as GarageDocument;
+    expect(receipt.archivePath).toBeNull();
+    const filed = await call('PUT', `/api/documents/${receipt.id}/archive`, { path: '31 Véhicules/31.99 Test/Entretien/2026-10-03_TestRepair.pdf' });
+    expect(filed.status).toBe(200);
+    expect(await filed.json()).toMatchObject({ archivePath: '31 Véhicules/31.99 Test/Entretien/2026-10-03_TestRepair.pdf' });
+    expect((await call('PUT', `/api/documents/${receipt.id}/archive`, { path: '../x.pdf' })).status).toBe(422);
+    expect((await call('PUT', `/api/documents/${receipt.id}/archive`, { path: null })).status).toBe(200);
+
+    // Only a Service's Receipt is filed; a Vehicle Document is not.
+    const registration = (await (await upload({ ownerKind: 'vehicle', ownerId: bike.id, type: 'registration' })).json()) as GarageDocument;
+    expect((await call('PUT', `/api/documents/${registration.id}/archive`, { path: 'a/b.pdf' })).status).toBe(422);
+  });
+
   it('refuses files that are not PDFs or photos', async () => {
     const car = await createVehicle('Car');
     const res = await upload(
@@ -1169,7 +1193,7 @@ describe('migrations', () => {
   it('adds an empty ref_purchases table and leaves the legacy purchases alone', () => {
     const path = join(dir, 'garage.sqlite');
     const latest = (openDatabase(':memory:').prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
-    const old = openDatabase(path, undefined, latest - 4);
+    const old = openDatabase(path, undefined, latest - 5);
     old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v1', 'default', 'motorcycle', 'Old bike')`);
     old.exec(`INSERT INTO vehicle_parts (id, vehicle_id, name, unit, quantity) VALUES ('p1', 'v1', 'Motul 7100 10W-40', 'litre', 5)`);
     old.exec(`INSERT INTO purchases (id, part_id, vehicle_id, date, quantity, total_paid) VALUES ('b1', 'p1', 'v1', '2026-01-10', 5, 40)`);
@@ -1472,7 +1496,7 @@ describe('Notion sync migration', () => {
     const dir = mkdtempSync(join(tmpdir(), 'garage-actions-'));
     try {
       const path = join(dir, 'garage.sqlite');
-      const old = openDatabase(path, undefined, latest - 5);
+      const old = openDatabase(path, undefined, latest - 6);
       old.exec(`INSERT INTO ref_tasks (id, garage_id, notion_id, name, action, applicable_if, default_km, category) VALUES ('r1', 'default', 'n1', 'Vidange', 'replace', '["Moto"]', 6000, 'engine')`);
       expect(() => old.exec(`INSERT INTO ref_tasks (id, garage_id, notion_id, name, action) VALUES ('r2', 'default', 'n2', 'Tension', 'adjust')`)).toThrow();
       old.close();
@@ -1501,7 +1525,7 @@ describe('the glossary rename migration', () => {
   const latest = () => (openDatabase(':memory:').prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
   const seed = (path: string, backupDir?: string) => {
     // The version just before the rename (the ADR 0009 migration came after it).
-    const old = openDatabase(path, undefined, latest() - 3);
+    const old = openDatabase(path, undefined, latest() - 4);
     old.exec(`
       INSERT INTO vehicles (id, garage_id, kind, name, status) VALUES ('v1', 'default', 'car', 'Sold car', 'sold'), ('v2', 'default', 'car', 'Kept car', 'owned');
       INSERT INTO vehicle_consumables (id, garage_id, vehicle_id, notion_id, name, status) VALUES ('vc1', 'default', 'v1', 'n1', 'Huile', 'to_confirm');
@@ -1534,9 +1558,9 @@ describe('the glossary rename migration', () => {
     const backups = join(dir, 'backups');
     seed(path);
     openDatabase(path, backups).close();
-    const copy = readdirSync(backups).find((f) => f.startsWith(`garage-v${latest() - 3}-`) && f.endsWith('.sqlite'));
+    const copy = readdirSync(backups).find((f) => f.startsWith(`garage-v${latest() - 4}-`) && f.endsWith('.sqlite'));
     expect(copy).toBeDefined();
-    const saved = openDatabase(join(backups, copy!), undefined, latest() - 3);
+    const saved = openDatabase(join(backups, copy!), undefined, latest() - 4);
     expect(saved.prepare('SELECT status FROM vehicles WHERE id = ?').get('v1')).toEqual({ status: 'sold' });
     expect(saved.prepare('SELECT status FROM vehicle_specs').all()).toEqual([{ status: 'confirmed' }]);
     saved.close();
@@ -1565,7 +1589,7 @@ describe('the Item Spec migration (ADR 0009)', () => {
     try {
       const path = join(dir, 'garage.sqlite');
       const latest = (openDatabase(':memory:').prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
-      const old = openDatabase(path, undefined, latest - 2);
+      const old = openDatabase(path, undefined, latest - 3);
       old.exec(`INSERT INTO vehicles (id, garage_id, kind, name) VALUES ('v1', 'default', 'motorcycle', 'Old bike')`);
       old.exec(`INSERT INTO spec_lines (id, vehicle_id, label, value, spec_group, sort) VALUES ('s1', 'v1', 'Engine oil', '10W-40', 'fluids', 0)`);
       old.exec(`INSERT INTO vehicle_parts (id, vehicle_id, name, unit, quantity, spec_line_id) VALUES ('p1', 'v1', 'Motul 7100 10W-40', 'litre', 5, 's1')`);

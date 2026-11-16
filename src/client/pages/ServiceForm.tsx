@@ -550,7 +550,18 @@ export function ServiceForm({
       {existing && !pending ? (
         // Receipts are added and removed on the desktop only, and never sent to Notion (ADR 0009).
         isDesktop ? (
-          <DocumentsPanel snapshot={snapshot} ownerKind="service" ownerId={existing.id} defaultType="invoice" title={t.papers.receipt} />
+          <DocumentsPanel
+            snapshot={snapshot}
+            ownerKind="service"
+            ownerId={existing.id}
+            defaultType="invoice"
+            title={t.papers.receipt}
+            archive={{
+              folder: snapshot.vehicles.find((v) => v.id === existing.vehicleId)?.archiveFolder ?? null,
+              date: existing.date,
+              title: existing.title,
+            }}
+          />
         ) : (
           <p className="muted">{t.desktop.receipt}</p>
         )

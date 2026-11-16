@@ -106,6 +106,7 @@ export function VehicleForm({ existing, returnTo }: { existing?: Vehicle; return
   const [vin, setVin] = useState(existing?.vin ?? '');
   const [firstRegistrationDate, setFirstRegistrationDate] = useState(existing?.firstRegistrationDate ?? '');
   const [purchaseDate, setPurchaseDate] = useState(existing?.purchaseDate ?? '');
+  const [archiveFolder, setArchiveFolder] = useState(existing?.archiveFolder ?? '');
   const [fuel, setFuel] = useState<FuelType | ''>(existing?.fuel ?? '');
   const [transmission, setTransmission] = useState<Transmission | ''>(existing?.transmission ?? '');
   const [drivetrain, setDrivetrain] = useState<Drivetrain | ''>(existing?.drivetrain ?? '');
@@ -149,6 +150,10 @@ export function VehicleForm({ existing, returnTo }: { existing?: Vehicle; return
       const saved = existing
         ? await online<Vehicle>('PUT', `/api/vehicles/${existing.id}`, body)
         : await online<Vehicle>('POST', '/api/vehicles', body);
+      // Where the Vehicle's Receipts are filed in Proton Drive (ADR 0010); its own route, only when it changed.
+      if (archiveFolder.trim() !== (existing?.archiveFolder ?? '')) {
+        await online('PUT', `/api/vehicles/${saved.id}/archive-folder`, { folder: archiveFolder.trim() || null });
+      }
       navigate(returnTo ?? `/vehicles/${saved.id}`, { replace: true });
     });
   }
@@ -193,6 +198,9 @@ export function VehicleForm({ existing, returnTo }: { existing?: Vehicle; return
         </Field>
         <Field label={t.setup.purchaseDate}>
           <input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} />
+        </Field>
+        <Field label={t.papers.folderLabel} hint={t.papers.folderHint}>
+          <input value={archiveFolder} onChange={(e) => setArchiveFolder(e.target.value)} maxLength={300} placeholder="31 Véhicules\31.01 …" />
         </Field>
         <fieldset className="field">
           <legend className="field-label">{t.setup.builtWith}</legend>

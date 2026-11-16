@@ -11,7 +11,7 @@ Each run does, in order: **fetch** the owner's databases, **apply** them to the 
 | Task catalogue, component types, consumable types, products, tools | Notion | Hand-made databases, read-only in the app. |
 | Per-vehicle Item Specs and Component Specs | Notion, edited from the desktop app too | The app writes to Notion first, under the sync's lock, and saves the local row only from the page Notion returns. No offline edit. The old Spec Lines are frozen and read-only until moved (see below). |
 | Phone and desktop | The app | The phone logs Services, Odometer Readings and Fill-ups only; everything else is read-only on it. The desktop edits everything. The split is in the screens: the server accepts writes from any client. |
-| Receipts (Documents of a Service) | The app, desktop only | Added and removed on the desktop; never pushed to Notion. |
+| Receipts (Documents of a Service) | The app, desktop only | Added and removed on the desktop; never pushed to Notion. Also filed in Proton Drive by the desktop browser (ADR 0010). |
 | A vehicle's equipment tags | Notion | Column *Équipements* of *Véhicules*. The push never writes it. |
 | Name, action, intervals and notes of a task that follows the catalogue | Notion | The Plan's interval overrides the catalogue default. The app answers 409 `notion_owned` if asked to change them or delete the task. |
 | Switched off, baseline (last done before tracking) and category of a task | The app | |
