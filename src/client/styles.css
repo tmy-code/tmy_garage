@@ -13,7 +13,6 @@
   --tonal: #262626;
   --tonal-hover: #3f3f3f;
   --tonal-active: #333333;
-  --emphasis-hover: #e5e5e5;
   --success: #16a34a;
   --success-text: #4ade80;
   --success-border: #14532d;
@@ -655,13 +654,6 @@ section {
   border-color: transparent;
 }
 
-.button-emphasis {
-  background: var(--text);
-  border-color: var(--text);
-  color: var(--base);
-}
-
-
 .button-danger {
   color: var(--error-text);
   border-color: var(--error);
@@ -967,7 +959,6 @@ textarea {
   padding: 8px 0;
 }
 
-
 /* A field the owner keeps in Notion: shown as text, not as an input. */
 .locked dl {
   margin: 0;
@@ -1020,12 +1011,6 @@ textarea {
   .button-primary:hover {
     background: var(--tonal-hover);
     border-color: transparent;
-  }
-
-  .button-emphasis:hover {
-    background: var(--emphasis-hover);
-    border-color: var(--emphasis-hover);
-    color: var(--base);
   }
 
   .button:disabled:hover {
