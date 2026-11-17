@@ -1,50 +1,41 @@
 :root {
-  --bg: #f3f4f6;
-  --surface: #ffffff;
-  --text: #111827;
-  --muted: #4b5563;
-  --border: #e5e7eb;
-  --accent: #2c6aa0;
-  --accent-text: #ffffff;
-  --overdue: #b91c1c;
-  --overdue-bg: #fee2e2;
-  --soon: #92400e;
-  --soon-bg: #fef3c7;
-  --ok: #166534;
-  --ok-bg: #dcfce7;
-  --unknown: #374151;
-  --unknown-bg: #e5e7eb;
-  --pending: #1e40af;
-  --pending-bg: #dbeafe;
-  --topbar: #1f2937;
-  --topbar-text: #f9fafb;
-  color-scheme: light dark;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* tmy design system: dark monochromatic (see C:\Projects\DESIGN-SYSTEM.md). Dark only. */
+  --base: #000000;
+  --bg: #0a0a0a;
+  --surface: #141414;
+  --elevated: #1c1c1c;
+  --hover: #262626;
+  --border: #333333;
+  --text: #ffffff;
+  --text-2: #b3b3b3;
+  --muted: #737373;
+  --disabled: #525252;
+  --primary-hover: #e5e5e5;
+  --primary-active: #d4d4d4;
+  --success: #16a34a;
+  --success-text: #4ade80;
+  --success-border: #14532d;
+  --success-bg: #052e16;
+  --error: #dc2626;
+  --error-text: #f87171;
+  --error-border: #7f1d1d;
+  --error-bg: #1f0808;
+  --warning: #d97706;
+  --warning-text: #fb923c;
+  --warning-border: #7c2d12;
+  --warning-bg: #1a0d05;
+  --info: #2563eb;
+  --info-text: #60a5fa;
+  --info-border: #1e3a8a;
+  --info-bg: #0b1220;
+  color-scheme: dark;
+  font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   font-size: 17px;
   line-height: 1.4;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #111827;
-    --surface: #1f2937;
-    --text: #f3f4f6;
-    --muted: #9ca3af;
-    --border: #374151;
-    --accent: #8fb8e6;
-    --accent-text: #111827;
-    --overdue: #fca5a5;
-    --overdue-bg: #450a0a;
-    --soon: #fcd34d;
-    --soon-bg: #451a03;
-    --ok: #86efac;
-    --ok-bg: #052e16;
-    --unknown: #d1d5db;
-    --unknown-bg: #374151;
-    --pending: #93c5fd;
-    --pending-bg: #172554;
-    --topbar: #030712;
-  }
+html {
+  background: var(--base);
 }
 
 * {
@@ -53,7 +44,7 @@
 
 /* A clear ring for keyboard users, in every theme. */
 :focus-visible {
-  outline: 3px solid var(--accent);
+  outline: 2px solid var(--text);
   outline-offset: 2px;
 }
 
@@ -76,7 +67,7 @@ h2 .icon,
 }
 
 .brand-name {
-  font-weight: 700;
+  font-weight: 600;
   font-size: 0.85em;
   letter-spacing: 0.06em;
 }
@@ -124,8 +115,9 @@ section {
   align-items: center;
   gap: 12px;
   padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
-  background: var(--topbar);
-  color: var(--topbar-text);
+  background: var(--base);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
 }
 
 .topbar-side {
@@ -144,7 +136,7 @@ section {
 .home-link {
   flex: none;
   font-size: 1.2rem;
-  font-weight: 700;
+  font-weight: 600;
   text-decoration: none;
   padding: 6px 4px;
 }
@@ -202,7 +194,7 @@ section {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   padding: 4px 4px env(safe-area-inset-bottom);
-  background: var(--topbar);
+  background: var(--base);
   border-top: 1px solid var(--border);
 }
 
@@ -213,7 +205,7 @@ section {
   gap: 2px;
   padding: 6px 0;
   font-size: 0.85rem;
-  color: #9ca3af;
+  color: var(--text-2);
   text-decoration: none;
 }
 
@@ -223,8 +215,9 @@ section {
 }
 
 .tabbar a.active {
-  color: var(--accent);
-  font-weight: 700;
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: inset 0 2px 0 var(--text);
 }
 
 .back {
@@ -260,8 +253,9 @@ section {
   min-width: 32px;
   justify-content: center;
   padding: 4px;
-  background: #14532d;
-  color: #dcfce7;
+  background: var(--success-bg);
+  border: 1px solid var(--success-border);
+  color: var(--success-text);
 }
 
 .sync-synced .sync-label {
@@ -273,20 +267,22 @@ section {
 }
 
 .sync-syncing {
-  background: #1e3a8a;
-  color: #dbeafe;
+  background: var(--info-bg);
+  border: 1px solid var(--info-border);
+  color: var(--info-text);
 }
 
 .sync-offline {
-  background: #7c2d12;
-  color: #ffedd5;
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  color: var(--warning-text);
 }
 
 .card {
   display: block;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 12px;
   padding: 16px;
   margin-bottom: 16px;
   text-decoration: none;
@@ -333,7 +329,7 @@ section {
 }
 
 .muted {
-  color: var(--muted);
+  color: var(--text-2);
 }
 
 .center {
@@ -342,7 +338,7 @@ section {
 
 .empty {
   text-align: center;
-  color: var(--muted);
+  color: var(--text-2);
   padding: 24px 8px;
 }
 
@@ -399,7 +395,7 @@ section {
   padding: 8px 12px;
   border: 1px solid var(--border);
   border-radius: 12px;
-  background: var(--unknown-bg);
+  background: var(--elevated);
   color: inherit;
   font-weight: 600;
   text-decoration: none;
@@ -407,7 +403,7 @@ section {
 
 .setup-link-go {
   flex: none;
-  color: var(--accent);
+  color: var(--text);
 }
 
 .page-buttons {
@@ -421,18 +417,16 @@ section {
 .due-group {
   margin: 14px 0 2px;
   font-size: 0.85rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
+  font-weight: 600;
+  color: var(--text-2);
 }
 
 .due-group-overdue {
-  color: var(--overdue);
+  color: var(--error-text);
 }
 
 .due-group-dueSoon {
-  color: var(--soon);
+  color: var(--warning-text);
 }
 
 .due-lines {
@@ -510,8 +504,8 @@ section {
   top: 50%;
   width: 8px;
   height: 8px;
-  border-top: 2px solid var(--muted);
-  border-right: 2px solid var(--muted);
+  border-top: 2px solid var(--text-2);
+  border-right: 2px solid var(--text-2);
   transform: translateY(-50%) rotate(45deg);
 }
 
@@ -546,7 +540,7 @@ section {
   align-items: center;
   gap: 4px;
   font-size: 0.85rem;
-  color: var(--accent);
+  color: var(--text-2);
 }
 
 .history-row .muted {
@@ -558,29 +552,29 @@ section {
   border-radius: 999px;
   padding: 1px 8px;
   font-size: 0.85rem;
-  font-weight: 700;
+  font-weight: 600;
   white-space: nowrap;
 }
 
 .chip-overdue {
-  color: var(--overdue);
-  background: var(--overdue-bg);
+  color: var(--error-text);
+  background: var(--error-bg);
 }
 
 .chip-dueSoon {
-  color: var(--soon);
-  background: var(--soon-bg);
+  color: var(--warning-text);
+  background: var(--warning-bg);
 }
 
 .chip-ok {
-  color: var(--ok);
-  background: var(--ok-bg);
+  color: var(--success-text);
+  background: var(--success-bg);
 }
 
 .chip-unknown,
 .chip-paused {
-  color: var(--unknown);
-  background: var(--unknown-bg);
+  color: var(--text-2);
+  background: var(--elevated);
 }
 
 .chip-neutral {
@@ -590,21 +584,21 @@ section {
 }
 
 .chip-standard {
-  color: var(--unknown);
-  background: var(--unknown-bg);
+  color: var(--text-2);
+  background: var(--elevated);
   margin-left: 8px;
 }
 
 .chip-pending {
-  color: var(--pending);
-  background: var(--pending-bg);
+  color: var(--info-text);
+  background: var(--info-bg);
   margin-left: 8px;
 }
 
 .nudge {
   margin: 8px 0 0;
   font-size: 0.9rem;
-  color: var(--soon);
+  color: var(--warning-text);
 }
 
 .actions {
@@ -627,7 +621,7 @@ section {
   justify-content: center;
   min-height: 48px;
   padding: 10px 16px;
-  border-radius: 12px;
+  border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
@@ -637,26 +631,42 @@ section {
   cursor: pointer;
 }
 
+.button:active:not(:disabled) {
+  background: var(--hover);
+}
+
 .button:disabled {
-  opacity: 0.5;
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--disabled);
   cursor: not-allowed;
 }
 
 .button-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-text);
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--base);
+}
+
+.button-primary:active:not(:disabled) {
+  background: var(--primary-active);
+  border-color: var(--primary-active);
 }
 
 .button-danger {
-  color: var(--overdue);
-  border-color: currentColor;
+  color: var(--error-text);
+  border-color: var(--error);
 }
 
 .button-danger-solid {
-  background: var(--overdue);
-  border-color: var(--overdue);
-  color: var(--surface);
+  background: var(--error);
+  border-color: var(--error);
+  color: var(--text);
+}
+
+.button-danger-solid:active:not(:disabled) {
+  background: var(--error-text);
+  border-color: var(--error-text);
 }
 
 .button-small {
@@ -667,8 +677,8 @@ section {
 
 .topbar .button-small {
   background: transparent;
-  color: var(--topbar-text);
-  border-color: #4b5563;
+  color: var(--text);
+  border-color: var(--border);
 }
 
 .button-block {
@@ -700,20 +710,20 @@ section {
 
 .field-hint {
   font-size: 0.85rem;
-  color: var(--muted);
+  color: var(--text-2);
 }
 
 .field-error {
   font-size: 0.9rem;
   font-weight: 600;
-  color: var(--overdue);
+  color: var(--error-text);
 }
 
 .field-invalid input,
 .field-invalid select,
 .field-invalid textarea,
 .field-invalid .check {
-  border-color: var(--overdue);
+  border-color: var(--error-text);
 }
 
 .field-invalid input {
@@ -750,9 +760,9 @@ section {
   width: 100%;
   padding: 8px 8px 8px 16px;
   border-radius: 12px;
-  background: var(--text);
-  color: var(--bg);
-  box-shadow: 0 6px 24px rgb(0 0 0 / 0.3);
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  color: var(--text);
   pointer-events: auto;
   animation: toast-in 0.2s ease-out;
 }
@@ -767,9 +777,10 @@ section {
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--accent);
+  color: var(--text);
+  text-decoration: underline;
   font: inherit;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -797,13 +808,13 @@ section {
   width: min(420px, calc(100% - 32px));
   padding: 20px;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--surface);
   color: var(--text);
 }
 
 .confirm::backdrop {
-  background: rgb(0 0 0 / 0.5);
+  background: rgb(0 0 0 / 0.7);
 }
 
 .confirm p {
@@ -818,7 +829,7 @@ textarea {
   font-size: 1.05rem;
   min-height: 48px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
@@ -877,7 +888,7 @@ textarea {
 }
 
 .buy-type {
-  color: var(--muted);
+  color: var(--text-2);
   font-size: 0.9rem;
 }
 
@@ -931,7 +942,7 @@ textarea {
 }
 
 .need-facts dt {
-  color: var(--muted);
+  color: var(--text-2);
 }
 
 .need-facts dd {
@@ -978,11 +989,25 @@ textarea {
   .history-row:hover,
   .task-row:hover,
   .check:hover {
-    background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+    background: var(--hover);
   }
 
   .button:hover {
-    filter: brightness(1.12);
+    background: var(--hover);
+  }
+
+  .button-danger-solid:hover:not(:disabled) {
+    background: var(--error-text);
+    border-color: var(--error-text);
+  }
+
+  .button-primary:hover {
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
+  }
+
+  .button:disabled:hover {
+    background: var(--surface);
   }
 }
 
@@ -1010,7 +1035,7 @@ textarea {
 }
 
 .check-on {
-  border-color: var(--accent);
+  border-color: var(--text);
 }
 
 .segmented {
@@ -1021,7 +1046,7 @@ textarea {
 .segmented button {
   flex: 1;
   min-height: 48px;
-  border-radius: 12px;
+  border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
@@ -1029,17 +1054,17 @@ textarea {
   font-weight: 600;
 }
 
-/* The chosen option is outlined and tinted, not filled: the filled accent colour belongs to the button that saves. */
+/* The chosen option is outlined and tinted, not filled: the filled white primary belongs to the button that saves. */
 .segmented button.on {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  border-color: var(--text);
+  background: var(--elevated);
   color: var(--text);
-  box-shadow: inset 0 0 0 1px var(--accent);
+  box-shadow: inset 0 0 0 1px var(--text);
 }
 
 .segmented button.on::before {
   content: '✓ ';
-  color: var(--accent);
+  color: var(--text);
 }
 
 /* The save button of a long form stays in view, just above the bottom menu bar on a phone. */
@@ -1048,14 +1073,15 @@ textarea {
   bottom: calc(68px + env(safe-area-inset-bottom));
   z-index: 4;
   padding: 16px 0 8px;
-  background: linear-gradient(to top, var(--bg) 75%, transparent);
+  background: var(--bg);
+  border-top: 1px solid var(--border);
 }
 
 /* Never-done tasks, gathered in one block above the tracked ones. */
 .setup {
   margin: 0 0 16px;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 12px;
   padding: 4px 14px;
   background: var(--surface);
 }
@@ -1087,18 +1113,18 @@ textarea {
 }
 
 .banner-error {
-  background: var(--overdue-bg);
-  color: var(--overdue);
+  background: var(--error-bg);
+  color: var(--error-text);
 }
 
 .banner-ok {
-  background: var(--ok-bg);
-  color: var(--ok);
+  background: var(--success-bg);
+  color: var(--success-text);
 }
 
 .banner-warn {
-  background: var(--soon-bg);
-  color: var(--soon);
+  background: var(--warning-bg);
+  color: var(--warning-text);
 }
 
 .banner ul {
@@ -1113,7 +1139,7 @@ body > .banner {
 
 .sold summary {
   cursor: pointer;
-  color: var(--muted);
+  color: var(--text-2);
   margin: 8px 0;
 }
 
@@ -1136,8 +1162,8 @@ body > .banner {
 }
 
 .language button.on {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--text);
+  color: var(--text);
   font-weight: 600;
 }
 
@@ -1188,7 +1214,7 @@ body > .banner {
 }
 
 .item-selected {
-  outline: 2px solid var(--accent, currentColor);
+  outline: 2px solid var(--text);
   outline-offset: -2px;
 }
 
@@ -1216,7 +1242,7 @@ body > .banner {
 }
 
 .list li.unset strong {
-  color: var(--muted);
+  color: var(--text-2);
 }
 
 .list li.editing {
@@ -1226,8 +1252,8 @@ body > .banner {
 
 /* The item open in the editor beside the list. */
 .list li.selected {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
+  border-color: var(--text);
+  box-shadow: 0 0 0 1px var(--text);
 }
 
 .component-used {
@@ -1248,7 +1274,7 @@ body > .banner {
 
 .component-details summary {
   cursor: pointer;
-  color: var(--muted);
+  color: var(--text-2);
   padding: 4px 0;
 }
 
@@ -1279,7 +1305,7 @@ body > .banner {
 }
 
 .facts dt {
-  color: var(--muted);
+  color: var(--text-2);
 }
 
 .facts dd {
@@ -1288,7 +1314,7 @@ body > .banner {
 }
 
 .saving {
-  color: var(--ok);
+  color: var(--success-text);
   font-weight: 600;
 }
 
@@ -1310,6 +1336,16 @@ body > .banner {
   .nudge {
     color: #000;
     font-style: italic;
+  }
+
+  /* Paper is white: swap the dark tokens for ink on paper. */
+  :root {
+    --base: #fff;
+    --bg: #fff;
+    --surface: #fff;
+    --elevated: #fff;
+    --text: #000;
+    --text-2: #333;
   }
 }
 
@@ -1343,13 +1379,16 @@ body > .banner {
     font-size: 0.95rem;
   }
 
-  .tabbar a:hover {
-    color: var(--topbar-text);
+  @media (hover: hover) {
+    .tabbar a:hover {
+      color: var(--text);
+    }
   }
 
   .tabbar a.active {
-    color: var(--topbar-text);
-    background: rgb(255 255 255 / 0.1);
+    color: var(--text);
+    background: var(--elevated);
+    box-shadow: none;
   }
 
   .toast-host {
@@ -1470,17 +1509,6 @@ body > .banner {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     column-gap: 8px;
-  }
-}
-
-/* Last, so it overrides the light-mode defaults above. */
-@media (prefers-color-scheme: dark) and (pointer: coarse) {
-  .topbar {
-    border-bottom: 1px solid var(--border);
-  }
-
-  .topbar .button-small {
-    border-color: var(--border);
   }
 }
 
@@ -1640,4 +1668,11 @@ body > .banner {
   margin-top: 24px;
   padding-top: 16px;
   border-top: 1px solid var(--border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
 }
