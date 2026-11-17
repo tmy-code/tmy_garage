@@ -10,8 +10,10 @@
   --text-2: #b3b3b3;
   --muted: #737373;
   --disabled: #525252;
-  --primary-hover: #e5e5e5;
-  --primary-active: #d4d4d4;
+  --tonal: #262626;
+  --tonal-hover: #3f3f3f;
+  --tonal-active: #333333;
+  --emphasis-hover: #e5e5e5;
   --success: #16a34a;
   --success-text: #4ade80;
   --success-border: #14532d;
@@ -620,11 +622,11 @@ section {
   align-items: center;
   justify-content: center;
   min-height: 48px;
-  padding: 10px 16px;
-  border-radius: 8px;
+  padding: 10px 24px;
+  border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface);
-  color: var(--text);
+  color: var(--text-2);
   font: inherit;
   font-weight: 600;
   text-decoration: none;
@@ -643,15 +645,22 @@ section {
 }
 
 .button-primary {
+  background: var(--tonal);
+  border-color: transparent;
+  color: var(--text);
+}
+
+.button-primary:active:not(:disabled) {
+  background: var(--tonal-active);
+  border-color: transparent;
+}
+
+.button-emphasis {
   background: var(--text);
   border-color: var(--text);
   color: var(--base);
 }
 
-.button-primary:active:not(:disabled) {
-  background: var(--primary-active);
-  border-color: var(--primary-active);
-}
 
 .button-danger {
   color: var(--error-text);
@@ -994,16 +1003,29 @@ textarea {
 
   .button:hover {
     background: var(--hover);
+    color: var(--text);
+  }
+
+  .button-danger:hover:not(:disabled) {
+    background: var(--error-bg);
+    color: var(--error-text);
   }
 
   .button-danger-solid:hover:not(:disabled) {
     background: var(--error-text);
     border-color: var(--error-text);
+    color: var(--text);
   }
 
   .button-primary:hover {
-    background: var(--primary-hover);
-    border-color: var(--primary-hover);
+    background: var(--tonal-hover);
+    border-color: transparent;
+  }
+
+  .button-emphasis:hover {
+    background: var(--emphasis-hover);
+    border-color: var(--emphasis-hover);
+    color: var(--base);
   }
 
   .button:disabled:hover {
