@@ -1,14 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import type { Snapshot } from '../shared/types.ts';
-import { applyOutbox, enqueueOp, opDeletePath, opRequest, type OutboxOp } from './outbox.ts';
+import type { MaintenanceTask, Snapshot } from '../shared/types.ts';
+import { logService } from '../shared/service-logging.ts';
+import { catalogueOf } from '../shared/catalogue.ts';
+import { applyOutbox, enqueueOp, opDeletePath, opRequest, serviceToSend, type OutboxOp } from './outbox.ts';
+
+const task = (id: string, templateCode: string | null, intervalKm: number | null): MaintenanceTask => ({
+  id, vehicleId: 'v', name: id, nameFr: null, action: 'replace', intervalKm, intervalMonths: null, baselineDate: null, baselineOdometer: null, notes: null, category: null, switchedOff: false, templateCode,
+});
 
 const base: Snapshot = {
   vehicles: [],
-  tasks: [],
+  tasks: [task('t', null, 5000), task('t-seals', 'moto_fork_seals', 60000), task('t-oil', 'moto_fork_oil', 30000)],
   services: [{ id: 's1', vehicleId: 'v', date: '2026-01-01', odometer: 100, taskIds: ['t'], notes: null, kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null, componentsUsed: [] }],
   readings: [],
   specLines: [],
-  vehicleItems: [],
+  vehicleItems: [
+    { id: 'item-0001', vehicleId: 'v', name: 'Engine oil', partNumber: 'P-1', unit: 'litre', quantity: 3, price: null, taskId: null, itemSpecId: null, specLineId: null, notes: null },
+    { id: 'item-other', vehicleId: 'w', name: 'Other bike item', partNumber: null, unit: 'piece', quantity: 1, price: null, taskId: null, itemSpecId: null, specLineId: null, notes: null },
+  ],
   fillups: [],
   documents: [],
   catalogue: [],
@@ -74,5 +83,84 @@ describe('outbox', () => {
     expect(
       opDeletePath({ kind: 'fillup', data: { id: 'f9', vehicleId: 'v', date: '2026-01-01', odometer: null, litres: 1, totalPaid: 1, fullTank: false, notes: null } }),
     ).toBe('/api/fillups/f9');
+  });
+});
+
+const line = (over: Record<string, unknown>) => ({ description: 'Gasket', partNumber: null, quantity: 1, unit: 'piece', price: null, ...over });
+const withLines = (id: string, componentsUsed: unknown[], over: Record<string, unknown> = {}): OutboxOp => {
+  const op = service(id, 200);
+  return { kind: 'service', data: { ...op.data, componentsUsed, ...over } } as OutboxOp;
+};
+
+describe('applyOutbox shows a queued Service as the server keeps it', () => {
+  it('expands a Task that comes with another', () => {
+    const view = applyOutbox(base, [withLines('s2', [], { taskIds: ['t-seals'] })]);
+    expect(view.services.find((s) => s.id === 's2')!.taskIds).toEqual(['t-seals', 't-oil']);
+  });
+
+  it('adds an item to remember to the items list and keeps the line linked', () => {
+    const view = applyOutbox(base, [withLines('s2', [line({ itemId: 'item-new', remember: true, description: 'Fresh filter' })])]);
+    expect(view.vehicleItems.find((i) => i.id === 'item-new')).toMatchObject({ vehicleId: 'v', name: 'Fresh filter', taskId: 't', itemSpecId: null, specLineId: null, notes: null });
+    expect(view.services.find((s) => s.id === 's2')!.componentsUsed[0]).toMatchObject({ itemId: 'item-new' });
+  });
+
+  it('relinks a line to an existing item with the same loose name and part number', () => {
+    const view = applyOutbox(base, [withLines('s2', [line({ itemId: 'item-new', remember: true, description: ' ENGINE  oil', partNumber: 'p-1' })])]);
+    expect(view.vehicleItems).toHaveLength(base.vehicleItems.length);
+    expect(view.services.find((s) => s.id === 's2')!.componentsUsed[0]).toMatchObject({ itemId: 'item-0001' });
+  });
+
+  it('links a legacy partsUsed line to an existing item and drops a link to a missing one', () => {
+    const legacy = (id: string, partId: string) =>
+      ({ kind: 'service', data: { ...service(id, 300).data, componentsUsed: undefined, partsUsed: [{ description: 'Oil', quantity: 1, unit: 'litre', partId }] } }) as unknown as OutboxOp;
+    const view = applyOutbox(base, [legacy('s3', 'item-0001'), legacy('s4', 'item-gone'), legacy('s5', 'item-other')]);
+    expect(view.services.find((s) => s.id === 's3')!.componentsUsed[0]!.itemId).toBe('item-0001');
+    expect(view.services.find((s) => s.id === 's4')!.componentsUsed[0]!.itemId).toBeNull();
+    expect(view.services.find((s) => s.id === 's5')!.componentsUsed[0]!.itemId).toBeNull();
+  });
+
+  it('shows an invalid Service unchanged instead of dropping it', () => {
+    const op = withLines('s6', [], { kind: 'repair', title: null, taskIds: [] });
+    const view = applyOutbox(base, [op]);
+    expect(view.services.find((s) => s.id === 's6')).toMatchObject({ kind: 'repair', title: null });
+  });
+
+  it('does not add an item of another Vehicle and unlinks the line', () => {
+    const view = applyOutbox(base, [withLines('s7', [line({ itemId: 'item-other', remember: true })])]);
+    expect(view.vehicleItems.filter((i) => i.id === 'item-other')).toHaveLength(1);
+    expect(view.vehicleItems.find((i) => i.id === 'item-other')!.vehicleId).toBe('w');
+    expect(view.services.find((s) => s.id === 's7')!.componentsUsed[0]!.itemId).toBeNull();
+  });
+
+  it('is deterministic, idempotent and leaves the snapshot alone', () => {
+    const ops = [
+      withLines('s2', [line({ itemId: 'item-new', remember: true })], { taskIds: ['t-seals'] }),
+      withLines('s8', [line({ remember: true, description: 'No id yet' })]),
+    ];
+    const before = structuredClone(base);
+    const once = applyOutbox(base, ops);
+    expect(applyOutbox(base, ops)).toEqual(once);
+    expect(applyOutbox(once, ops)).toEqual(once);
+    expect(base).toEqual(before);
+  });
+
+  it('adds an item named by two queued Services once', () => {
+    const view = applyOutbox(base, [withLines('s2', [line({ itemId: 'item-new', remember: true })]), withLines('s9', [line({ itemId: 'item-new', remember: true })])]);
+    expect(view.vehicleItems.filter((i) => i.id === 'item-new')).toHaveLength(1);
+    expect(view.services.find((s) => s.id === 's9')!.componentsUsed[0]!.itemId).toBe('item-new');
+  });
+});
+
+describe('serviceToSend', () => {
+  it('keeps remember only on lines whose item is still to be added', () => {
+    const draft = withLines('s2', [line({ itemId: 'item-new', remember: true }), line({ itemId: 'item-0001' }), line({ description: 'Plain' })]).data as import('../shared/types.ts').Service;
+    const r = logService({ tasks: base.tasks, items: base.vehicleItems.filter((i) => i.vehicleId === 'v'), catalogue: catalogueOf(base) }, draft, { newId: () => 'x', canAddToItems: true });
+    if (!r.ok) throw new Error('expected ok');
+    const sent = serviceToSend(r);
+    expect(sent.componentsUsed.map((p) => [p.itemId, p.remember ?? false])).toEqual([
+      ['item-new', true],
+      ['item-0001', false],
+      [null, false],
+    ]);
   });
 });

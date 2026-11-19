@@ -1,4 +1,6 @@
-import type { Fillup, OdometerReading, Service, Snapshot } from '../shared/types.ts';
+import type { Fillup, OdometerReading, Service, Snapshot, VehicleItem } from '../shared/types.ts';
+import { catalogueOf } from '../shared/catalogue.ts';
+import { logService, type LogServiceResult, type NewVehicleItem } from '../shared/service-logging.ts';
 import { normalizeService } from '../shared/workshop.ts';
 
 /**
@@ -31,15 +33,53 @@ function upsert<T extends { id: string }>(items: T[], item: T): T[] {
   return copy;
 }
 
+function toVehicleItem(i: NewVehicleItem): VehicleItem {
+  return { ...i, itemSpecId: null, specLineId: null, notes: null };
+}
+
+/** The Service as the queue sends it: the stored form, plus `remember` on lines whose item is still to be added. */
+export function serviceToSend(result: Extract<LogServiceResult, { ok: true }>): Service {
+  const newIds = new Set(result.newItems.map((i) => i.id));
+  return {
+    ...result.service,
+    componentsUsed: result.service.componentsUsed.map((p) => (p.itemId && newIds.has(p.itemId) ? { ...p, remember: true } : p)),
+  };
+}
+
 /** The snapshot as the user should see it: the last server copy with queued changes applied on top. */
 export function applyOutbox(snapshot: Snapshot, ops: OutboxOp[]): Snapshot {
-  let { services, readings, fillups } = snapshot;
+  let { services, readings, fillups, vehicleItems } = snapshot;
+  const catalogue = catalogueOf(snapshot);
   for (const op of ops) {
-    if (op.kind === 'service') services = upsert(services, normalizeService(op.data));
-    else if (op.kind === 'reading') readings = upsert(readings, op.data);
+    if (op.kind === 'service') {
+      const draft = normalizeService(op.data);
+      const ctx = {
+        tasks: snapshot.tasks.filter((t) => t.vehicleId === draft.vehicleId),
+        items: vehicleItems.filter((i) => i.vehicleId === draft.vehicleId),
+        catalogue,
+      };
+      let n = 0;
+      const newId = () => `queued-${draft.id}-${n++}`;
+      const r = logService(ctx, draft, { newId, canAddToItems: true });
+      if (!r.ok) {
+        // Stays visible as typed; the server will move it to the rejected ones.
+        services = upsert(services, draft);
+        continue;
+      }
+      let service = r.service;
+      for (const item of r.newItems) {
+        if (vehicleItems.some((i) => i.id === item.id)) {
+          // An item of another Vehicle: the server ignores the insert and the line keeps no link.
+          service = { ...service, componentsUsed: service.componentsUsed.map((p) => (p.itemId === item.id ? { ...p, itemId: null } : p)) };
+        } else {
+          vehicleItems = [...vehicleItems, toVehicleItem(item)];
+        }
+      }
+      services = upsert(services, service);
+    } else if (op.kind === 'reading') readings = upsert(readings, op.data);
     else fillups = upsert(fillups, op.data);
   }
-  return { ...snapshot, services, readings, fillups };
+  return { ...snapshot, services, readings, fillups, vehicleItems };
 }
 
 /** Queues a change, replacing an earlier queued version of the same record so it is sent once. */
