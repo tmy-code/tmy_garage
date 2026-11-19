@@ -82,6 +82,8 @@ erDiagram
 
 Never deleted: sold, hidden from the garage page, or both.
 
+The fields are described in [`vehicle-fields.ts`](../src/shared/vehicle-fields.ts) (the `Vehicle` type, the row reader and the form's INSERT/UPDATE come from it), and a schema-sync test checks them against `db.ts`.
+
 | Column | Meaning |
 | --- | --- |
 | `garage_id` | Required. → `garages`. |
@@ -392,7 +394,7 @@ The phone keeps one `Snapshot` ([`types.ts`](../src/shared/types.ts)) to work wi
 - It holds Vehicles (with their equipment), Tasks, Services, readings, Fill-ups, the Spec Lines not moved to Notion, items lists and Template changes; Document details but not files. It also holds the Notion referentials (catalogue, types, products, tools, per-Vehicle Item Specs (`itemSpecs`) and Component Specs (`componentSpecs`), and the Achats as `notionPurchases`) and the last sync status, **read-only**: they need no send queue.
 - It is shaped for screens, not tables (a Service carries `taskIds` and `componentsUsed`).
 - Services, Odometer Readings and Fill-ups can be logged offline: queued on the phone, sent on reconnect. Everything else needs a connection.
-- `normalizeSnapshot` in [`workshop.ts`](../src/shared/workshop.ts) fills what an older saved snapshot lacks (e.g. no Fill-ups) and drops removed fields.
+- `normalizeSnapshot` in [`workshop.ts`](../src/shared/workshop.ts) fills what an older saved snapshot lacks (e.g. no Fill-ups) and drops removed fields. The mapping of a Vehicle lives in `normalizeVehicle` in [`vehicle-fields.ts`](../src/shared/vehicle-fields.ts).
 - **Old names**: the Component Specs used to be `vehicleSpecs` and `vehicles.ownership`, `vehicleConsumables[].confirmation` and `componentSpecs[].confirmation` were all `status`. `normalizeSnapshot` maps the old names to the new ones, so a phone that saved a snapshot (or an old server answer) before the rename still loads. Keep that mapping while phones may hold old snapshots. `API_VERSION` went to 2 with the rename.
 - **Item Specs** (ADR 0009): `itemSpecs` was `vehicleConsumables`; `normalizeSnapshot` maps the old key. `vehicleItems[].itemSpecId` is new, `specLines` holds only the lines not moved to Notion, and `API_VERSION` went to 3.
 - **Vehicle Items** (ADR 0009): the Vehicle Part was renamed Vehicle Item. Old names: snapshot `vehicleParts` is now `vehicleItems`, `partsUsed[].partId` is `itemId`, table `vehicle_parts` is `vehicle_items`, `service_items.part_id` is `item_id` (`purchases.part_id` keeps its name). `normalizeSnapshot` and `normalizeService`, and the server's `componentUsedInput`, still read the old names. `API_VERSION` went to 4. Rollback: the pre-migration `garage-v40-*.sqlite` copy.

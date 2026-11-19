@@ -51,7 +51,8 @@ import type {
 import { BUILT_IN_CATALOGUE, Catalogue, tidyConditions, type Build, type Conditions } from '../shared/catalogue.ts';
 import { logService, looseName, type ServiceLoggingError } from '../shared/service-logging.ts';
 import { API_VERSION, API_VERSION_HEADER } from '../shared/api-version.ts';
-import { buildOfRow, catalogueEntries } from './catalogue-rows.ts';
+import { vehicleFromRow, parseJsonList, vehicleWrite } from '../shared/vehicle-fields.ts';
+import { catalogueEntries } from './catalogue-rows.ts';
 import type { VehicleInput, VehicleKind } from '../shared/schemas.ts';
 import { DEFAULT_GARAGE_ID } from './db.ts';
 import type { NotionSyncService } from './notion-sync.ts';
@@ -100,37 +101,6 @@ async function parse<T>(c: Context, schema: ZodType<T>): Promise<T> {
 }
 
 type Row = Record<string, any>;
-
-const toVehicle = (r: Row): Vehicle => ({
-  id: r.id,
-  name: r.name,
-  make: r.make,
-  model: r.model,
-  year: r.year,
-  vin: r.vin,
-  firstRegistrationDate: r.first_registration_date,
-  purchaseDate: r.purchase_date,
-  ...buildOfRow(r),
-  ownership: r.ownership,
-  onGaragePage: r.on_garage_page === 1,
-  soldDate: r.sold_date,
-  soldOdometer: r.sold_odometer,
-  soldPrice: r.sold_price,
-  equipment: parseJsonList(r.equipment),
-  notionPageId: r.notion_page_id,
-  archiveFolder: r.archive_folder ?? null,
-});
-
-/** A JSON list of text kept in one column. */
-function parseJsonList(value: unknown): string[] {
-  if (typeof value !== 'string') return [];
-  try {
-    const list: unknown = JSON.parse(value);
-    return Array.isArray(list) ? list.filter((x): x is string => typeof x === 'string') : [];
-  } catch {
-    return [];
-  }
-}
 
 const toTask = (r: Row): MaintenanceTask => ({
   id: r.id,
@@ -336,7 +306,7 @@ function garageReader(db: DatabaseSync, garageId: string) {
 
   function snapshot(): Snapshot {
     const notionState = db.prepare('SELECT * FROM notion_state WHERE garage_id = ?').get(garageId) as Row | undefined;
-    const vehicles = (db.prepare('SELECT * FROM vehicles WHERE garage_id = ? ORDER BY created_at').all(garageId) as Row[]).map(toVehicle);
+    const vehicles = (db.prepare('SELECT * FROM vehicles WHERE garage_id = ? ORDER BY created_at').all(garageId) as Row[]).map(vehicleFromRow);
     const tasks = db
       .prepare(
         `SELECT t.* FROM maintenance_tasks t JOIN vehicles v ON v.id = t.vehicle_id
@@ -568,65 +538,31 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
 
   // --- Vehicles ---
 
-  const vehicleValues = (v: VehicleInput) =>
-    [
-      v.kind,
-      v.name,
-      v.make,
-      v.model,
-      v.year,
-      v.vin,
-      v.firstRegistrationDate,
-      v.purchaseDate,
-      v.fuel,
-      v.transmission,
-      v.drivetrain,
-      v.distribution,
-      v.cooling,
-      v.finalDrive,
-      v.cylinders,
-      v.hasHydraulicClutch ? 1 : 0,
-      v.hasTurbo ? 1 : 0,
-      v.hasDirectInjection ? 1 : 0,
-      v.hasStartStop ? 1 : 0,
-      v.hasAdblue ? 1 : 0,
-      v.hasAc ? 1 : 0,
-      v.hasAirSuspension ? 1 : 0,
-    ] as const;
-
-  const BUILD_COLUMNS = `fuel, transmission, drivetrain, distribution, cooling, final_drive, cylinders, has_hydraulic_clutch,
-         has_turbo, has_direct_injection, has_start_stop, has_adblue, has_ac, has_air_suspension`;
-
   app.post('/api/vehicles', async (c) => {
     const v = await parse(c, vehicleInput);
+    const w = vehicleWrite(v);
     const id = randomUUID();
     transaction(() => {
       db.prepare(
-        `INSERT INTO vehicles (id, garage_id, kind, name, make, model, year, vin, first_registration_date, purchase_date, ${BUILD_COLUMNS})
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(id, garageId, ...vehicleValues(v));
+        `INSERT INTO vehicles (id, garage_id, ${w.columns.join(', ')})
+         VALUES (?, ?, ${w.columns.map(() => '?').join(', ')})`,
+      ).run(id, garageId, ...w.values);
       // A new Vehicle starts with the plan templates that fit its Build; after that the plan is its own.
       // Once the Notion catalogue has rows it decides the plan instead (the sync derives the tasks).
       if (!notionCatalogueActive()) seedTasks(id, v);
     });
-    return c.json(toVehicle(vehicleOrThrow(id)), 201);
+    return c.json(vehicleFromRow(vehicleOrThrow(id)), 201);
   });
 
   app.put('/api/vehicles/:id', async (c) => {
     const id = c.req.param('id');
     vehicleOrThrow(id);
     const v = await parse(c, vehicleInput);
+    const w = vehicleWrite(v);
     transaction(() => {
-      db.prepare(
-        `UPDATE vehicles SET kind = ?, name = ?, make = ?, model = ?, year = COALESCE(?, year), vin = ?,
-           first_registration_date = ?, purchase_date = ?,
-           fuel = ?, transmission = ?, drivetrain = ?, distribution = ?, cooling = ?, final_drive = ?, cylinders = ?,
-           has_hydraulic_clutch = ?, has_turbo = ?, has_direct_injection = ?, has_start_stop = ?, has_adblue = ?, has_ac = ?,
-           has_air_suspension = ?
-         WHERE id = ?`,
-      ).run(...vehicleValues(v), id);
+      db.prepare(`UPDATE vehicles SET ${w.assignments.join(', ')} WHERE id = ?`).run(...w.values, id);
     });
-    return c.json(toVehicle(vehicleOrThrow(id)));
+    return c.json(vehicleFromRow(vehicleOrThrow(id)));
   });
 
   app.post('/api/vehicles/:id/sell', async (c) => {
@@ -640,7 +576,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       s.price,
       id,
     );
-    return c.json(toVehicle(vehicleOrThrow(id)));
+    return c.json(vehicleFromRow(vehicleOrThrow(id)));
   });
 
   // ADR 0010: where this Vehicle's Receipts are filed in Proton Drive. Its own route, so the long Vehicle save stays as it is.
@@ -649,7 +585,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     vehicleOrThrow(id);
     const { folder } = await parse(c, archiveFolderInput);
     db.prepare('UPDATE vehicles SET archive_folder = ? WHERE id = ?').run(folder, id);
-    return c.json(toVehicle(vehicleOrThrow(id)));
+    return c.json(vehicleFromRow(vehicleOrThrow(id)));
   });
 
   app.post('/api/vehicles/:id/unsell', (c) => {
@@ -660,7 +596,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
         `UPDATE vehicles SET ownership = 'owned', on_garage_page = 1, sold_date = NULL, sold_odometer = NULL, sold_price = NULL WHERE id = ?`,
       ).run(id);
     });
-    return c.json(toVehicle(vehicleOrThrow(id)));
+    return c.json(vehicleFromRow(vehicleOrThrow(id)));
   });
 
   app.put('/api/vehicles/:id/garage-page', async (c) => {
@@ -668,7 +604,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     vehicleOrThrow(id);
     const { shown } = await parse(c, garagePageInput);
     db.prepare('UPDATE vehicles SET on_garage_page = ? WHERE id = ?').run(shown ? 1 : 0, id);
-    return c.json(toVehicle(vehicleOrThrow(id)));
+    return c.json(vehicleFromRow(vehicleOrThrow(id)));
   });
 
   // --- Maintenance Tasks: the Vehicle's own plan ---
@@ -689,7 +625,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
   /** Gives a Vehicle the plan templates that fit its Build and it has no Task named like yet. */
   app.post('/api/vehicles/:id/add-from-templates', (c) => {
     const vehicleId = c.req.param('id');
-    const build = buildOfRow(vehicleOrThrow(vehicleId));
+    const build = vehicleFromRow(vehicleOrThrow(vehicleId));
     if (notionCatalogueActive()) {
       return c.json({ added: 0, skipped: 'notion_catalogue', message: "The Notion catalogue decides this Vehicle's tasks: they are added when it syncs" });
     }

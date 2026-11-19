@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { Catalogue } from '../shared/catalogue.ts';
-import { buildOfRow, catalogueEntries } from './catalogue-rows.ts';
+import { vehicleFromRow } from '../shared/vehicle-fields.ts';
+import { catalogueEntries } from './catalogue-rows.ts';
 
 type Row = Record<string, any>;
 
@@ -56,7 +57,7 @@ export function convertToFiveParts(db: DatabaseSync): void {
 
   for (const v of db.prepare('SELECT * FROM vehicles').all() as Row[]) {
     const catalogue = catalogueOf(v.garage_id);
-    const build = buildOfRow(v);
+    const build = vehicleFromRow(v);
     const partLabel = (p: Row): string => (p.standard_part ? (catalogue.known(p.standard_part)?.en ?? p.name) : p.name);
 
     // --- the Profile's spec lines ---

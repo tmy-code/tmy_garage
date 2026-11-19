@@ -1,6 +1,7 @@
 import { PART_CATEGORIES, type PartCategory } from './catalogue.ts';
 import type { DueInfo } from './due.ts';
-import type { ComponentSpec, ComponentUsed, Confirmation, ItemSpec, MaintenanceTask, Ownership, Service, Snapshot, VehicleItem } from './types.ts';
+import { normalizeVehicle, type LegacyVehicle } from './vehicle-fields.ts';
+import type { ComponentSpec, ComponentUsed, Confirmation, ItemSpec, MaintenanceTask, Service, Snapshot, VehicleItem } from './types.ts';
 
 /** A Maintenance Task's category: the one the owner picked, else 'other'. */
 export function taskCategory(task: MaintenanceTask): PartCategory {
@@ -42,7 +43,7 @@ export function refKey(s: string | null | undefined): string {
  */
 type LegacyStatus = { status?: unknown };
 type LegacySnapshot = Omit<Snapshot, 'vehicles' | 'itemSpecs' | 'componentSpecs'> & {
-  vehicles: (Omit<Snapshot['vehicles'][number], 'ownership'> & { ownership?: Ownership } & LegacyStatus)[];
+  vehicles: LegacyVehicle[];
   vehicleConsumables?: (Omit<ItemSpec, 'confirmation'> & { confirmation?: Confirmation } & LegacyStatus)[];
   itemSpecs?: (Omit<ItemSpec, 'confirmation'> & { confirmation?: Confirmation } & LegacyStatus)[];
   componentSpecs?: (Omit<ComponentSpec, 'confirmation'> & { confirmation?: Confirmation } & LegacyStatus)[];
@@ -86,31 +87,7 @@ export function normalizeSnapshot(input: Snapshot): Snapshot {
     catalogue: (snapshot.catalogue ?? []).map((e) => ({ ...e, overrides: e.overrides ?? null, own: e.own ? { ...e.own, action: e.own.action ?? 'replace' } : null })),
     specLines: (snapshot.specLines ?? []).map((l) => ({ ...l, oem: l.oem ?? null, category: l.category ?? null })),
     vehicleItems: (snapshot.vehicleItems ?? legacyItems ?? []).map((p) => ({ ...p, partNumber: p.partNumber ?? null, price: p.price ?? null, taskId: p.taskId ?? null, itemSpecId: p.itemSpecId ?? null, specLineId: p.specLineId ?? null, notes: p.notes ?? null })),
-    vehicles: snapshot.vehicles.map(({ status, ...v }) => ({
-      ...v,
-      ownership: v.ownership ?? (status as Ownership | undefined) ?? 'owned',
-      vin: v.vin ?? null,
-      firstRegistrationDate: v.firstRegistrationDate ?? null,
-      purchaseDate: v.purchaseDate ?? null,
-      fuel: v.fuel ?? null,
-      transmission: v.transmission ?? null,
-      drivetrain: v.drivetrain ?? null,
-      distribution: v.distribution ?? null,
-      cooling: v.cooling ?? null,
-      finalDrive: v.finalDrive ?? null,
-      cylinders: v.cylinders ?? null,
-      hasHydraulicClutch: v.hasHydraulicClutch ?? false,
-      hasTurbo: v.hasTurbo ?? false,
-      hasDirectInjection: v.hasDirectInjection ?? false,
-      hasStartStop: v.hasStartStop ?? false,
-      hasAdblue: v.hasAdblue ?? false,
-      hasAc: v.hasAc ?? false,
-      hasAirSuspension: v.hasAirSuspension ?? false,
-      onGaragePage: v.onGaragePage ?? (v.ownership ?? status ?? 'owned') === 'owned',
-      equipment: v.equipment ?? [],
-      notionPageId: v.notionPageId ?? null,
-      archiveFolder: v.archiveFolder ?? null,
-    })),
+    vehicles: snapshot.vehicles.map(normalizeVehicle),
     fillups: (snapshot.fillups ?? []).map((f) => ({ ...f, odometer: f.odometer ?? null, notes: f.notes ?? null, fullTank: f.fullTank ?? true })),
     documents: snapshot.documents ?? [],
   };

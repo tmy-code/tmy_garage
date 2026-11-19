@@ -1,36 +1,9 @@
 import type { IsoDate } from './dates.ts';
-import type { CatalogueEntry, PartCategory, VehicleSpecs } from './catalogue.ts';
-import type { DocumentOwnerKind, DocumentType, PartUnit, PerformedBy, ServiceKind, SpecGroup, TaskAction, VehicleKind } from './schemas.ts';
-export type Ownership = 'owned' | 'sold';
+import type { CatalogueEntry, PartCategory } from './catalogue.ts';
+import type { DocumentOwnerKind, DocumentType, PartUnit, PerformedBy, ServiceKind, SpecGroup, TaskAction } from './schemas.ts';
+import type { Vehicle } from './vehicle-fields.ts';
+export type { Vehicle, Ownership } from './vehicle-fields.ts';
 export type Confirmation = 'confirmed' | 'to_confirm' | null;
-
-/** A car or motorcycle; what it is built with (its Build) comes from VehicleSpecs. */
-export interface Vehicle extends VehicleSpecs {
-  id: string;
-  kind: VehicleKind;
-  name: string;
-  make: string | null;
-  model: string | null;
-  year: number | null;
-  /** Vehicle identification number. */
-  vin: string | null;
-  /** When it first went on the road (first registration). */
-  firstRegistrationDate: IsoDate | null;
-  /** When the owner bought it. */
-  purchaseDate: IsoDate | null;
-  ownership: Ownership;
-  /** Whether it has a card on the garage page, whatever its ownership; selling it hides it, and the user can change either. */
-  onGaragePage: boolean;
-  soldDate: IsoDate | null;
-  soldOdometer: number | null;
-  soldPrice: number | null;
-  /** The equipment tags the owner keeps in Notion (e.g. "Transmission chaîne"); they decide which catalogue tasks apply. Read-only here. */
-  equipment: string[];
-  /** The Vehicle's page in the Notion Véhicules database, once the sync has seen it. */
-  notionPageId?: string | null;
-  /** Where this Vehicle's Receipts are filed in the owner's Proton Drive, relative to the Proton root (ADR 0010). */
-  archiveFolder?: string | null;
-}
 
 export interface MaintenanceTask {
   id: string;
