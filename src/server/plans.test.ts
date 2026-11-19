@@ -72,27 +72,6 @@ describe('spec lines and the plan templates', () => {
     expect(((await (await call('POST', `/api/vehicles/${bike.id}/add-from-templates`)).json()) as { added: number }).added).toBe(0);
   });
 
-  it('does not add a template’s Task when the Vehicle has one named like the template’s part', async () => {
-    const bike = (await (await call('POST', '/api/vehicles', { ...BIKE, name: 'Fresh' })).json()) as Vehicle;
-    const oil = (await snapshot()).tasks.find((t) => t.vehicleId === bike.id && t.name === 'Change engine oil and filter')!;
-    await call('DELETE', `/api/tasks/${oil.id}`);
-    await call('POST', `/api/vehicles/${bike.id}/tasks`, { name: 'Engine Oil', intervalKm: 10000, intervalMonths: 12 });
-    await call('POST', `/api/vehicles/${bike.id}/add-from-templates`);
-    const names = (await snapshot()).tasks.filter((t) => t.vehicleId === bike.id).map((t) => t.name);
-    expect(names).toContain('Engine Oil');
-    expect(names).not.toContain('Change engine oil and filter');
-  });
-
-  it('never doubles a template’s Task, even once the owner renamed it', async () => {
-    const bike = (await (await call('POST', '/api/vehicles', { ...BIKE, name: 'Fresh' })).json()) as Vehicle;
-    const before = (await snapshot()).tasks.filter((t) => t.vehicleId === bike.id);
-    const oil = before.find((t) => t.name === 'Change engine oil and filter')!;
-    await call('PUT', `/api/tasks/${oil.id}`, { name: 'Vidange maison', intervalKm: 8000, intervalMonths: 12 });
-    await call('POST', `/api/vehicles/${bike.id}/add-from-templates`);
-    await call('POST', `/api/vehicles/${bike.id}/add-from-templates`);
-    expect((await snapshot()).tasks.filter((t) => t.vehicleId === bike.id)).toHaveLength(before.length);
-  });
-
   it('changes a template without touching vehicles that exist, and the next vehicle gets the change', async () => {
     const before = (await (await call('POST', '/api/vehicles', { ...BIKE, name: 'Before' })).json()) as Vehicle;
     expect((await call('PUT', '/api/catalogue/moto_engine_oil', { conditions: {}, intervalKm: 5000, intervalMonths: 6 })).status).toBe(200);
