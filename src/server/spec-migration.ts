@@ -3,10 +3,10 @@
 // Everything runs under the sync's lock. A line is moved once (table spec_line_moves), so a re-run never makes a page twice.
 // Lines that cannot move (no Notion page for the vehicle, nothing to say) stay visible in the app, read-only.
 import type { DatabaseSync } from 'node:sqlite';
+import { SpecError } from '../shared/spec-errors.ts';
 import { fetchReference } from '../notion/engine.ts';
 import { parseSpecPage, type ItemSpecRow, type ComponentSpecRow, type ReferencePull } from '../notion/reference.ts';
 import {
-  SpecWriteError,
   componentSpecProperties,
   createSpecPage,
   itemSpecProperties,
@@ -137,7 +137,7 @@ export async function migrateSpecLines(opts: { db: DatabaseSync; garageId: strin
       try {
         targets[kind] = await specTarget(api, parentPageId, kind);
       } catch (error) {
-        if (!(error instanceof SpecWriteError) || !dryRun) throw error;
+        if (!(error instanceof SpecError) || !dryRun) throw error;
         warn(error.message);
       }
     }
@@ -149,7 +149,7 @@ export async function migrateSpecLines(opts: { db: DatabaseSync; garageId: strin
       try {
         return make();
       } catch (error) {
-        if (!(error instanceof SpecWriteError) || !dryRun) throw error;
+        if (!(error instanceof SpecError) || !dryRun) throw error;
         warn(`"${label}": ${error.message}`);
         return undefined;
       }
