@@ -1,37 +1,4 @@
 :root {
-  /* tmy design system: dark monochromatic (see C:\Projects\DESIGN-SYSTEM.md). Dark only. */
-  --base: #000000;
-  --bg: #0a0a0a;
-  --surface: #141414;
-  --elevated: #1c1c1c;
-  --hover: #262626;
-  --border: #333333;
-  --text: #ffffff;
-  --text-2: #b3b3b3;
-  --muted: #737373;
-  --disabled: #525252;
-  --tonal: #262626;
-  --tonal-hover: #3f3f3f;
-  --tonal-active: #333333;
-  --success: #16a34a;
-  --success-text: #4ade80;
-  --success-border: #14532d;
-  --success-bg: #052e16;
-  --error: #dc2626;
-  --error-text: #f87171;
-  --error-border: #7f1d1d;
-  --error-bg: #1f0808;
-  --warning: #d97706;
-  --warning-text: #fb923c;
-  --warning-border: #7c2d12;
-  --warning-bg: #1a0d05;
-  --info: #2563eb;
-  --info-text: #60a5fa;
-  --info-border: #1e3a8a;
-  --info-bg: #0b1220;
-  color-scheme: dark;
-  font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  font-size: 17px;
   line-height: 1.4;
 }
 
