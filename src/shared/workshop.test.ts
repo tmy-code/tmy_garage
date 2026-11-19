@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MaintenanceTask, Snapshot } from './types.ts';
 import type { DueInfo } from './due.ts';
+import { normalizeVehicle } from './vehicle-fields.ts';
 import { groupByCategory, itemSpecText, normalizeSnapshot, refKey } from './workshop.ts';
 
 function task(overrides: Partial<MaintenanceTask>): MaintenanceTask {
@@ -110,7 +111,7 @@ describe('normalizeSnapshot', () => {
   it('fills in the Notion referentials, equipment and status that an offline copy saved before the Notion sync lacks', () => {
     const old = { vehicles: [{ id: 'v', ownership: 'owned' }], tasks: [{ id: 't' }], services: [], readings: [] } as unknown as Snapshot;
     const s = normalizeSnapshot(old);
-    expect(s.vehicles[0]!.equipment).toEqual([]);
+    expect(s.vehicles[0]).toEqual(normalizeVehicle({ id: 'v', ownership: 'owned' }));
     expect(s.tasks[0]).toMatchObject({ refTaskId: null, notionPlanId: null });
     for (const key of ['refTasks', 'componentTypes', 'consumableTypes', 'products', 'tools', 'itemSpecs', 'componentSpecs', 'notionPurchases'] as const) expect(s[key]).toEqual([]);
     expect(s.notion).toBeNull();
@@ -126,8 +127,6 @@ describe('normalizeSnapshot', () => {
       readings: [],
     } as unknown as Snapshot;
     const s = normalizeSnapshot(old) as unknown as Record<string, any>;
-    expect(s.vehicles[0]).toMatchObject({ ownership: 'sold', onGaragePage: false });
-    expect(s.vehicles[0]).not.toHaveProperty('status');
     expect(s.itemSpecs[0]).toMatchObject({ confirmation: 'to_confirm' });
     expect(s.itemSpecs[0]).not.toHaveProperty('status');
     expect(s.componentSpecs).toMatchObject([{ id: 's', confirmation: 'confirmed' }, { id: 's2', confirmation: null }]);
@@ -150,7 +149,7 @@ describe('normalizeSnapshot', () => {
 
   it('lets a snapshot with the new names pass through', () => {
     const fresh = {
-      vehicles: [{ id: 'v', ownership: 'sold', onGaragePage: true }],
+      vehicles: [],
       itemSpecs: [{ id: 'c', confirmation: 'confirmed' }],
       componentSpecs: [{ id: 's', confirmation: 'to_confirm' }],
       tasks: [],
@@ -158,7 +157,6 @@ describe('normalizeSnapshot', () => {
       readings: [],
     } as unknown as Snapshot;
     const s = normalizeSnapshot(fresh);
-    expect(s.vehicles[0]).toMatchObject({ ownership: 'sold', onGaragePage: true });
     expect(s.itemSpecs[0]).toMatchObject({ confirmation: 'confirmed' });
     expect(s.componentSpecs).toMatchObject([{ id: 's', confirmation: 'to_confirm' }]);
   });
