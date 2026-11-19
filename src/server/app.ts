@@ -49,6 +49,7 @@ import type {
   SpecLine,
 } from '../shared/types.ts';
 import { BUILT_IN_CATALOGUE, Catalogue, tidyConditions, type Build, type Conditions } from '../shared/catalogue.ts';
+import { logService, looseName, type ServiceLoggingError } from '../shared/service-logging.ts';
 import { API_VERSION, API_VERSION_HEADER } from '../shared/api-version.ts';
 import { buildOfRow, catalogueEntries } from './catalogue-rows.ts';
 import type { VehicleInput, VehicleKind } from '../shared/schemas.ts';
@@ -68,6 +69,19 @@ class HttpError extends Error {
     super(message);
     this.status = status;
     this.code = code;
+  }
+}
+
+function serviceLoggingMessage(error: ServiceLoggingError): string {
+  switch (error.code) {
+    case 'task-not-on-vehicle':
+      return 'A Maintenance Task in this Service no longer exists';
+    case 'odometer-needed':
+      return 'odometer: The odometer is needed when a ticked Task counts distance';
+    case 'repair-needs-title':
+      return 'title: A repair needs a title';
+    case 'maintenance-needs-task':
+      return 'taskIds: A Service completes at least one Maintenance Task';
   }
 }
 
@@ -509,16 +523,6 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
       added++;
     }
     return added;
-  }
-
-  /** A name compared loosely: case, accents and spacing aside. */
-  function looseName(name: string | null): string {
-    return (name ?? '')
-      .normalize('NFD')
-      .replace(/\p{Diacritic}/gu, '')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .toLowerCase();
   }
 
   app.onError((error, c) => {
@@ -1107,20 +1111,16 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     vehicleOrThrow(s.vehicleId);
     const existing = db.prepare('SELECT vehicle_id FROM services WHERE id = ?').get(s.id) as Row | undefined;
     if (existing && existing.vehicle_id !== s.vehicleId) throw new HttpError(409, 'Service belongs to another Vehicle');
-    const taskIds = [...new Set(s.taskIds)];
-    for (const taskId of taskIds) {
-      const task = db.prepare('SELECT vehicle_id FROM maintenance_tasks WHERE id = ?').get(taskId) as Row | undefined;
-      if (!task || task.vehicle_id !== s.vehicleId) throw new HttpError(422, 'A Maintenance Task in this Service no longer exists');
-    }
-    // A Task that always comes with another (the fork seals with the fork oil) counts that one as done too.
-    for (const taskId of [...taskIds]) {
-      const { template_code } = db.prepare('SELECT template_code FROM maintenance_tasks WHERE id = ?').get(taskId) as Row;
-      const included = template_code === null ? null : catalogue.includedWith(template_code);
-      if (included === null) continue;
-      const other = db.prepare('SELECT id FROM maintenance_tasks WHERE vehicle_id = ? AND template_code = ?').get(s.vehicleId, included) as Row | undefined;
-      if (other && !taskIds.includes(other.id)) taskIds.push(other.id);
-    }
-    const componentsUsed = s.componentsUsed;
+    const vehicleTasks = (
+      db.prepare('SELECT id, interval_km, template_code FROM maintenance_tasks WHERE vehicle_id = ?').all(s.vehicleId) as Row[]
+    ).map((r) => ({ id: r.id as string, intervalKm: r.interval_km as number | null, templateCode: r.template_code as string | null }));
+    const vehicleItems = (db.prepare('SELECT id, name, part_number FROM vehicle_items WHERE vehicle_id = ?').all(s.vehicleId) as Row[]).map(
+      (r) => ({ id: r.id as string, name: r.name as string, partNumber: r.part_number as string | null }),
+    );
+    const logged = logService({ tasks: vehicleTasks, items: vehicleItems, catalogue }, s, { newId: randomUUID, canAddToItems: true });
+    if (!logged.ok) throw new HttpError(422, serviceLoggingMessage(logged.errors[0]!));
+    const { service, newItems } = logged;
+    const componentsUsed = service.componentsUsed;
     transaction(() => {
       db.prepare(
         `INSERT INTO services (id, vehicle_id, date, odometer, notes, performed_by, total_cost, kind, title, category)
@@ -1128,30 +1128,22 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
          ON CONFLICT (id) DO UPDATE SET date = excluded.date, odometer = excluded.odometer, notes = excluded.notes,
            performed_by = excluded.performed_by, total_cost = excluded.total_cost, kind = excluded.kind, title = excluded.title,
            category = excluded.category`,
-      ).run(s.id, s.vehicleId, s.date, s.odometer, s.notes, s.performedBy, s.totalCost, s.kind, s.kind === 'repair' ? s.title : null, s.kind === 'repair' ? s.category : null);
-      db.prepare('DELETE FROM service_tasks WHERE service_id = ?').run(s.id);
+      ).run(service.id, service.vehicleId, service.date, service.odometer, service.notes, service.performedBy, service.totalCost, service.kind, service.title, service.category);
+      db.prepare('DELETE FROM service_tasks WHERE service_id = ?').run(service.id);
       const link = db.prepare('INSERT INTO service_tasks (service_id, task_id) VALUES (?, ?)');
-      for (const taskId of taskIds) link.run(s.id, taskId);
-      db.prepare('DELETE FROM service_items WHERE service_id = ?').run(s.id);
-      const insertComponent = db.prepare('INSERT INTO service_items (service_id, sort, description, part_number, quantity, unit, price, item_id, consumable_type_id, product_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-      // A Component Used to keep goes on the Vehicle's items list (once, whatever the replays), tied to the Service's Task when it has just one.
+      for (const taskId of service.taskIds) link.run(service.id, taskId);
+      // A Component Used to keep goes on the Vehicle's items list (once, whatever the replays).
       const keep = db.prepare('INSERT OR IGNORE INTO vehicle_items (id, vehicle_id, name, part_number, unit, quantity, price, task_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-      const listed = db.prepare('SELECT id FROM vehicle_items WHERE id = ? AND vehicle_id = ?');
-      const oneTask = new Set(s.taskIds).size === 1 ? s.taskIds[0]! : null;
-      const linked = componentsUsed.map((p) => {
-        let itemId = p.itemId;
-        if (p.remember && itemId !== null) {
-          const twin = sameItem(s.vehicleId, p.description, p.partNumber, itemId);
-          if (twin) itemId = twin.id;
-          else keep.run(itemId, s.vehicleId, p.description, p.partNumber, p.unit, p.quantity, p.price, oneTask);
-        }
-        // A link to an item that is gone, or on another Vehicle, is dropped: the Service keeps its copy.
-        return { ...p, remember: false, itemId: itemId !== null && listed.get(itemId, s.vehicleId) ? itemId : null };
-      });
-      linked.forEach((p, i) => insertComponent.run(s.id, i, p.description, p.partNumber, p.quantity, p.unit, p.price, p.itemId, p.consumableTypeId, p.productId));
-      componentsUsed.splice(0, componentsUsed.length, ...linked);
+      for (const item of newItems) {
+        const { changes } = keep.run(item.id, item.vehicleId, item.name, item.partNumber, item.unit, item.quantity, item.price, item.taskId);
+        // The id belongs to an item of another Vehicle: the Service keeps its copy, without the link.
+        if (changes === 0) for (const p of componentsUsed) if (p.itemId === item.id) p.itemId = null;
+      }
+      db.prepare('DELETE FROM service_items WHERE service_id = ?').run(service.id);
+      const insertComponent = db.prepare('INSERT INTO service_items (service_id, sort, description, part_number, quantity, unit, price, item_id, consumable_type_id, product_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+      componentsUsed.forEach((p, i) => insertComponent.run(service.id, i, p.description, p.partNumber, p.quantity, p.unit, p.price ?? null, p.itemId ?? null, p.consumableTypeId ?? null, p.productId ?? null));
     });
-    return c.json({ ...s, taskIds, componentsUsed });
+    return c.json({ ...s, taskIds: service.taskIds, componentsUsed });
   });
 
   app.delete('/api/services/:id', (c) => {
