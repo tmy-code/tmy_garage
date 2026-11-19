@@ -1,3 +1,5 @@
+import type { SpecErrorCode } from './spec-errors.ts';
+
 export type Lang = 'en' | 'fr';
 export const LANGS: { code: Lang; label: string }[] = [
   { code: 'en', label: 'English' },
@@ -463,7 +465,7 @@ const en = {
       value_not_number: 'In Notion this value is a number: type only the number, and put the unit in “Unit”.',
       notion_failed: 'Notion refused the change. Nothing was changed: try again, or edit it in Notion.',
       not_found: 'This spec, type or product is no longer in the app. Run a sync (Settings › Notion), then try again.',
-    },
+    } satisfies Record<SpecErrorCode, string>,
   },
   items: {
     title: 'Parts and fluids',
@@ -1112,7 +1114,7 @@ const fr: Messages = {
       value_not_number: 'Dans Notion, cette valeur est un nombre : tapez seulement le nombre, l’unité va dans « Unité ».',
       notion_failed: 'Notion a refusé la modification. Rien n’a changé : réessayez, ou modifiez-la dans Notion.',
       not_found: 'Cette spécification, ce type ou ce produit n’est plus dans l’appli. Lancez une synchronisation (Réglages › Notion), puis réessayez.',
-    },
+    } satisfies Record<SpecErrorCode, string>,
   },
   items: {
     title: 'Pièces et fluides',

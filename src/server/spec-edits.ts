@@ -6,7 +6,6 @@ import { NotionError } from '../notion/api.ts';
 import type { NotionClient } from '../notion/engine.ts';
 import { parseSpecPage } from '../notion/reference.ts';
 import {
-  SpecWriteError,
   componentSpecProperties,
   createSpecPage,
   itemSpecProperties,
@@ -16,6 +15,7 @@ import {
   updateSpecPage,
   type SpecKind,
 } from '../notion/spec-pages.ts';
+import { SpecError } from '../shared/spec-errors.ts';
 import type { ComponentSpecInput, ItemSpecInput } from '../shared/schemas.ts';
 import type { ComponentSpec, ItemSpec } from '../shared/types.ts';
 import { markSpecPageRemoved, storeSpecPage } from './notion-apply.ts';
@@ -23,16 +23,12 @@ import type { NotionSyncService } from './notion-sync.ts';
 
 type Row = Record<string, any>;
 
-export class SpecEditError extends Error {
-  readonly status: 404 | 409 | 422 | 502 | 503;
-  readonly code: 'not_found' | 'notion_off' | 'notion_busy' | 'vehicle_not_in_notion' | 'notion_incomplete' | 'value_not_number' | 'notion_failed';
-
-  constructor(status: SpecEditError['status'], code: SpecEditError['code'], message: string) {
-    super(message);
-    this.name = 'SpecEditError';
-    this.status = status;
-    this.code = code;
-  }
+/** A SpecError as is; a busy sync or a Notion failure as its SpecError; anything else (a bug) is not ours: null. */
+export function asSpecError(error: unknown): SpecError | null {
+  if (error instanceof SpecError) return error;
+  if (error instanceof Error && error.name === 'NotionSyncBusy') return new SpecError('notion_busy', 'A Notion sync is already running');
+  if (error instanceof NotionError) return new SpecError('notion_failed', error.message);
+  return null;
 }
 
 export interface SpecEditor {
@@ -55,15 +51,13 @@ export function createSpecEditor(opts: {
 }): SpecEditor {
   const { db, garageId, notionSync } = opts;
 
-  /** Runs one operation under the sync lock, turning every failure into a SpecEditError (nothing is changed locally on failure). */
+  /** Runs one operation under the sync lock, turning every known failure into a SpecError (nothing is changed locally on failure). */
   async function guarded<T>(fn: (api: NotionClient, parentPageId: string) => Promise<T>): Promise<T> {
     try {
       return await notionSync.exclusive(fn);
     } catch (error) {
-      if (error instanceof SpecEditError) throw error;
-      if (error instanceof SpecWriteError) throw new SpecEditError(error.status, error.code, error.message);
-      if (error instanceof Error && error.name === 'NotionSyncBusy') throw new SpecEditError(409, 'notion_busy', 'A Notion sync is already running');
-      if (error instanceof NotionError) throw new SpecEditError(502, 'notion_failed', error.message);
+      const specError = asSpecError(error);
+      if (specError) throw specError;
       throw error;
     }
   }
@@ -71,9 +65,9 @@ export function createSpecEditor(opts: {
   /** An owned Vehicle of this garage that has a Notion page. */
   function vehicleWithPage(vehicleId: string): { id: string; pageId: string } {
     const row = db.prepare('SELECT id, ownership, notion_page_id FROM vehicles WHERE id = ? AND garage_id = ?').get(vehicleId, garageId) as Row | undefined;
-    if (!row) throw new SpecEditError(404, 'not_found', 'Vehicle not found');
+    if (!row) throw new SpecError('not_found', 'Vehicle not found');
     if (row.ownership !== 'owned' || !row.notion_page_id) {
-      throw new SpecEditError(409, 'vehicle_not_in_notion', 'This vehicle has no page in Notion yet: run a Notion sync first');
+      throw new SpecError('vehicle_not_in_notion', 'This vehicle has no page in Notion yet: run a Notion sync first');
     }
     return { id: row.id, pageId: row.notion_page_id };
   }
@@ -88,13 +82,13 @@ export function createSpecEditor(opts: {
   function notionIdOf(table: 'consumable_types' | 'products' | 'ref_component_types', id: string | null, what: string): string | null {
     if (id === null) return null;
     const row = db.prepare(`SELECT notion_id FROM ${table} WHERE id = ? AND garage_id = ? AND notion_removed = 0`).get(id, garageId) as Row | undefined;
-    if (!row) throw new SpecEditError(422, 'not_found', `That ${what} is not in the app's Notion lists`);
+    if (!row) throw new SpecError('not_found', `That ${what} is not in the app's Notion lists`, 422);
     return row.notion_id as string;
   }
 
   function spec(kind: SpecKind, id: string): Row {
     const row = db.prepare(`SELECT * FROM ${TABLE[kind]} WHERE id = ? AND garage_id = ? AND notion_removed = 0`).get(id, garageId) as Row | undefined;
-    if (!row) throw new SpecEditError(404, 'not_found', kind === 'itemSpecs' ? 'Item Spec not found' : 'Component Spec not found');
+    if (!row) throw new SpecError('not_found', kind === 'itemSpecs' ? 'Item Spec not found' : 'Component Spec not found');
     return row;
   }
 
@@ -103,7 +97,7 @@ export function createSpecEditor(opts: {
     const parsed = kind === 'itemSpecs' ? parseSpecPage('itemSpecs', page, pageMap()) : parseSpecPage('componentSpecs', page, pageMap());
     storeSpecPage(db, garageId, kind, page.id, parsed.rows);
     const row = db.prepare(`SELECT * FROM ${TABLE[kind]} WHERE vehicle_id = ? AND notion_id = ? AND garage_id = ?`).get(vehicleId, page.id, garageId) as Row | undefined;
-    if (!row || row.notion_removed === 1) throw new SpecEditError(502, 'notion_failed', 'Notion did not return the page as expected');
+    if (!row || row.notion_removed === 1) throw new SpecError('notion_failed', 'Notion did not return the page as expected');
     return row;
   }
 
@@ -111,7 +105,7 @@ export function createSpecEditor(opts: {
   function failIfTrashed(kind: SpecKind, page: any, notionId: string): void {
     if (page.in_trash === true || page.archived === true) {
       markSpecPageRemoved(db, garageId, kind, notionId);
-      throw new SpecEditError(404, 'not_found', 'This page is no longer in Notion');
+      throw new SpecError('not_found', 'This page is no longer in Notion');
     }
   }
 

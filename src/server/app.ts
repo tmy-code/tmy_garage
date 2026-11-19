@@ -57,9 +57,10 @@ import { catalogueEntries } from './catalogue-rows.ts';
 import type { VehicleInput, VehicleKind } from '../shared/schemas.ts';
 import { DEFAULT_GARAGE_ID } from './db.ts';
 import type { NotionSyncService } from './notion-sync.ts';
-import { SpecEditError, createSpecEditor } from './spec-edits.ts';
+import { asSpecError, createSpecEditor } from './spec-edits.ts';
 import { migrateSpecLines } from './spec-migration.ts';
-import { SpecWriteError } from '../notion/spec-pages.ts';
+import { NotionError } from '../notion/api.ts';
+import { SPEC_ERROR_STATUS } from '../shared/spec-errors.ts';
 
 type ErrorStatus = 400 | 404 | 409 | 413 | 415 | 422 | 502 | 503;
 
@@ -798,7 +799,7 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
 
   /** The spec editor, or 503 when the Notion sync is not set up on this server. */
   function specs() {
-    if (!specEditor) throw new HttpError(503, 'The Notion sync is not set up on this server', 'notion_off');
+    if (!specEditor) throw new HttpError(SPEC_ERROR_STATUS.notion_off, 'The Notion sync is not set up on this server', 'notion_off');
     return specEditor;
   }
 
@@ -807,9 +808,9 @@ export function createApp(db: DatabaseSync, garageId: string = DEFAULT_GARAGE_ID
     try {
       return await run();
     } catch (error) {
-      if (error instanceof SpecEditError) throw new HttpError(error.status, error.message, error.code);
-      if (error instanceof SpecWriteError) throw new HttpError(error.status, error.message, error.code);
-      if (error instanceof Error && error.name === 'NotionSyncBusy') throw new HttpError(409, error.message, 'notion_busy');
+      // A NotionError reaching here (only from migrateSpecLines) has always answered 500; the editor maps it before this point.
+      const specError = error instanceof NotionError ? null : asSpecError(error);
+      if (specError) throw new HttpError(specError.status, specError.message, specError.code);
       throw error;
     }
   }

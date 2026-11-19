@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { SpecError } from '../shared/spec-errors.ts';
 import type { ComponentSpecInput, ItemSpecInput } from '../shared/schemas.ts';
 import { fakeNotion, numberValue, referenceDatabases, relationValue, richValue, selectValue, titleValue, type FakeDb } from './fake-notion.ts';
 import {
-  SpecWriteError,
   componentSpecProperties,
   createSpecPage,
   itemSpecProperties,
@@ -94,7 +94,7 @@ describe('itemSpecProperties', () => {
     const columns = itemColumns();
     delete columns['Capacité'];
     expect(itemSpecProperties(item({ capacity: null }), target('itemSpecs', columns), refs)).not.toHaveProperty('Capacité');
-    expect(() => itemSpecProperties(item({ capacity: '3 L' }), target('itemSpecs', columns), refs)).toThrow(SpecWriteError);
+    expect(() => itemSpecProperties(item({ capacity: '3 L' }), target('itemSpecs', columns), refs)).toThrow(SpecError);
     try {
       itemSpecProperties(item({ capacity: '3 L' }), target('itemSpecs', columns), refs);
     } catch (error) {
@@ -136,7 +136,7 @@ describe('componentSpecProperties', () => {
   it('refuses a text where Valeur is a number, but lets an empty value be empty', () => {
     const t = target('componentSpecs', componentColumns());
     const r = { vehiclePageIds: ['page-bike'], componentTypeNotionId: null };
-    expect(() => componentSpecProperties(component({ value: '120/70 R17' }), t, r)).toThrow(SpecWriteError);
+    expect(() => componentSpecProperties(component({ value: '120/70 R17' }), t, r)).toThrow(SpecError);
     try {
       componentSpecProperties(component({ value: '25 Nm' }), t, r);
     } catch (error) {

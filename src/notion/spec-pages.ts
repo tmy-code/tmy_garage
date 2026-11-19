@@ -5,6 +5,7 @@
 import type { PartCategory } from '../shared/catalogue.ts';
 import { messagesFor } from '../shared/messages.ts';
 import type { ComponentSpecInput, ItemSpecInput } from '../shared/schemas.ts';
+import { SpecError } from '../shared/spec-errors.ts';
 import { parsePlainNumber } from '../shared/session-consumables.ts';
 import { refKey } from '../shared/workshop.ts';
 import { REFERENCE_DBS, fromNotion, relationPageIds, samePlain, toNotion, type ColumnType, type Plain, type ReferenceDb } from './databases.ts';
@@ -12,21 +13,6 @@ import { databasesUnder, dataSourceOf, findReferenceDatabase, type NotionClient 
 import { CATEGORIES } from './reference.ts';
 
 export type SpecKind = 'itemSpecs' | 'componentSpecs';
-export type SpecWriteCode = 'notion_incomplete' | 'value_not_number';
-
-/** Why a spec page could not be built: the database or a column is not usable (409), or a value does not fit its column (422). */
-export class SpecWriteError extends Error {
-  readonly code: SpecWriteCode;
-  readonly status: 409 | 422;
-
-  constructor(code: SpecWriteCode, message: string) {
-    super(message);
-    this.name = 'SpecWriteError';
-    this.code = code;
-    this.status = code === 'notion_incomplete' ? 409 : 422;
-  }
-}
-
 /** A spec database as found in Notion: where to write, and the columns (with the options of a select) it really has. */
 export interface SpecTarget {
   kind: SpecKind;
@@ -53,9 +39,9 @@ const descriptor = (kind: SpecKind): ReferenceDb => REFERENCE_DBS.find((d) => d.
 export async function specTarget(api: NotionClient, parentPageId: string, kind: SpecKind): Promise<SpecTarget> {
   const db = descriptor(kind);
   const found = findReferenceDatabase(await databasesUnder(api, parentPageId), db);
-  if (found === null) throw new SpecWriteError('notion_incomplete', `${db.title}: the database was not found under the parent page`);
+  if (found === null) throw new SpecError('notion_incomplete', `${db.title}: the database was not found under the parent page`);
   if ('ambiguous' in found) {
-    throw new SpecWriteError('notion_incomplete', `${db.title}: both "${found.ambiguous[0]}" and "${found.ambiguous[1]}" exist under the parent page; archive or rename one`);
+    throw new SpecError('notion_incomplete', `${db.title}: both "${found.ambiguous[0]}" and "${found.ambiguous[1]}" exist under the parent page; archive or rename one`);
   }
   const dataSourceId = await dataSourceOf(api, found.databaseId);
   const source = await api.call('GET', `/data_sources/${dataSourceId}`);
@@ -66,8 +52,8 @@ export async function specTarget(api: NotionClient, parentPageId: string, kind: 
   }
   for (const c of db.required) {
     const column = columns[c.name];
-    if (!column) throw new SpecWriteError('notion_incomplete', `${found.title}: the required column "${c.name}" is missing`);
-    if (!c.types.includes(column.type)) throw new SpecWriteError('notion_incomplete', `${found.title}: the column "${c.name}" is a ${column.type}, expected ${c.types.join(' or ')}`);
+    if (!column) throw new SpecError('notion_incomplete', `${found.title}: the required column "${c.name}" is missing`);
+    if (!c.types.includes(column.type)) throw new SpecError('notion_incomplete', `${found.title}: the column "${c.name}" is a ${column.type}, expected ${c.types.join(' or ')}`);
   }
   return { kind, title: found.title, dataSourceId, columns };
 }
@@ -103,7 +89,7 @@ function build(target: SpecTarget, wanted: Wanted[], current: any | undefined): 
     const column = target.columns[w.name];
     if (!column) {
       if (isEmpty(w.value)) continue;
-      throw new SpecWriteError('notion_incomplete', `${target.title}: the column "${w.name}" is missing, so its value could not be written`);
+      throw new SpecError('notion_incomplete', `${target.title}: the column "${w.name}" is missing, so its value could not be written`);
     }
     const currentValue: Plain = current ? fromNotion(current.properties?.[w.name], (id) => id) : null;
     if (current ? samePlain(currentValue, w.value) : isEmpty(w.value)) continue;
@@ -149,7 +135,7 @@ export function componentSpecProperties(input: ComponentSpecInput, target: SpecT
     if (input.value.trim() === '') value = null;
     else {
       const number = parsePlainNumber(input.value);
-      if (number === null) throw new SpecWriteError('value_not_number', `${target.title}: "Valeur" is a number column in Notion, "${input.value}" is not a number`);
+      if (number === null) throw new SpecError('value_not_number', `${target.title}: "Valeur" is a number column in Notion, "${input.value}" is not a number`);
       value = number;
     }
   } else {
