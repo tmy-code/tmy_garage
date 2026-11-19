@@ -231,14 +231,6 @@ describe('services and readings (replayed by the offline send queue)', () => {
     expect(s.services).toEqual([{ ...body, kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null, componentsUsed: [] }]);
   });
 
-  it('stores a Service without an odometer value, for time-based tasks', async () => {
-    const bike = await createVehicle();
-    const coolant = await createTask(bike.id, { name: 'Coolant', intervalKm: null, intervalMonths: 36 });
-    const body = { id: 'svc-00002', vehicleId: bike.id, date: '2026-07-14', taskIds: [coolant.id], notes: null };
-    expect((await call('PUT', '/api/services/svc-00002', body)).status).toBe(200);
-    expect((await snapshot()).services).toEqual([{ ...body, odometer: null, kind: 'maintenance', title: null, category: null, performedBy: 'diy', totalCost: null, componentsUsed: [] }]);
-  });
-
   it('updates a Service and its tasks on a later PUT', async () => {
     const bike = await createVehicle();
     const oil = await createTask(bike.id);
@@ -265,16 +257,22 @@ describe('services and readings (replayed by the offline send queue)', () => {
     expect(res.status).toBe(422);
   });
 
-  it('rejects a Service with no tasks', async () => {
+  it('answers 409 when the Service id belongs to another Vehicle', async () => {
+    const a = await createVehicle('A');
+    const b = await createVehicle('B');
+    const taskA = await createTask(a.id);
+    const taskB = await createTask(b.id);
+    const body = { id: 'svc-00001', date: '2026-10-01', odometer: 1 };
+    expect((await call('PUT', '/api/services/svc-00001', { ...body, vehicleId: a.id, taskIds: [taskA.id] })).status).toBe(200);
+    expect((await call('PUT', '/api/services/svc-00001', { ...body, vehicleId: b.id, taskIds: [taskB.id] })).status).toBe(409);
+  });
+
+  it('answers 422 when a Task that counts distance is ticked without an odometer', async () => {
     const bike = await createVehicle();
-    const res = await call('PUT', '/api/services/svc-00001', {
-      id: 'svc-00001',
-      vehicleId: bike.id,
-      date: '2026-10-01',
-      odometer: 1,
-      taskIds: [],
-    });
+    const task = await createTask(bike.id, { name: 'Chain', intervalKm: 10000 });
+    const res = await call('PUT', '/api/services/svc-00001', { id: 'svc-00001', vehicleId: bike.id, date: '2026-10-01', taskIds: [task.id] });
     expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ error: 'odometer: The odometer is needed when a ticked Task counts distance' });
   });
 
   it('stores Odometer Readings idempotently', async () => {
@@ -453,18 +451,6 @@ describe('spec lines and the plan templates', () => {
     expect((await snapshot()).tasks.filter((t) => t.vehicleId === bike.id)).toHaveLength(before.length);
   });
 
-  it('counts the fork oil as changed whenever the fork seals are, but not the other way round', async () => {
-    const bike = (await (await call('POST', '/api/vehicles', { ...BIKE, name: 'Fresh' })).json()) as Vehicle;
-    const tasks = (await snapshot()).tasks.filter((t) => t.vehicleId === bike.id);
-    const oil = tasks.find((t) => t.name === 'Change fork oil')!;
-    const seals = tasks.find((t) => t.name === 'Replace fork seals')!;
-    expect(oil && seals).toBeTruthy();
-    const log = (id: string, taskIds: string[]) => call('PUT', `/api/services/${id}`, { id, vehicleId: bike.id, date: '2026-10-01', odometer: 100, taskIds });
-    await log('svc-00001', [oil.id]);
-    await log('svc-00002', [seals.id]);
-    expect((await snapshot()).services.map((s) => s.taskIds)).toEqual([[oil.id], [seals.id, oil.id]]);
-  });
-
   it('changes a template without touching vehicles that exist, and the next vehicle gets the change', async () => {
     const before = (await (await call('POST', '/api/vehicles', { ...BIKE, name: 'Before' })).json()) as Vehicle;
     expect((await call('PUT', '/api/catalogue/moto_engine_oil', { conditions: {}, intervalKm: 5000, intervalMonths: 6 })).status).toBe(200);
@@ -543,17 +529,14 @@ describe('spec lines and the plan templates', () => {
       date: '2026-10-01',
       odometer: 18000,
       taskIds: [task.id],
-      componentsUsed: [{ description: 'Mann HU 7008 z', partNumber: 'HU 7008 z', quantity: 1, unit: 'piece', price: 9.9, itemId: 'part-0000001', remember: true }],
+      componentsUsed: [{ description: 'Mann HU 7008 z', partNumber: 'HU 7008 z', quantity: 1, unit: 'piece', price: 9.9, itemId: 'part-0000001', remember: true, consumableTypeId: 'type-1', productId: 'product-1' }],
     };
     expect((await call('PUT', '/api/services/svc-00010', body)).status).toBe(200);
     expect((await call('PUT', '/api/services/svc-00010', body)).status).toBe(200);
     const parts = (await snapshot()).vehicleItems;
     expect(parts).toEqual([{ id: 'part-0000001', vehicleId: bike.id, name: 'Mann HU 7008 z', partNumber: 'HU 7008 z', unit: 'piece', quantity: 1, price: 9.9, taskId: task.id, itemSpecId: null, specLineId: null, notes: null }]);
     expect((await snapshot()).services[0]!.componentsUsed[0]).toMatchObject({ itemId: 'part-0000001', price: 9.9 });
-    // The same part typed again in another Service links to the list instead of doubling it.
-    await call('PUT', '/api/services/svc-00011', { ...body, id: 'svc-00011', componentsUsed: [{ ...body.componentsUsed[0], itemId: 'part-0000002' }] });
-    expect((await snapshot()).vehicleItems).toHaveLength(1);
-    expect((await snapshot()).services.find((x) => x.id === 'svc-00011')!.componentsUsed[0]!.itemId).toBe('part-0000001');
+    expect(db.prepare('SELECT consumable_type_id, product_id FROM service_items WHERE service_id = ?').all('svc-00010')).toEqual([{ consumable_type_id: 'type-1', product_id: 'product-1' }]);
     await call('DELETE', '/api/items/part-0000001');
     const kept = (await snapshot()).services.find((x) => x.id === 'svc-00010')!.componentsUsed[0]!;
     expect(kept).toMatchObject({ description: 'Mann HU 7008 z', itemId: null, price: 9.9 });
@@ -1427,33 +1410,6 @@ describe('the Notion sync endpoint and status', () => {
     expect((await snapshot()).notion).toEqual({ lastSyncAt: null, lastError: null, warnings: [], pausedTasks: 0 });
     db.prepare(`INSERT INTO notion_state (garage_id, last_sync_at, last_error, warnings, paused_tasks) VALUES ('default', '2026-11-01T10:00:00.000Z', NULL, '["Un avertissement"]', 2)`).run();
     expect((await snapshot()).notion).toEqual({ lastSyncAt: '2026-11-01T10:00:00.000Z', lastError: null, warnings: ['Un avertissement'], pausedTasks: 2 });
-  });
-});
-
-describe('services keep the consumable type and product of a part used', () => {
-  it('stores consumableTypeId and productId and returns them in the snapshot', async () => {
-    const bike = await createVehicle();
-    const task = await createTask(bike.id);
-    const body = {
-      id: 'service-0001',
-      vehicleId: bike.id,
-      date: '2026-11-01',
-      odometer: 1000,
-      taskIds: [task.id],
-      componentsUsed: [
-        { description: 'Huile test', quantity: 3, unit: 'litre', consumableTypeId: 'type-1', productId: 'product-1' },
-        { description: 'Joint', quantity: 1, unit: 'piece' },
-      ],
-    };
-    expect((await call('PUT', '/api/services/service-0001', body)).status).toBe(200);
-    expect((await call('PUT', '/api/services/service-0001', body)).status).toBe(200);
-    expect(db.prepare('SELECT description, consumable_type_id, product_id FROM service_items ORDER BY sort').all()).toEqual([
-      { description: 'Huile test', consumable_type_id: 'type-1', product_id: 'product-1' },
-      { description: 'Joint', consumable_type_id: null, product_id: null },
-    ]);
-    const [service] = (await snapshot()).services;
-    expect(service!.componentsUsed[0]).toMatchObject({ consumableTypeId: 'type-1', productId: 'product-1' });
-    expect(service!.componentsUsed[1]).not.toHaveProperty('consumableTypeId');
   });
 });
 

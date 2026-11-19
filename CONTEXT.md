@@ -67,6 +67,10 @@ _Avoid_: Maintenance (as a noun for an occasion), visit, intervention and sessio
 A Service outside the plan: a title and a Category instead of Tasks (a Task can still be ticked if one was done too). It never changes a Status.
 _Avoid_: Fix, breakdown
 
+**Service logging**:
+Turning what the owner entered for a Service into the Service as stored: the checks (a Repair needs a title, a maintenance Service needs a Task, the odometer is needed when a ticked Task counts distance), the Tasks that always come with a ticked one, and which Component Used lines go on the Vehicle's items list. One rule set, shared by the server and by the phone's queued view, so a Service shown offline matches what the server will keep.
+_Avoid_: Service validation (it covers more than checks)
+
 **Component Used**:
 A line of a Service naming what went in, with brand and variant ("Motul 7100 10W-40"), a part number, a quantity in pieces or litres and the price paid per unit. It is a copy: the Service keeps it as logged, even if the Vehicle Item it was picked from changes. On screen it is an **item** too (articles utilisés), the same word as the Vehicle Item it is usually picked from.
 _Avoid_: Part Used, Part Spec, Element
