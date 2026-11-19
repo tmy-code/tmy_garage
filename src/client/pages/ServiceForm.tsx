@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { todayIso } from '../../shared/dates.ts';
 import { checkOdometer, findDuplicateService } from '../../shared/consistency.ts';
-import { effectiveInterval, pointsOf, readingOn, vehicleDue } from '../../shared/due.ts';
-import { PART_CATEGORIES, type PartCategory } from '../../shared/catalogue.ts';
+import { pointsOf, readingOn, vehicleDue } from '../../shared/due.ts';
+import { PART_CATEGORIES, catalogueOf, type PartCategory } from '../../shared/catalogue.ts';
+import { logService, type ServiceLoggingError } from '../../shared/service-logging.ts';
 import { buyStates } from '../../shared/purchases.ts';
 import { formFigure, mergeNeeds, prefillForType, prefillFromProduct, type MergedNeed } from '../../shared/session-consumables.ts';
 import type { PartUnit, PerformedBy, ServiceKind } from '../../shared/schemas.ts';
@@ -15,7 +16,7 @@ import { useT, type Messages } from '../i18n.ts';
 import { isDesktop } from '../native.ts';
 import { navigate } from '../router.ts';
 import { enqueue, online, undoCreate, useStore } from '../store.ts';
-import type { OutboxOp } from '../outbox.ts';
+import { serviceToSend, type OutboxOp } from '../outbox.ts';
 import { DocumentsPanel } from './Documents.tsx';
 import { OTHER_PRODUCT, SessionConsumables } from './SessionConsumables.tsx';
 
@@ -73,8 +74,6 @@ function draftOfListed(p: VehicleItem): ComponentUsedDraft {
 }
 
 function fromDraft(d: ComponentUsedDraft, t: Messages): ComponentUsed {
-  // The phone does not add to the items list (ADR 0009): nothing is kept from a Service logged there.
-  const remember = d.remember && isDesktop;
   const quantity = parseNumber(d.quantity);
   const price = parseNumber(d.price);
   if (!d.description.trim() || quantity === null || Number.isNaN(quantity) || quantity <= 0) throw new Error(t.workshop.itemError);
@@ -85,9 +84,9 @@ function fromDraft(d: ComponentUsedDraft, t: Messages): ComponentUsed {
     quantity,
     unit: d.unit,
     price,
-    // An id made here for an item to keep travels with the Service, so sending it again never doubles it.
-    itemId: d.itemId ?? (remember ? newId() : null),
-    ...(remember && !d.itemId ? { remember: true } : {}),
+    // The id of an item to keep is made when the Service is checked, so sending it again never doubles it.
+    itemId: d.itemId ?? null,
+    ...(d.remember && !d.itemId ? { remember: true } : {}),
     ...(d.consumableTypeId ? { consumableTypeId: d.consumableTypeId } : {}),
     ...(d.productId ? { productId: d.productId } : {}),
   };
@@ -143,11 +142,8 @@ export function ServiceForm({
   const tasksField = useRef<HTMLFieldSetElement>(null);
 
   const odometer = parseNumber(odometerText);
-  // The odometer is needed when a ticked Task counts distance; for time-based ones alone it can be left out.
-  const needsOdometer = [...selected].some((id) => {
-    const task = tasks.get(id);
-    return task !== undefined && effectiveInterval(task).km !== null;
-  });
+  // Only for the hint: a ticked Task that counts distance. Whether the odometer is required is decided by logService.
+  const countsDistance = [...selected].some((id) => tasks.get(id)?.intervalKm != null);
   const validOdometer = odometer !== null && Number.isInteger(odometer) && odometer >= 0 ? odometer : null;
   // Warnings only: a value that looks off can still be saved.
   const check = useMemo(
@@ -252,52 +248,61 @@ export function ServiceForm({
     event.preventDefault();
     setError(null);
     // Each problem is shown next to its field, and the first one is brought into view.
-    const badOdometer =
-      odometer === null ? needsOdometer : Number.isNaN(odometer) || odometer < 0 || !Number.isInteger(odometer);
-    setOdometerError(badOdometer ? (odometer === null ? t.service.needsOdometer : t.service.errorOdometer) : null);
-    const noTasks = kind === 'maintenance' && selected.size === 0;
-    setTasksError(noTasks ? t.service.errorTasks : null);
-    const noTitle = kind === 'repair' && !title.trim();
-    setTitleError(noTitle ? t.service.errorTitle : null);
-    if (badOdometer) {
+    const badOdometerText = odometer !== null && (Number.isNaN(odometer) || odometer < 0 || !Number.isInteger(odometer));
+    const totalCost = parseNumber(costText);
+    const costBad = totalCost !== null && (Number.isNaN(totalCost) || totalCost < 0);
+    let componentsUsed: ComponentUsed[] = [];
+    let lineError: string | null = null;
+    try {
+      componentsUsed = drafts.map((d) => fromDraft(d, t));
+    } catch (e) {
+      lineError = (e as Error).message;
+      componentsUsed = [];
+    }
+    const draft: Service = {
+      id: existing?.id ?? newId(),
+      vehicleId: vehicle.id,
+      date,
+      odometer: badOdometerText ? null : odometer,
+      taskIds: [...selected],
+      kind,
+      title: kind === 'repair' ? title.trim() : null,
+      category: kind === 'repair' ? category : null,
+      notes: notes.trim() || null,
+      performedBy,
+      totalCost: costBad ? null : totalCost,
+      componentsUsed,
+    };
+    const r = logService(
+      { tasks: snapshot.tasks.filter((x) => x.vehicleId === vehicle.id), items: listed, catalogue: catalogueOf(snapshot) },
+      draft,
+      { newId, canAddToItems: isDesktop },
+    );
+    const errs: ServiceLoggingError[] = r.ok ? [] : r.errors;
+    const has = (code: ServiceLoggingError['code']) => errs.some((e) => e.code === code);
+    setOdometerError(badOdometerText ? t.service.errorOdometer : has('odometer-needed') ? t.service.needsOdometer : null);
+    setTasksError(has('maintenance-needs-task') ? t.service.errorTasks : null);
+    setTitleError(has('repair-needs-title') ? t.service.errorTitle : null);
+    if (has('task-not-on-vehicle')) setError(t.service.errorTaskGone);
+    if (badOdometerText || has('odometer-needed')) {
       odometerInput.current?.focus();
       odometerInput.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       return;
     }
-    if (noTasks) {
+    if (has('maintenance-needs-task')) {
       tasksField.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       return;
     }
-    if (noTitle) return;
-    const totalCost = parseNumber(costText);
-    if (totalCost !== null && (Number.isNaN(totalCost) || totalCost < 0)) {
+    if (has('repair-needs-title') || !r.ok) return;
+    if (costBad) {
       setError(t.service.totalCostError);
       return;
     }
-    let componentsUsed: ComponentUsed[];
-    try {
-      componentsUsed = drafts.map((d) => fromDraft(d, t));
-    } catch (e) {
-      setError((e as Error).message);
+    if (lineError !== null) {
+      setError(lineError);
       return;
     }
-    const op: OutboxOp = {
-      kind: 'service',
-      data: {
-        id: existing?.id ?? newId(),
-        vehicleId: vehicle.id,
-        date,
-        odometer,
-        taskIds: [...selected],
-        kind,
-        title: kind === 'repair' ? title.trim() : null,
-        category: kind === 'repair' ? category : null,
-        notes: notes.trim() || null,
-        performedBy,
-        totalCost,
-        componentsUsed,
-      },
-    };
+    const op: OutboxOp = { kind: 'service', data: serviceToSend(r) };
     await enqueue(op);
     navigate(back, { replace: true });
     toastCreated(op, existing ? t.feedback.saved : t.feedback.serviceSaved, t, !existing);
@@ -405,7 +410,7 @@ export function ServiceForm({
                 [
                   fromLog !== null && odometerText === fromLog ? t.service.odometerFromLog : null,
                   usage.latest ? t.service.lastReading(formatKm(usage.latest.odometer)) : null,
-                  needsOdometer || selected.size === 0 ? null : t.service.odometerOptional,
+                  countsDistance || selected.size === 0 ? null : t.service.odometerOptional,
                 ]
                   .filter(Boolean)
                   .join(' · ') || undefined
