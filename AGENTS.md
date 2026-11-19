@@ -43,3 +43,7 @@ The phone uses a sideloaded Android app (ADR 0006), built the same way as TMY Fi
 - Build: `npm run build:android`, then `./gradlew assembleDebug` in `android/` with `JAVA_HOME` on a **JDK 21**.
 - Releases: merging to `main` makes `.github/workflows/android.yml` sign the APK with the key in the repo's secrets (made by `C:\Projects\infra\android\new-signing-key.ps1`) and publish a GitHub Release, which Obtainium installs on the phone.
 - Test on the owner's phone over USB with `adb`. Bump `API_VERSION` in `src/shared/api-version.ts` whenever a change to `/api` would break an older app.
+
+## Notion sync: never on a database copy
+
+Never run the server or `npm run notion-sync` with the real Notion token against a local copy of `data/garage.sqlite`. The push ticks "Supprimé de l'app" on every Notion page whose app id is missing from the local DB. Test with the NAS snapshot (`GARAGE_URL`) or `--pull-dry-run` / `?dryRun=1`. Before any non-dry sync, check the DB has the same vehicle ids as Notion.
