@@ -1,6 +1,6 @@
 # TMY Garage
 
-Workspace rules (hard rules, task size, PR and NAS workflow, handoff between Claude Code and Codex): `C:\Projects\AGENTS.md`. Read it first if you have not.
+Workspace rules (hard rules, task size, PR and NAS workflow, handoff between Claude Code and Codex): `<workspace>\AGENTS.md`. Read it first if you have not. `<workspace>` is the workspace root: the `tmy_workspace` checkout this repo is cloned in (`..` from here), at any path.
 
 ## Docs: read only what the task needs
 
@@ -41,7 +41,7 @@ The owner is not technical and relies on these rules being followed in every com
 The phone uses a sideloaded Android app (ADR 0006), built the same way as TMY Fitness: Capacitor wraps the same React screens, bundled in the APK. Android-only behaviour (back button, opening Documents in the phone's viewer) lives in `src/client/native.ts`; the server's address is typed on first launch (`src/client/server.ts`) and never written in the repo.
 
 - Build: `npm run build:android`, then `./gradlew assembleDebug` in `android/` with `JAVA_HOME` on a **JDK 21**.
-- Releases: merging to `main` makes `.github/workflows/android.yml` sign the APK with the key in the repo's secrets (made by `C:\Projects\infra\android\new-signing-key.ps1`) and publish a GitHub Release, which Obtainium installs on the phone.
+- Releases: merging to `main` makes `.github/workflows/android.yml` sign the APK with the key in the repo's secrets (made by `<workspace>\infra\android\new-signing-key.ps1`) and publish a GitHub Release, which Obtainium installs on the phone.
 - Test on the owner's phone over USB with `adb`. Bump `API_VERSION` in `src/shared/api-version.ts` whenever a change to `/api` would break an older app.
 
 ## Notion sync: never on a database copy
